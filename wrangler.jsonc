@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "fantastic-factories",
+  "compatibility_date": "2026-09-01",
+  "assets": {
+    "directory": "./out",
+    // The app is a static export with no server, so unknown paths fall back to
+    // the 404 page Next generated rather than to a client-side router.
+    "not_found_handling": "404-page"
+  },
+  "observability": {
+    "enabled": true
+  }
+}
