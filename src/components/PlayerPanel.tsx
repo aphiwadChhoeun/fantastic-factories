@@ -1,4 +1,5 @@
 import type { Player } from "@/engine";
+import { colorSwatch, DIE_SWATCHES } from "@/lib/colors";
 import { CardView } from "./CardView";
 import styles from "./game.module.css";
 
@@ -14,12 +15,17 @@ export function PlayerPanel({ player, active, hideHand = false }: Props) {
     <section className={`${styles.section} ${active ? styles.playerActive : ""}`}>
       <header className={styles.playerHeader}>
         <span className={styles.playerName}>
+          <span
+            className={styles.swatch}
+            style={colorSwatch(player.color)}
+            title={`${player.color} dice`}
+          />
           {player.name}
           {active ? " — to act" : ""}
         </span>
         <span className={styles.cardMeta}>
-          {player.resources.goods} goods · {player.resources.energy} energy ·{" "}
-          {player.buildings.length} built
+          {player.resources.metal} metal · {player.resources.energy} energy ·{" "}
+          {player.resources.goods} goods · {player.compound.length} in compound
         </span>
       </header>
 
@@ -33,7 +39,8 @@ export function PlayerPanel({ player, active, hideHand = false }: Props) {
               <span
                 key={die.id}
                 className={`${styles.die} ${die.spent ? styles.dieSpent : ""}`}
-                title={die.spent ? "Spent" : "Available"}
+                style={DIE_SWATCHES[die.color]}
+                title={`${die.color} ${die.face} — ${die.spent ? "spent" : "available"}`}
               >
                 {die.face}
               </span>
@@ -43,12 +50,12 @@ export function PlayerPanel({ player, active, hideHand = false }: Props) {
       </div>
 
       <div>
-        <div className={styles.sectionTitle}>Buildings</div>
-        {player.buildings.length === 0 ? (
+        <div className={styles.sectionTitle}>Compound</div>
+        {player.compound.length === 0 ? (
           <p className={styles.empty}>Nothing built yet.</p>
         ) : (
           <div className={styles.cardRow}>
-            {player.buildings.map((building) => (
+            {player.compound.map((building) => (
               <CardView
                 key={building.card.id}
                 card={building.card}
@@ -63,9 +70,9 @@ export function PlayerPanel({ player, active, hideHand = false }: Props) {
       <div>
         <div className={styles.sectionTitle}>Hand</div>
         {hideHand ? (
-          <p className={styles.empty}>{player.hand.length} blueprint(s), hidden.</p>
+          <p className={styles.empty}>{player.hand.length} card(s), hidden.</p>
         ) : player.hand.length === 0 ? (
-          <p className={styles.empty}>No blueprints.</p>
+          <p className={styles.empty}>No cards.</p>
         ) : (
           <div className={styles.cardRow}>
             {player.hand.map((card) => (

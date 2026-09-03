@@ -1,42 +1,108 @@
-import { createDeck, createStartingBuilding } from "./cards";
-import { createRng, shuffle } from "./rng";
-import type { Card, GameState, Player, Resources } from "./types";
+import { createBlueprintDeck, createContractorDeck, createStartingBuilding } from "./cards";
+import { createRng, shuffle, type Rng } from "./rng";
+import {
+  BLUEPRINT_TYPES,
+  DIE_COLORS,
+  type BlueprintCard,
+  type CardPool,
+  type ContractorCard,
+  type ContractorMarket,
+  type DieColor,
+  type GameState,
+  type Player,
+  type Resources,
+} from "./types";
 
-export const MARKETPLACE_SIZE = 4;
-export const STARTING_HAND = 2;
-export const STARTING_WORKFORCE = 3;
+/**
+ * Face-up cards per market row. There are two rows: contractors, blueprints.
+ *
+ * Four slots and four tool types means the contractor row carries one token of
+ * each icon.
+ */
+export const MARKET_ROW_SIZE = 4;
+/** Blueprints dealt to each player at setup. */
+export const STARTING_HAND = 4;
+/** Dice each player rolls per round, all in their own colour. */
+export const STARTING_WORKFORCE = 4;
 
-/** Enough to afford a first blueprint before any building has paid out. */
-export const STARTING_RESOURCES: Resources = { goods: 2, energy: 2 };
+/** Metal to build with, energy to power it, no goods until you produce them. */
+export const STARTING_RESOURCES: Resources = { metal: 1, energy: 2, goods: 0 };
+
+/** Human first, then the AI seats, in palette order. */
+export const DEFAULT_PLAYER_COLORS: readonly DieColor[] = ["blue", "red"];
 
 export type SetupOptions = {
   readonly seed?: number;
   /** Human is always index 0; every later name becomes an AI seat. */
   readonly playerNames?: readonly string[];
+  /** One colour per player. Defaults to blue, then red, then palette order. */
+  readonly playerColors?: readonly DieColor[];
 };
 
+function resolveColors(count: number, requested?: readonly DieColor[]): DieColor[] {
+  const colors = requested
+    ? [...requested]
+    : [...DEFAULT_PLAYER_COLORS, ...DIE_COLORS.filter((c) => !DEFAULT_PLAYER_COLORS.includes(c))];
+
+  if (colors.length < count) {
+    throw new Error(`Need ${count} player colours, got ${colors.length}`);
+  }
+  const chosen = colors.slice(0, count);
+  if (new Set(chosen).size !== chosen.length) {
+    throw new Error("Each player needs a distinct colour");
+  }
+  return chosen;
+}
+
 export function createInitialState(options: SetupOptions = {}): GameState {
-  const { seed = 1, playerNames = ["You", "AI"] } = options;
+  const { seed = 1, playerNames = ["You", "AI"], playerColors } = options;
 
   if (playerNames.length < 2) {
     throw new Error("A game needs at least two players");
   }
+  if (playerNames.length > DIE_COLORS.length) {
+    throw new Error(`At most ${DIE_COLORS.length} players — one per die colour`);
+  }
 
-  const [shuffled, rng] = shuffle(createDeck(), createRng(seed));
-  const cards: Card[] = [...shuffled];
+  const colors = resolveColors(playerNames.length, playerColors);
+
+  let rng: Rng = createRng(seed);
+  const [blueprintCards, afterBlueprints] = shuffle(createBlueprintDeck(), rng);
+  rng = afterBlueprints;
+  const [contractorCards, afterContractors] = shuffle(createContractorDeck(), rng);
+  rng = afterContractors;
+
+  const blueprintDraw: BlueprintCard[] = [...blueprintCards];
+  const contractorDraw: ContractorCard[] = [...contractorCards];
 
   const players: Player[] = playerNames.map((name, index) => ({
     id: `p${index}`,
     name,
     isAi: index > 0,
-    hand: cards.splice(0, STARTING_HAND),
-    buildings: [{ card: createStartingBuilding(`p${index}`), activated: false }],
+    color: colors[index],
+    // Hands are blueprints only — contractors resolve the moment you take one.
+    hand: blueprintDraw.splice(0, STARTING_HAND),
+    compound: [{ card: createStartingBuilding(`p${index}`), activated: false }],
     resources: STARTING_RESOURCES,
     dice: [],
     workforce: STARTING_WORKFORCE,
   }));
 
-  const marketplace = cards.splice(0, MARKETPLACE_SIZE);
+  const blueprints: CardPool<BlueprintCard> = {
+    row: blueprintDraw.splice(0, MARKET_ROW_SIZE),
+    deck: blueprintDraw,
+    discard: [],
+  };
+  // One token per tool type, fixed to its slot for the whole game.
+  // TODO: unconfirmed — tokens could instead be dealt out or rotate per round.
+  const contractors: ContractorMarket = {
+    slots: Array.from({ length: MARKET_ROW_SIZE }, (_, index) => ({
+      token: BLUEPRINT_TYPES[index % BLUEPRINT_TYPES.length],
+      card: contractorDraw.shift() ?? null,
+    })),
+    deck: contractorDraw,
+    discard: [],
+  };
 
   return {
     rng,
@@ -44,10 +110,9 @@ export function createInitialState(options: SetupOptions = {}): GameState {
     phase: "market",
     players,
     currentPlayerIndex: 0,
-    marketplace,
-    deck: cards,
-    discard: [],
-    log: [`Round 1 — market phase`],
+    blueprints,
+    contractors,
+    log: ["Round 1 — Market Phase"],
     gameOver: false,
     winner: null,
   };

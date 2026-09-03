@@ -6,29 +6,31 @@
  * touches React, the DOM, or the network — this module would run unchanged in
  * Node or in a Worker.
  *
- * What is implemented is a thin but complete slice: draft a card, roll dice,
- * spend dice to build blueprints and activate buildings, end the round. The
- * TODOs mark where the real Fantastic Factories rules go.
+ * What is implemented is a thin but complete slice: take a card from one of
+ * the two market rows, roll dice, spend dice to build blueprints into your
+ * compound, activate what stands there, end the round. The TODOs mark where
+ * the real Fantastic Factories rules go.
  */
 
-import { nextInt, shuffle } from "./rng";
-import { MARKETPLACE_SIZE } from "./setup";
-import type {
-  ActivationRequirement,
-  Building,
-  Card,
-  Die,
-  DieFace,
-  Effect,
-  GameState,
-  Move,
-  Player,
-  Resources,
+import { nextInt, shuffle, type Rng } from "./rng";
+import { MARKET_ROW_SIZE } from "./setup";
+import {
+  PHASE_LABELS,
+  type ActivationRequirement,
+  type BlueprintCard,
+  type Card,
+  type Die,
+  type DieFace,
+  type Effect,
+  type GameState,
+  type Move,
+  type Player,
+  type Resources,
 } from "./types";
 
 /** A player who reaches either threshold ends the game. */
 export const END_GOODS = 12;
-export const END_BUILDINGS = 10;
+export const END_COMPOUND_SIZE = 10;
 
 /**
  * Safety valve. The slice implemented below cannot deadlock, but a partially
@@ -61,11 +63,20 @@ function satisfies(requirement: ActivationRequirement, face: DieFace): boolean {
 }
 
 function canAfford(resources: Resources, cost: Resources): boolean {
-  return resources.goods >= cost.goods && resources.energy >= cost.energy;
+  return (
+    resources.metal >= cost.metal &&
+    resources.energy >= cost.energy &&
+    resources.goods >= cost.goods
+  );
 }
 
 function unspentDice(player: Player): Die[] {
   return player.dice.filter((die) => !die.spent);
+}
+
+/** Blueprints in hand that could pay a slot carrying `token`. */
+function paymentsFor(player: Player, token: BlueprintCard["type"]): BlueprintCard[] {
+  return player.hand.filter((card) => card.type === token);
 }
 
 export function legalMoves(state: GameState): Move[] {
@@ -75,14 +86,27 @@ export function legalMoves(state: GameState): Move[] {
 
   switch (state.phase) {
     case "market": {
-      const moves: Move[] = state.marketplace.map((card) => ({
-        type: "draftFromMarket" as const,
-        cardId: card.id,
-      }));
-      if (state.deck.length > 0 || state.discard.length > 0) {
-        moves.push({ type: "drawFromDeck" });
+      const moves: Move[] = [];
+
+      // A contractor costs a blueprint of its slot's tool type, so a slot with
+      // no matching blueprint in hand simply offers nothing.
+      for (const slot of state.contractors.slots) {
+        if (!slot.card) continue;
+        for (const payment of paymentsFor(player, slot.token)) {
+          moves.push({
+            type: "draft",
+            kind: "contractor",
+            cardId: slot.card.id,
+            paymentCardId: payment.id,
+          });
+        }
       }
-      // Only reachable if both the market and the deck have run dry.
+      for (const card of state.blueprints.row) {
+        moves.push({ type: "draft", kind: "blueprint", cardId: card.id });
+      }
+
+      // There is no blind draw, so a player with nothing to take passes.
+      // Reachable when the blueprint row is empty and no slot is payable.
       if (moves.length === 0) moves.push({ type: "endPhase" });
       return moves;
     }
@@ -97,7 +121,7 @@ export function legalMoves(state: GameState): Move[] {
             moves.push({ type: "build", cardId: card.id, dieId: die.id });
           }
         }
-        for (const building of player.buildings) {
+        for (const building of player.compound) {
           if (!building.activated && satisfies(building.card.activation, die.face)) {
             moves.push({ type: "activate", cardId: building.card.id, dieId: die.id });
           }
@@ -127,51 +151,76 @@ function log(state: GameState, message: string): GameState {
   return { ...state, log: [...state.log, message] };
 }
 
+/** Just the piles a draw touches — shared by both markets. */
+type DrawSource<T extends Card> = {
+  readonly deck: readonly T[];
+  readonly discard: readonly T[];
+};
+
 /**
- * Draws up to `count` cards, reshuffling the discard pile when the deck runs
- * out. Draws fewer than asked if both piles are empty rather than throwing.
+ * Takes up to `count` cards off a deck, reshuffling its discard pile when the
+ * deck runs out. Returns fewer than asked if both are empty rather than
+ * throwing.
  */
-function drawCards(state: GameState, playerIndex: number, count: number): GameState {
-  let deck = [...state.deck];
-  let discard = [...state.discard];
-  let rng = state.rng;
-  const drawn: Card[] = [];
+function takeFromDeck<T extends Card>(
+  source: DrawSource<T>,
+  count: number,
+  rng: Rng,
+): { drawn: T[]; deck: T[]; discard: T[]; rng: Rng } {
+  let deck = [...source.deck];
+  let discard = [...source.discard];
+  let current = rng;
+  const drawn: T[] = [];
 
   for (let i = 0; i < count; i++) {
     if (deck.length === 0) {
       if (discard.length === 0) break;
-      const [reshuffled, nextRng] = shuffle(discard, rng);
+      const [reshuffled, next] = shuffle(discard, current);
       deck = reshuffled;
       discard = [];
-      rng = nextRng;
+      current = next;
     }
     drawn.push(deck.shift()!);
   }
 
-  const withCards = updatePlayer({ ...state, deck, discard, rng }, playerIndex, (player) => ({
+  return { drawn, deck, discard, rng: current };
+}
+
+/**
+ * Puts blueprints from the deck into a hand. Only card effects reach this —
+ * there is no blind draw as a move.
+ */
+function drawBlueprints(state: GameState, playerIndex: number, count: number): GameState {
+  const { drawn, deck, discard, rng } = takeFromDeck(state.blueprints, count, state.rng);
+  const next: GameState = { ...state, rng, blueprints: { ...state.blueprints, deck, discard } };
+  return updatePlayer(next, playerIndex, (player) => ({
     ...player,
     hand: [...player.hand, ...drawn],
   }));
-  return withCards;
 }
 
 function addResources(resources: Resources, gain: Partial<Resources>): Resources {
   return {
-    goods: resources.goods + (gain.goods ?? 0),
+    metal: resources.metal + (gain.metal ?? 0),
     energy: resources.energy + (gain.energy ?? 0),
+    goods: resources.goods + (gain.goods ?? 0),
   };
 }
 
 function spendResources(resources: Resources, cost: Resources): Resources {
   return {
-    goods: resources.goods - cost.goods,
+    metal: resources.metal - cost.metal,
     energy: resources.energy - cost.energy,
+    goods: resources.goods - cost.goods,
   };
 }
 
 /**
  * TODO: this is where new `Effect` variants get handled. Keep it exhaustive —
  * the switch has no default so TypeScript will flag any variant you forget.
+ *
+ * A `draw` effect pulls blueprints; contractors can only be taken from the
+ * market by paying a token. TODO: some real cards may let you choose a deck.
  */
 function applyEffect(state: GameState, playerIndex: number, effect: Effect): GameState {
   switch (effect.kind) {
@@ -181,7 +230,21 @@ function applyEffect(state: GameState, playerIndex: number, effect: Effect): Gam
         resources: addResources(player.resources, effect.resources),
       }));
     case "draw":
-      return drawCards(state, playerIndex, effect.count);
+      return drawBlueprints(state, playerIndex, effect.count);
+  }
+}
+
+/** Terse effect summary for the log. Display formatting lives in `lib/format`. */
+function describeEffectForLog(effect: Effect): string {
+  switch (effect.kind) {
+    case "gain": {
+      const parts = (["metal", "energy", "goods"] as const)
+        .filter((key) => effect.resources[key])
+        .map((key) => `${effect.resources[key]} ${key}`);
+      return `gained ${parts.join(", ")}`;
+    }
+    case "draw":
+      return `drew ${effect.count}`;
   }
 }
 
@@ -208,35 +271,63 @@ function endTurn(state: GameState): GameState {
 
   switch (state.phase) {
     case "market":
-      return log({ ...state, phase: "work", currentPlayerIndex: 0 }, "Work phase");
+      return log({ ...state, phase: "work", currentPlayerIndex: 0 }, PHASE_LABELS.work);
     case "work":
-      return log({ ...state, phase: "cleanup", currentPlayerIndex: 0 }, "Cleanup");
+      return log({ ...state, phase: "cleanup", currentPlayerIndex: 0 }, PHASE_LABELS.cleanup);
     case "cleanup":
       return state; // cleanup advances the round itself, in endRound
   }
 }
 
-/** Discards dice, refreshes buildings, refills the market, checks the end. */
+function refillBlueprintRow(
+  pool: GameState["blueprints"],
+  rng: Rng,
+): { pool: GameState["blueprints"]; rng: Rng } {
+  const missing = MARKET_ROW_SIZE - pool.row.length;
+  if (missing <= 0) return { pool, rng };
+
+  const { drawn, deck, discard, rng: next } = takeFromDeck(pool, missing, rng);
+  return { pool: { row: [...pool.row, ...drawn], deck, discard }, rng: next };
+}
+
+/** Refills empty contractor slots. Tokens stay put; only the cards change. */
+function refillContractorSlots(
+  market: GameState["contractors"],
+  rng: Rng,
+): { market: GameState["contractors"]; rng: Rng } {
+  const empty = market.slots.filter((slot) => slot.card === null).length;
+  if (empty === 0) return { market, rng };
+
+  const { drawn, deck, discard, rng: next } = takeFromDeck(market, empty, rng);
+  const queue = [...drawn];
+  const slots = market.slots.map((slot) =>
+    slot.card === null ? { ...slot, card: queue.shift() ?? null } : slot,
+  );
+  return { market: { slots, deck, discard }, rng: next };
+}
+
+/** Discards dice, refreshes compounds, refills both rows, checks the end. */
 function endRound(state: GameState): GameState {
   const players = state.players.map((player) => ({
     ...player,
     dice: [],
-    buildings: player.buildings.map((building: Building) => ({ ...building, activated: false })),
+    compound: player.compound.map((building) => ({ ...building, activated: false })),
   }));
 
-  let refilled = { ...state, players };
-  const missing = MARKETPLACE_SIZE - refilled.marketplace.length;
-  if (missing > 0 && refilled.deck.length > 0) {
-    const drawn = refilled.deck.slice(0, missing);
-    refilled = {
-      ...refilled,
-      marketplace: [...refilled.marketplace, ...drawn],
-      deck: refilled.deck.slice(drawn.length),
-    };
-  }
+  const blueprints = refillBlueprintRow(state.blueprints, state.rng);
+  const contractors = refillContractorSlots(state.contractors, blueprints.rng);
+
+  const refilled: GameState = {
+    ...state,
+    players,
+    blueprints: blueprints.pool,
+    contractors: contractors.market,
+    rng: contractors.rng,
+  };
 
   const triggered = players.some(
-    (player) => player.resources.goods >= END_GOODS || player.buildings.length >= END_BUILDINGS,
+    (player) =>
+      player.resources.goods >= END_GOODS || player.compound.length >= END_COMPOUND_SIZE,
   );
   const round = refilled.round + 1;
 
@@ -248,12 +339,15 @@ function endRound(state: GameState): GameState {
     );
   }
 
-  return log({ ...refilled, round, phase: "market", currentPlayerIndex: 0 }, `Round ${round} — market phase`);
+  return log(
+    { ...refilled, round, phase: "market", currentPlayerIndex: 0 },
+    `Round ${round} — ${PHASE_LABELS.market}`,
+  );
 }
 
 /**
- * TODO: replace with real scoring. Most goods wins, buildings break the tie,
- * and a genuine tie returns null.
+ * TODO: replace with real scoring. Most goods wins, compound size breaks the
+ * tie, and a genuine tie returns null.
  */
 function decideWinner(state: GameState): number | null {
   const ranked = state.players
@@ -261,14 +355,14 @@ function decideWinner(state: GameState): number | null {
     .sort(
       (a, b) =>
         b.player.resources.goods - a.player.resources.goods ||
-        b.player.buildings.length - a.player.buildings.length,
+        b.player.compound.length - a.player.compound.length,
     );
 
   const [best, runnerUp] = ranked;
   if (
     runnerUp &&
     best.player.resources.goods === runnerUp.player.resources.goods &&
-    best.player.buildings.length === runnerUp.player.buildings.length
+    best.player.compound.length === runnerUp.player.compound.length
   ) {
     return null;
   }
@@ -286,27 +380,73 @@ export function applyMove(state: GameState, move: Move): GameState {
   const player = currentPlayer(state);
 
   switch (move.type) {
-    case "draftFromMarket": {
-      if (state.phase !== "market") throw new Error("Drafting happens in the market phase");
-      const card = state.marketplace.find((c) => c.id === move.cardId);
-      if (!card) throw new Error(`No card ${move.cardId} in the marketplace`);
+    case "draft": {
+      if (state.phase !== "market") throw new Error("Drafting happens in the Market Phase");
 
+      if (move.kind === "blueprint") {
+        const card = state.blueprints.row.find((c) => c.id === move.cardId);
+        if (!card) throw new Error(`No card ${move.cardId} in the blueprint row`);
+
+        const taken = updatePlayer(
+          {
+            ...state,
+            blueprints: {
+              ...state.blueprints,
+              row: state.blueprints.row.filter((c) => c.id !== card.id),
+            },
+          },
+          index,
+          (p) => ({ ...p, hand: [...p.hand, card] }),
+        );
+        return endTurn(log(taken, `${player.name} drafted ${card.name}`));
+      }
+
+      const slot = state.contractors.slots.find((s) => s.card?.id === move.cardId);
+      if (!slot?.card) throw new Error(`No card ${move.cardId} in the contractor row`);
+
+      const payment = player.hand.find((c) => c.id === move.paymentCardId);
+      if (!payment) throw new Error(`${player.name} does not hold ${move.paymentCardId}`);
+      if (payment.type !== slot.token) {
+        throw new Error(
+          `${slot.card.name} costs a ${slot.token} blueprint, but ${payment.name} is ${payment.type}`,
+        );
+      }
+
+      // The contractor never reaches hand: it empties its slot, goes straight
+      // to the contractor discard, and its effect resolves at once.
+      const contractor = slot.card;
       const taken = updatePlayer(
-        { ...state, marketplace: state.marketplace.filter((c) => c.id !== card.id) },
+        {
+          ...state,
+          contractors: {
+            slots: state.contractors.slots.map((s) =>
+              s.card?.id === contractor.id ? { ...s, card: null } : s,
+            ),
+            deck: state.contractors.deck,
+            discard: [...state.contractors.discard, contractor],
+          },
+          // The blueprint spent as payment goes to the blueprint discard.
+          blueprints: {
+            ...state.blueprints,
+            discard: [...state.blueprints.discard, payment],
+          },
+        },
         index,
-        (p) => ({ ...p, hand: [...p.hand, card] }),
+        (p) => ({ ...p, hand: p.hand.filter((c) => c.id !== payment.id) }),
       );
-      return endTurn(log(taken, `${player.name} drafted ${card.name}`));
-    }
-
-    case "drawFromDeck": {
-      if (state.phase !== "market") throw new Error("Drawing happens in the market phase");
-      const drawn = drawCards(state, index, 1);
-      return endTurn(log(drawn, `${player.name} drew a blueprint`));
+      const resolved = applyEffect(taken, index, contractor.effect);
+      return endTurn(
+        log(
+          resolved,
+          `${player.name} took ${contractor.name} for ${payment.name} — ${describeEffectForLog(
+            contractor.effect,
+          )}`,
+        ),
+      );
     }
 
     case "rollDice": {
-      if (state.phase !== "work") throw new Error("Dice are rolled in the work phase");
+      if (state.phase !== "work") throw new Error("Dice are rolled in the Work Phase");
       if (player.dice.length > 0) throw new Error(`${player.name} already rolled`);
 
       let rng = state.rng;
@@ -314,7 +454,12 @@ export function applyMove(state: GameState, move: Move): GameState {
       for (let i = 0; i < player.workforce; i++) {
         const [value, next] = nextInt(rng, 6);
         rng = next;
-        dice.push({ id: `${player.id}-r${state.round}-d${i}`, face: (value + 1) as DieFace, spent: false });
+        dice.push({
+          id: `${player.id}-r${state.round}-d${i}`,
+          face: (value + 1) as DieFace,
+          color: player.color,
+          spent: false,
+        });
       }
 
       const rolled = updatePlayer({ ...state, rng }, index, (p) => ({ ...p, dice }));
@@ -322,10 +467,11 @@ export function applyMove(state: GameState, move: Move): GameState {
     }
 
     case "build": {
-      if (state.phase !== "work") throw new Error("Building happens in the work phase");
+      if (state.phase !== "work") throw new Error("Building happens in the Work Phase");
       const die = requireUnspentDie(player, move.dieId);
       const card = player.hand.find((c) => c.id === move.cardId);
       if (!card) throw new Error(`${player.name} does not hold ${move.cardId}`);
+      if (card.kind !== "blueprint") throw new Error(`${card.name} is not a blueprint`);
       if (die.face < card.buildRequirement) {
         throw new Error(`${card.name} needs a die of ${card.buildRequirement} or more`);
       }
@@ -336,16 +482,16 @@ export function applyMove(state: GameState, move: Move): GameState {
       const built = updatePlayer(state, index, (p) => ({
         ...spendDie(p, die.id),
         hand: p.hand.filter((c) => c.id !== card.id),
-        buildings: [...p.buildings, { card, activated: false }],
+        compound: [...p.compound, { card, activated: false }],
         resources: spendResources(p.resources, card.buildCost),
       }));
       return log(built, `${player.name} built ${card.name}`);
     }
 
     case "activate": {
-      if (state.phase !== "work") throw new Error("Activation happens in the work phase");
+      if (state.phase !== "work") throw new Error("Activation happens in the Work Phase");
       const die = requireUnspentDie(player, move.dieId);
-      const building = player.buildings.find((b) => b.card.id === move.cardId);
+      const building = player.compound.find((b) => b.card.id === move.cardId);
       if (!building) throw new Error(`${player.name} has no building ${move.cardId}`);
       if (building.activated) throw new Error(`${building.card.name} already activated this round`);
       if (!satisfies(building.card.activation, die.face)) {
@@ -354,7 +500,7 @@ export function applyMove(state: GameState, move: Move): GameState {
 
       const marked = updatePlayer(state, index, (p) => ({
         ...spendDie(p, die.id),
-        buildings: p.buildings.map((b) =>
+        compound: p.compound.map((b) =>
           b.card.id === building.card.id ? { ...b, activated: true } : b,
         ),
       }));

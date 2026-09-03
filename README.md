@@ -53,15 +53,56 @@ State is immutable and the RNG is seeded and lives inside `GameState`, so a seed
 plus a move list replays a game exactly. That is what makes the tests
 deterministic and what undo and replay would build on.
 
+## Rules so far
+
+Dice come in six colours — red, blue, green, purple, yellow, white. Each player
+takes one colour and every die they roll carries it, so up to six can play. The
+human is blue and the AI red by default; pass `playerColors` to
+`createInitialState` to change that.
+
+Three resources: **metal** builds, **energy** powers, **goods** score. Players
+start with 4 dice in their colour, 1 metal, 2 energy, and 4 random blueprints.
+
+Two card types, each with its own deck and its own market row:
+
+- **Blueprints** are built into your **compound** — the area in front of you —
+  where each one can be activated once per round. Every blueprint carries one
+  of four colour-coded tool types: hammer, wrench, gear, shovel.
+- **Contractors** never enter your hand. Taking one resolves its effect
+  immediately and discards the card.
+
+Setup lays out 4 face-up contractors and 4 face-up blueprints, one row each.
+Each of the four contractor slots carries a **tool token** — one per type. To
+take the contractor on a slot you discard a blueprint of that type from your
+hand as payment, so a slot you have no matching blueprint for is simply not
+available to you.
+
+Because contractors resolve on take, your hand only ever holds blueprints —
+that is enforced by the type of `Player.hand`, not by a runtime check.
+
+A round runs **Market Phase** → **Work Phase** → **Cleanup**. Market: take one
+face-up card from either row — there is no blind draw, so the only way to a
+contractor is paying its token. Work: roll your dice, then spend them to build
+blueprints from hand and activate your compound. Cleanup: dice clear, buildings
+refresh, both rows refill — tokens stay on their slots. The game ends when
+someone reaches 12 goods or 10 cards in their compound.
+
 ## Filling in the rules
 
-Start in `src/engine/rules.ts`. The implemented slice is: draft a card, roll
-dice, spend dice to build blueprints and activate buildings, end the round.
-Known stubs:
+Start in `src/engine/rules.ts`. The implemented slice is: take a card from one
+of the two rows, roll dice, spend dice to build blueprints and activate your
+compound, end the round. Known stubs:
 
-- `cards.ts` — invented placeholder blueprints, not the published card set
+- `cards.ts` — invented placeholder cards, not the published sets
 - `createStartingBuilding` — a placeholder so the economy has a source
 - `Effect` — only `gain` and `draw`; the real game needs many more variants
+- a `draw` effect always pulls blueprints; no card lets you choose a deck yet
+- blueprint tool types are read by the contractor tokens, nothing else yet
+- contractor slot tokens are fixed to their slot for the whole game; they could
+  instead be dealt or rotated each round
+- cards still reach hand from the blueprint deck through `draw` effects; only
+  the *move* was removed. Nothing draws contractors from their deck at all.
+- no contractor *dice* — white is currently just another player colour
 - `decideWinner` — most goods, buildings break ties
 - `MAX_ROUNDS` — a safety valve so a half-written rule cannot hang a test run
 

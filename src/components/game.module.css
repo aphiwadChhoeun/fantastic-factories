@@ -83,13 +83,69 @@
   background: color-mix(in srgb, currentColor 7%, transparent);
 }
 
+/* Contractors are one-time cards; the dashed edge separates them at a glance. */
+.cardContractor {
+  border-style: dashed;
+}
+
+.cardTag {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.5;
+}
+
 .cardSpent {
   opacity: 0.45;
+}
+
+.cardEmpty {
+  border-style: dashed;
+  opacity: 0.4;
+  justify-content: center;
+}
+
+/* A contractor slot: its tool token, then the card sitting on it. */
+.slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+
+/* Fill comes from the token's tool type, inline. */
+.token {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.cardHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
 }
 
 .cardName {
   font-size: 13px;
   font-weight: 600;
+}
+
+/* Fill comes from the blueprint's tool type, inline. Icon only, no label. */
+.typeBadge {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  display: inline-grid;
+  place-items: center;
+  font-size: 11px;
+  line-height: 1;
 }
 
 .cardMeta {
@@ -102,11 +158,12 @@
   flex-wrap: wrap;
 }
 
+/* Fill, text and border colour come from the die's own colour, inline. */
 .die {
   width: 34px;
   height: 34px;
   border-radius: 7px;
-  border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+  border: 1px solid transparent;
   display: grid;
   place-items: center;
   font-variant-numeric: tabular-nums;
@@ -116,6 +173,16 @@
 .dieSpent {
   opacity: 0.35;
   text-decoration: line-through;
+}
+
+.swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 7px;
+  vertical-align: baseline;
+  border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
 }
 
 .moves {

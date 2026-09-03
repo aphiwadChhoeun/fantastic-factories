@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { PHASE_LABELS } from "@/engine";
 import { useGame } from "@/hooks/useGame";
 import { GameLog } from "./GameLog";
 import { Marketplace } from "./Marketplace";
@@ -22,7 +23,7 @@ export function Game() {
     ? state.winner === null
       ? "Game over — a draw"
       : `Game over — ${state.players[state.winner].name} wins`
-    : `Round ${state.round} · ${state.phase} phase · ${active.name} to act`;
+    : `Round ${state.round} · ${PHASE_LABELS[state.phase]} · ${active.name} to act`;
 
   function newGame() {
     const next = seed + 1;
@@ -39,7 +40,7 @@ export function Game() {
 
       <div className={styles.columns}>
         <div className={styles.stack}>
-          <Marketplace cards={state.marketplace} deckSize={state.deck.length} />
+          <Marketplace contractors={state.contractors} blueprints={state.blueprints} />
           {state.players.map((player, index) => (
             <PlayerPanel
               key={player.id}
