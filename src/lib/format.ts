@@ -33,6 +33,18 @@ export function describeEffect(effect: Effect): string {
       })}`;
     case "draw":
       return `Draw ${effect.count} blueprint${effect.count === 1 ? "" : "s"}`;
+    case "buildFromDeck":
+      return "Draw a blueprint and build it free — duplicates are discarded and redrawn";
+    case "revealForResources":
+      return "Reveal the top blueprint — gain metal and energy equal to its build cost";
+    case "chooseOwnFaces":
+      return `Set up to ${effect.count} of your dice instead of rolling them`;
+    case "extraDice": {
+      const dice = `${effect.count} extra white ${effect.count === 1 ? "die" : "dice"}`;
+      return effect.chosen
+        ? `Take ${dice} at a face of your choice after rolling`
+        : `Roll ${dice} this round`;
+    }
   }
 }
 
@@ -63,8 +75,19 @@ export function describeMove(state: GameState, move: Move): string {
             state,
             move.paymentCardId,
           )}`;
-    case "rollDice":
-      return "Roll dice";
+    case "rollDice": {
+      const player = state.players[state.currentPlayerIndex];
+      const placed = player.dice.length;
+      // With a Foreman the roll can be a formality — say so, so the button
+      // does not look like it undoes the faces just chosen.
+      return placed >= player.workforce && player.perks.extraRolled === 0
+        ? "Keep these dice"
+        : "Roll dice";
+    }
+    case "setDie":
+      return state.players[state.currentPlayerIndex].rolled
+        ? `Take an extra die showing ${move.face}`
+        : `Set a die to ${move.face}`;
     case "build":
       return `Build ${findCardName(state, move.cardId)} with a ${dieFace(state, move.dieId)}`;
     case "activate":

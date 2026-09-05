@@ -3,6 +3,7 @@ import { createRng, shuffle, type Rng } from "./rng";
 import {
   BLUEPRINT_TYPES,
   DIE_COLORS,
+  NO_PERKS,
   type BlueprintCard,
   type CardPool,
   type ContractorCard,
@@ -85,7 +86,9 @@ export function createInitialState(options: SetupOptions = {}): GameState {
     compound: [{ card: createStartingBuilding(`p${index}`), activated: false }],
     resources: STARTING_RESOURCES,
     dice: [],
+    rolled: false,
     workforce: STARTING_WORKFORCE,
+    perks: NO_PERKS,
   }));
 
   const blueprints: CardPool<BlueprintCard> = {

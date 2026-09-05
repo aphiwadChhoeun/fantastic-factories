@@ -38,6 +38,11 @@ export function CardView({ card, built = false, spent = false }: Props) {
           </span>
         )}
       </span>
+      {card.kind === "contractor" && card.extraCost && (
+        <span className={styles.cardMeta}>
+          Also costs: {describeResources(card.extraCost)}
+        </span>
+      )}
       {card.kind === "contractor" ? null : built ? (
         <span className={styles.cardMeta}>Activate: {describeRequirement(card.activation)}</span>
       ) : (

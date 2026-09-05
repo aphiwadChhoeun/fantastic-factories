@@ -3,6 +3,8 @@ import { createRandomAi } from "@/ai";
 import {
   applyMove,
   BLUEPRINT_TYPES,
+  createBlueprintDeck,
+  createContractorDeck,
   createInitialState,
   currentPlayer,
   DIE_COLORS,
@@ -14,8 +16,11 @@ import {
   STARTING_WORKFORCE,
   type BlueprintCard,
   type Card,
+  type ContractorCard,
+  type Die,
   type GameState,
   type Move,
+  type Player,
 } from "@/engine";
 
 /** Guards against a rules bug turning a test run into an infinite loop. */
@@ -64,6 +69,57 @@ function takeableContractor(state: GameState) {
     throw new Error("expected a payable contractor");
   }
   return move;
+}
+
+function cardNamed<T extends Card>(cards: readonly T[], name: string): T {
+  const card = cards.find((c) => c.name === name);
+  if (!card) throw new Error(`no card named ${name}`);
+  return card;
+}
+
+/** The distinct printed copies of one blueprint, for duplicate scenarios. */
+function copiesOf(name: string): BlueprintCard[] {
+  return createBlueprintDeck().filter((card) => card.name === name);
+}
+
+function patchPlayer(state: GameState, index: number, patch: Partial<Player>): GameState {
+  return {
+    ...state,
+    players: state.players.map((player, i) => (i === index ? { ...player, ...patch } : player)),
+  };
+}
+
+/**
+ * Sets up one specific take: `contractor` goes on the only occupied slot, with
+ * a token matching the first blueprint in the player's hand.
+ */
+function stageContractor(
+  state: GameState,
+  contractor: ContractorCard,
+  patch: Partial<Player> = {},
+  deck?: readonly BlueprintCard[],
+): GameState {
+  const staged = patchPlayer(state, 0, patch);
+  const token = staged.players[0].hand[0].type;
+  return {
+    ...staged,
+    contractors: {
+      ...staged.contractors,
+      slots: staged.contractors.slots.map((slot, i) =>
+        i === 0 ? { token, card: contractor } : { ...slot, card: null },
+      ),
+    },
+    blueprints: deck ? { ...staged.blueprints, deck, discard: [] } : staged.blueprints,
+  };
+}
+
+function takeStaged(state: GameState): GameState {
+  return applyMove(state, {
+    type: "draft",
+    kind: "contractor",
+    cardId: state.contractors.slots[0].card!.id,
+    paymentCardId: state.players[0].hand[0].id,
+  });
 }
 
 describe("setup", () => {
@@ -191,6 +247,180 @@ describe("setup", () => {
   });
 });
 
+describe("the contractor deck", () => {
+  const deck = createContractorDeck();
+
+  it("deals the printed number of copies of each contractor", () => {
+    const copies = (name: string) => deck.filter((card) => card.name === name).length;
+
+    expect(copies("Architect")).toBe(2);
+    expect(copies("Electrician")).toBe(2);
+    expect(copies("Miner")).toBe(2);
+    expect(copies("Investor")).toBe(3);
+    expect(copies("Specialist")).toBe(3);
+    expect(copies("Hired Hands")).toBe(3);
+    expect(copies("Foreman")).toBe(1);
+    expect(copies("Engineer")).toBe(1);
+    // No stragglers: the counts above are the whole deck.
+    expect(deck).toHaveLength(17);
+  });
+
+  it("gives each contractor its printed effect", () => {
+    expect(cardNamed(deck, "Architect").effect).toEqual({ kind: "draw", count: 3 });
+    expect(cardNamed(deck, "Electrician").effect).toEqual({
+      kind: "gain",
+      resources: { energy: 5 },
+    });
+    expect(cardNamed(deck, "Miner").effect).toEqual({ kind: "gain", resources: { metal: 3 } });
+    expect(cardNamed(deck, "Investor").effect).toEqual({ kind: "revealForResources" });
+    expect(cardNamed(deck, "Specialist").effect).toEqual({
+      kind: "extraDice",
+      count: 1,
+      chosen: true,
+    });
+    expect(cardNamed(deck, "Hired Hands").effect).toEqual({
+      kind: "extraDice",
+      count: 2,
+      chosen: false,
+    });
+    expect(cardNamed(deck, "Foreman").effect).toEqual({ kind: "chooseOwnFaces", count: 4 });
+    expect(cardNamed(deck, "Engineer").effect).toEqual({ kind: "buildFromDeck" });
+  });
+
+  it("charges energy on top of the token only where the card says so", () => {
+    const energyCost = (name: string) => cardNamed(deck, name).extraCost?.energy;
+
+    expect(energyCost("Engineer")).toBe(4);
+    expect(energyCost("Hired Hands")).toBe(3);
+    expect(energyCost("Foreman")).toBe(2);
+
+    const charged = ["Engineer", "Hired Hands", "Foreman"];
+    for (const card of deck.filter((c) => !charged.includes(c.name))) {
+      expect(card.extraCost).toBeUndefined();
+    }
+    // Nothing charges anything but energy.
+    for (const card of deck.filter((c) => charged.includes(c.name))) {
+      expect(card.extraCost?.metal).toBe(0);
+      expect(card.extraCost?.goods).toBe(0);
+    }
+  });
+
+  it("Architect draws three blueprints into hand", () => {
+    const state = createInitialState({ seed: 11 });
+    const architect = cardNamed(createContractorDeck(), "Architect");
+    const staged = stageContractor(state, architect);
+    const topThree = staged.blueprints.deck.slice(0, 3).map((card) => card.id);
+
+    const next = takeStaged(staged);
+
+    // Four dealt, one spent as payment.
+    expect(next.players[0].hand).toHaveLength(STARTING_HAND - 1 + 3);
+    expect(next.players[0].hand.map((card) => card.id)).toEqual(
+      expect.arrayContaining(topThree),
+    );
+  });
+
+  it("Electrician gives five energy", () => {
+    const state = createInitialState({ seed: 11 });
+    const electrician = cardNamed(createContractorDeck(), "Electrician");
+    const staged = stageContractor(state, electrician);
+
+    const next = takeStaged(staged);
+
+    expect(next.players[0].resources.energy).toBe(STARTING_RESOURCES.energy + 5);
+  });
+});
+
+describe("the Engineer", () => {
+  const engineer = cardNamed(createContractorDeck(), "Engineer");
+
+  it("is out of reach until the player holds four energy", () => {
+    const state = createInitialState({ seed: 11 });
+    const broke = stageContractor(state, engineer, {
+      resources: { metal: 0, energy: 3, goods: 0 },
+    });
+
+    expect(legalMoves(broke).filter((move) => move.type === "draft")).not.toContainEqual(
+      expect.objectContaining({ cardId: engineer.id }),
+    );
+    expect(() => takeStaged(broke)).toThrow(/4 energy/);
+
+    const funded = stageContractor(state, engineer, {
+      resources: { metal: 0, energy: 4, goods: 0 },
+    });
+    expect(legalMoves(funded).filter((move) => move.type === "draft")).toContainEqual(
+      expect.objectContaining({ cardId: engineer.id }),
+    );
+  });
+
+  it("charges four energy and builds the drawn blueprint for nothing", () => {
+    const state = createInitialState({ seed: 11 });
+    const mine = copiesOf("Mine")[0];
+    const staged = stageContractor(
+      state,
+      engineer,
+      { resources: { metal: 0, energy: 4, goods: 0 } },
+      [mine, ...copiesOf("Depot")],
+    );
+
+    const [player] = takeStaged(staged).players;
+
+    expect(player.compound.map((b) => b.card.id)).toContain(mine.id);
+    // The Engineer's own cost is paid, the blueprint's build cost is not.
+    expect(player.resources).toEqual({ metal: 0, energy: 0, goods: 0 });
+    // No die was needed, and the card never passed through hand.
+    expect(player.hand.map((card) => card.id)).not.toContain(mine.id);
+    expect(player.dice).toEqual([]);
+  });
+
+  it("discards a duplicate and draws again", () => {
+    const state = createInitialState({ seed: 11 });
+    const [built, duplicate] = copiesOf("Generator");
+    const mine = copiesOf("Mine")[0];
+    const staged = stageContractor(
+      state,
+      engineer,
+      {
+        resources: { metal: 0, energy: 4, goods: 0 },
+        compound: [{ card: built, activated: false }],
+      },
+      [duplicate, mine],
+    );
+
+    const next = takeStaged(staged);
+    const [player] = next.players;
+
+    expect(player.compound.map((b) => b.card.id)).toEqual([built.id, mine.id]);
+    expect(next.blueprints.discard.map((card) => card.id)).toContain(duplicate.id);
+    expect(next.log.at(-1)).toMatch(/built Mine for free \(discarded 1/);
+  });
+
+  it("builds nothing when every blueprint left is one the player has built", () => {
+    const state = createInitialState({ seed: 11 });
+    const [built, duplicate, payment] = copiesOf("Generator");
+    const staged = stageContractor(
+      state,
+      engineer,
+      {
+        resources: { metal: 0, energy: 4, goods: 0 },
+        // The payment is a Generator too, so even a reshuffle finds nothing.
+        hand: [payment],
+        compound: [{ card: built, activated: false }],
+      },
+      [duplicate],
+    );
+
+    const next = takeStaged(staged);
+
+    expect(next.players[0].compound).toHaveLength(1);
+    expect(next.log.at(-1)).toMatch(/found no new blueprint to build/);
+    expect(next.blueprints.deck).toEqual([]);
+    expect(next.blueprints.discard.map((card) => card.id)).toEqual(
+      expect.arrayContaining([duplicate.id, payment.id]),
+    );
+  });
+});
+
 describe("legalMoves", () => {
   it("offers the whole blueprint row in the Market Phase", () => {
     const state = createInitialState({ seed: 3 });
@@ -282,6 +512,18 @@ describe("applyMove", () => {
     expect(next.currentPlayerIndex).toBe(1);
   });
 
+  it("refills the blueprint row from the deck the moment a card is taken", () => {
+    const state = createInitialState({ seed: 11 });
+    const target = state.blueprints.row[0];
+    const nextUp = state.blueprints.deck[0];
+
+    const next = applyMove(state, { type: "draft", kind: "blueprint", cardId: target.id });
+
+    expect(next.blueprints.row).toHaveLength(MARKET_ROW_SIZE);
+    expect(next.blueprints.row.map((card) => card.id)).toContain(nextUp.id);
+    expect(next.blueprints.deck).toHaveLength(state.blueprints.deck.length - 1);
+  });
+
   it("takes a contractor by discarding a matching blueprint as payment", () => {
     const state = createInitialState({ seed: 11 });
     const move = takeableContractor(state);
@@ -294,31 +536,40 @@ describe("applyMove", () => {
     // The payment leaves hand for the blueprint discard.
     expect(player.hand.map((card) => card.id)).not.toContain(payment.id);
     expect(next.blueprints.discard.map((card) => card.id)).toContain(payment.id);
-    // The slot empties but keeps its token.
-    const emptied = next.contractors.slots.find((s) => s.token === slot.token)!;
-    expect(emptied.card).toBeNull();
-    expect(emptied.token).toBe(slot.token);
+    // The slot keeps its token and is refilled at once with a fresh contractor.
+    const refilled = next.contractors.slots.find((s) => s.token === slot.token)!;
+    expect(refilled.token).toBe(slot.token);
+    expect(refilled.card?.id).toBe(state.contractors.deck[0].id);
+  });
+
+  it("refills a contractor slot from the deck the moment it is taken", () => {
+    const state = createInitialState({ seed: 11 });
+    const move = takeableContractor(state);
+
+    const next = applyMove(state, move);
+
+    expect(next.contractors.slots.every((slot) => slot.card !== null)).toBe(true);
+    expect(next.contractors.deck).toHaveLength(state.contractors.deck.length - 1);
+    // The card just taken sits in the discard, not back on the row.
+    expect(next.contractors.slots.map((slot) => slot.card!.id)).not.toContain(move.cardId);
+    expect(next.contractors.discard.map((card) => card.id)).toContain(move.cardId);
   });
 
   it("resolves the contractor's effect at once and discards the card", () => {
-    const state = createInitialState({ seed: 11 });
-    const move = takeableContractor(state);
-    const contractor = state.contractors.slots.find((s) => s.card?.id === move.cardId)!.card!;
-    if (contractor.effect.kind !== "gain") throw new Error("expected a resource contractor");
+    const miner = cardNamed(createContractorDeck(), "Miner");
+    const staged = stageContractor(createInitialState({ seed: 11 }), miner);
 
-    const before = state.players[0].resources;
-    const next = applyMove(state, move);
+    const before = staged.players[0].resources;
+    const next = takeStaged(staged);
     const [player] = next.players;
 
     // The benefit lands immediately...
-    expect(player.resources.metal).toBe(before.metal + (contractor.effect.resources.metal ?? 0));
-    expect(player.resources.energy).toBe(
-      before.energy + (contractor.effect.resources.energy ?? 0),
-    );
-    expect(player.resources.goods).toBe(before.goods + (contractor.effect.resources.goods ?? 0));
+    expect(player.resources.metal).toBe(before.metal + 3);
+    expect(player.resources.energy).toBe(before.energy);
+    expect(player.resources.goods).toBe(before.goods);
     // ...and the card goes straight to the discard, never to hand.
-    expect(next.contractors.discard.map((card) => card.id)).toContain(contractor.id);
-    expect(player.hand.map((card) => card.id)).not.toContain(contractor.id);
+    expect(next.contractors.discard.map((card) => card.id)).toContain(miner.id);
+    expect(player.hand.map((card) => card.id)).not.toContain(miner.id);
   });
 
   it("never puts a contractor in hand", () => {
@@ -388,6 +639,34 @@ describe("applyMove", () => {
     expect(after.resources.energy).toBe(before.resources.energy - card.buildCost.energy);
     expect(after.compound.map((b) => b.card.id)).toContain(card.id);
     expect(after.hand.map((c) => c.id)).not.toContain(card.id);
+  });
+
+  it("refuses a second copy of a blueprint already in the compound", () => {
+    const state = createInitialState({ seed: 3 });
+    const [built, spare] = copiesOf("Generator");
+    const mine = copiesOf("Mine")[0];
+    const die: Die = {
+      id: "die",
+      face: 6,
+      color: state.players[0].color,
+      extra: false,
+      spent: false,
+    };
+    const staged: GameState = patchPlayer({ ...state, phase: "work" }, 0, {
+      hand: [spare, mine],
+      compound: [{ card: built, activated: false }],
+      resources: { metal: 5, energy: 5, goods: 0 },
+      dice: [die],
+      rolled: true,
+    });
+
+    const builds = legalMoves(staged).filter((move) => move.type === "build");
+
+    // The one it does not hold a copy of is still on offer.
+    expect(builds.map((move) => move.cardId)).toEqual([mine.id]);
+    expect(() => applyMove(staged, { type: "build", cardId: spare.id, dieId: die.id })).toThrow(
+      /already built Generator/,
+    );
   });
 
   it("replays identically from the same seed and move list", () => {

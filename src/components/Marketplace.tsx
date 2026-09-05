@@ -33,7 +33,7 @@ function ContractorRow({ market }: { market: ContractorMarket }) {
               <CardView card={slot.card} />
             ) : (
               <div className={`${styles.card} ${styles.cardEmpty}`}>
-                <span className={styles.empty}>Empty until cleanup</span>
+                <span className={styles.empty}>Deck and discard exhausted</span>
               </div>
             )}
           </div>

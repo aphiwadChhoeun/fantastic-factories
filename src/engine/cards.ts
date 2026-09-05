@@ -8,8 +8,8 @@
  * Costs are in metal, energy is a secondary input, and goods are what you are
  * racing to accumulate.
  *
- * TODO: replace both lists with the real cards. Names and numbers here are
- * invented, not the published card set.
+ * TODO: the blueprint list is still invented. The contractors below are real
+ * cards, but not yet the whole deck.
  */
 
 import type { BlueprintCard, ContractorCard } from "./types";
@@ -97,40 +97,71 @@ const BLUEPRINTS: readonly { template: BlueprintTemplate; copies: number }[] = [
   },
 ];
 
+/**
+ * The contractor deck, 17 cards. Several charge energy on top of their slot's
+ * token, which is what keeps the strong ones honest.
+ *
+ * TODO: the rest of the published contractors go here.
+ */
 const CONTRACTORS: readonly { template: ContractorTemplate; copies: number }[] = [
   {
-    copies: 6,
+    copies: 2,
     template: {
-      name: "Day Labourer",
-      effect: { kind: "gain", resources: { metal: 2 } },
+      name: "Architect",
+      effect: { kind: "draw", count: 3 },
     },
   },
   {
-    copies: 5,
+    copies: 2,
     template: {
       name: "Electrician",
-      effect: { kind: "gain", resources: { energy: 3 } },
+      effect: { kind: "gain", resources: { energy: 5 } },
     },
   },
   {
-    copies: 5,
+    copies: 2,
     template: {
-      name: "Quality Inspector",
-      effect: { kind: "gain", resources: { goods: 2 } },
+      name: "Miner",
+      effect: { kind: "gain", resources: { metal: 3 } },
     },
   },
   {
-    copies: 4,
+    copies: 3,
     template: {
-      name: "Consultant",
-      effect: { kind: "draw", count: 2 },
+      name: "Investor",
+      effect: { kind: "revealForResources" },
     },
   },
   {
-    copies: 4,
+    copies: 3,
     template: {
-      name: "Site Foreman",
-      effect: { kind: "gain", resources: { metal: 2, energy: 2 } },
+      name: "Specialist",
+      effect: { kind: "extraDice", count: 1, chosen: true },
+    },
+  },
+  {
+    copies: 3,
+    template: {
+      name: "Hired Hands",
+      extraCost: { metal: 0, energy: 3, goods: 0 },
+      effect: { kind: "extraDice", count: 2, chosen: false },
+    },
+  },
+  {
+    copies: 1,
+    template: {
+      name: "Foreman",
+      extraCost: { metal: 0, energy: 2, goods: 0 },
+      // A full workforce, so in practice: name every face instead of rolling.
+      effect: { kind: "chooseOwnFaces", count: 4 },
+    },
+  },
+  {
+    copies: 1,
+    template: {
+      name: "Engineer",
+      extraCost: { metal: 0, energy: 4, goods: 0 },
+      effect: { kind: "buildFromDeck" },
     },
   },
 ];

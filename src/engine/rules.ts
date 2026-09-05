@@ -15,6 +15,9 @@
 import { nextInt, shuffle, type Rng } from "./rng";
 import { MARKET_ROW_SIZE } from "./setup";
 import {
+  DIE_FACES,
+  EXTRA_DIE_COLOR,
+  NO_PERKS,
   PHASE_LABELS,
   type ActivationRequirement,
   type BlueprintCard,
@@ -26,6 +29,7 @@ import {
   type Move,
   type Player,
   type Resources,
+  type WorkPerks,
 } from "./types";
 
 /** A player who reaches either threshold ends the game. */
@@ -62,6 +66,9 @@ function satisfies(requirement: ActivationRequirement, face: DieFace): boolean {
   }
 }
 
+/** Costs nothing beyond its slot's token — most contractors. */
+const NO_COST: Resources = { metal: 0, energy: 0, goods: 0 };
+
 function canAfford(resources: Resources, cost: Resources): boolean {
   return (
     resources.metal >= cost.metal &&
@@ -70,8 +77,21 @@ function canAfford(resources: Resources, cost: Resources): boolean {
   );
 }
 
+/**
+ * No compound holds two of the same blueprint. Copies differ only by id, so
+ * the name is what counts.
+ */
+function alreadyBuilt(player: Player, card: BlueprintCard): boolean {
+  return player.compound.some((building) => building.card.name === card.name);
+}
+
 function unspentDice(player: Player): Die[] {
   return player.dice.filter((die) => !die.spent);
+}
+
+/** The player's own workforce dice, as opposed to white contractor extras. */
+function ownDice(player: Player): Die[] {
+  return player.dice.filter((die) => !die.extra);
 }
 
 /** Blueprints in hand that could pay a slot carrying `token`. */
@@ -89,9 +109,11 @@ export function legalMoves(state: GameState): Move[] {
       const moves: Move[] = [];
 
       // A contractor costs a blueprint of its slot's tool type, so a slot with
-      // no matching blueprint in hand simply offers nothing.
+      // no matching blueprint in hand simply offers nothing. A few also charge
+      // resources on top, which can put one out of reach entirely.
       for (const slot of state.contractors.slots) {
         if (!slot.card) continue;
+        if (!canAfford(player.resources, slot.card.extraCost ?? NO_COST)) continue;
         for (const payment of paymentsFor(player, slot.token)) {
           moves.push({
             type: "draft",
@@ -112,12 +134,32 @@ export function legalMoves(state: GameState): Move[] {
     }
 
     case "work": {
-      if (player.dice.length === 0) return [{ type: "rollDice" }];
+      // Nothing else happens until the dice are on the table.
+      if (!player.rolled) {
+        const moves: Move[] = [];
+        // A Foreman lets you name faces instead of rolling them. Placing fewer
+        // than you may is allowed: the rest are rolled.
+        if (player.perks.chooseOwnFaces > 0 && ownDice(player).length < player.workforce) {
+          for (const face of DIE_FACES) moves.push({ type: "setDie", face });
+        }
+        moves.push({ type: "rollDice" });
+        return moves;
+      }
+
+      // A Specialist's die is set before anything is spent. The roll is
+      // already face-up, so deciding now costs the player nothing.
+      if (player.perks.extraChosen > 0) {
+        return DIE_FACES.map((face) => ({ type: "setDie", face }));
+      }
 
       const moves: Move[] = [];
       for (const die of unspentDice(player)) {
         for (const card of player.hand) {
-          if (die.face >= card.buildRequirement && canAfford(player.resources, card.buildCost)) {
+          if (
+            die.face >= card.buildRequirement &&
+            canAfford(player.resources, card.buildCost) &&
+            !alreadyBuilt(player, card)
+          ) {
             moves.push({ type: "build", cardId: card.id, dieId: die.id });
           }
         }
@@ -216,6 +258,108 @@ function spendResources(resources: Resources, cost: Resources): Resources {
 }
 
 /**
+ * Digs through the blueprint deck for a card this player has not already
+ * built, then stands it in the compound for free — no die, no build cost.
+ *
+ * Passed-over duplicates are held aside until the search ends rather than
+ * discarded as they go: a reshuffle mid-search would otherwise deal the same
+ * duplicate straight back and spin forever. Once both piles are exhausted the
+ * search gives up, which is the only way this builds nothing.
+ */
+function buildFromDeck(state: GameState, playerIndex: number): GameState {
+  const player = state.players[playerIndex];
+  const skipped: BlueprintCard[] = [];
+  let source: DrawSource<BlueprintCard> = state.blueprints;
+  let rng = state.rng;
+  let chosen: BlueprintCard | null = null;
+
+  for (;;) {
+    const draw = takeFromDeck(source, 1, rng);
+    rng = draw.rng;
+    source = { deck: draw.deck, discard: draw.discard };
+
+    const [card] = draw.drawn;
+    if (!card) break;
+    if (alreadyBuilt(player, card)) {
+      skipped.push(card);
+      continue;
+    }
+    chosen = card;
+    break;
+  }
+
+  const searched: GameState = {
+    ...state,
+    rng,
+    blueprints: {
+      ...state.blueprints,
+      deck: source.deck,
+      discard: [...source.discard, ...skipped],
+    },
+  };
+
+  const aside =
+    skipped.length > 0
+      ? ` (discarded ${skipped.length} already-built blueprint${skipped.length === 1 ? "" : "s"})`
+      : "";
+
+  const card = chosen;
+  if (!card) {
+    return log(searched, `${player.name} found no new blueprint to build${aside}`);
+  }
+
+  const built = updatePlayer(searched, playerIndex, (p) => ({
+    ...p,
+    compound: [...p.compound, { card, activated: false }],
+  }));
+  return log(built, `${player.name} built ${card.name} for free${aside}`);
+}
+
+/**
+ * Turns the top blueprint face up, pays out its build cost in metal and
+ * energy, and discards it. The card is only ever revealed — it does not reach
+ * hand. Goods never appear in a build cost, so nothing is lost by ignoring
+ * that field.
+ */
+function revealForResources(state: GameState, playerIndex: number): GameState {
+  const player = state.players[playerIndex];
+  const { drawn, deck, discard, rng } = takeFromDeck(state.blueprints, 1, state.rng);
+  const [card] = drawn;
+
+  const searched: GameState = {
+    ...state,
+    rng,
+    blueprints: { ...state.blueprints, deck, discard },
+  };
+  if (!card) return log(searched, `${player.name} had no blueprint left to reveal`);
+
+  const gain = { metal: card.buildCost.metal, energy: card.buildCost.energy };
+  const revealed: GameState = {
+    ...searched,
+    blueprints: { ...searched.blueprints, discard: [...discard, card] },
+  };
+  const paid = updatePlayer(revealed, playerIndex, (p) => ({
+    ...p,
+    resources: addResources(p.resources, gain),
+  }));
+  return log(
+    paid,
+    `${player.name} revealed ${card.name} — gained ${describeResourcesForLog(gain)}`,
+  );
+}
+
+function grantPerks(state: GameState, playerIndex: number, grant: Partial<WorkPerks>): GameState {
+  return updatePlayer(state, playerIndex, (player) => ({
+    ...player,
+    perks: {
+      chooseOwnFaces: player.perks.chooseOwnFaces + (grant.chooseOwnFaces ?? 0),
+      extraRolled: player.perks.extraRolled + (grant.extraRolled ?? 0),
+      extraChosen: player.perks.extraChosen + (grant.extraChosen ?? 0),
+    },
+  }));
+}
+
+/**
  * TODO: this is where new `Effect` variants get handled. Keep it exhaustive —
  * the switch has no default so TypeScript will flag any variant you forget.
  *
@@ -231,20 +375,51 @@ function applyEffect(state: GameState, playerIndex: number, effect: Effect): Gam
       }));
     case "draw":
       return drawBlueprints(state, playerIndex, effect.count);
+    case "buildFromDeck":
+      return buildFromDeck(state, playerIndex);
+    case "revealForResources":
+      return revealForResources(state, playerIndex);
+    case "chooseOwnFaces":
+      return grantPerks(state, playerIndex, { chooseOwnFaces: effect.count });
+    case "extraDice":
+      return grantPerks(
+        state,
+        playerIndex,
+        effect.chosen ? { extraChosen: effect.count } : { extraRolled: effect.count },
+      );
   }
+}
+
+/** "2 metal, 1 energy". Display formatting lives in `lib/format`. */
+function describeResourcesForLog(resources: Partial<Resources>): string {
+  const parts = (["metal", "energy", "goods"] as const)
+    .filter((key) => resources[key])
+    .map((key) => `${resources[key]} ${key}`);
+  return parts.length > 0 ? parts.join(", ") : "nothing";
+}
+
+function costsNothing(cost: Resources): boolean {
+  return cost.metal === 0 && cost.energy === 0 && cost.goods === 0;
 }
 
 /** Terse effect summary for the log. Display formatting lives in `lib/format`. */
 function describeEffectForLog(effect: Effect): string {
   switch (effect.kind) {
-    case "gain": {
-      const parts = (["metal", "energy", "goods"] as const)
-        .filter((key) => effect.resources[key])
-        .map((key) => `${effect.resources[key]} ${key}`);
-      return `gained ${parts.join(", ")}`;
-    }
+    case "gain":
+      return `gained ${describeResourcesForLog(effect.resources)}`;
     case "draw":
       return `drew ${effect.count}`;
+    // These two log what actually happened themselves.
+    case "buildFromDeck":
+      return "building from the deck";
+    case "revealForResources":
+      return "revealing the top blueprint";
+    case "chooseOwnFaces":
+      return `may set ${effect.count} of their dice this round`;
+    case "extraDice": {
+      const dice = `${effect.count} extra white ${effect.count === 1 ? "die" : "dice"}`;
+      return effect.chosen ? `gets ${dice} at a face of their choice` : `rolls ${dice}`;
+    }
   }
 }
 
@@ -255,11 +430,16 @@ function spendDie(player: Player, dieId: string): Player {
   };
 }
 
-function requireUnspentDie(player: Player, dieId: string): Die {
-  const die = player.dice.find((d) => d.id === dieId);
-  if (!die) throw new Error(`${player.name} has no die ${dieId}`);
-  if (die.spent) throw new Error(`Die ${dieId} was already spent`);
+function requireUnspentDie(player: Player, id: string): Die {
+  const die = player.dice.find((d) => d.id === id);
+  if (!die) throw new Error(`${player.name} has no die ${id}`);
+  if (die.spent) throw new Error(`Die ${id} was already spent`);
   return die;
+}
+
+/** Unique within a round: a player's dice pool only ever grows. */
+function dieId(player: Player, round: number, offset = 0): string {
+  return `${player.id}-r${round}-d${player.dice.length + offset}`;
 }
 
 /** Hands the turn to the next player, advancing the phase after a full lap. */
@@ -290,7 +470,10 @@ function refillBlueprintRow(
   return { pool: { row: [...pool.row, ...drawn], deck, discard }, rng: next };
 }
 
-/** Refills empty contractor slots. Tokens stay put; only the cards change. */
+/**
+ * Refills empty contractor slots. Tokens stay put; only the cards change.
+ * Leaves a slot empty when both the deck and the discard have run dry.
+ */
 function refillContractorSlots(
   market: GameState["contractors"],
   rng: Rng,
@@ -306,11 +489,19 @@ function refillContractorSlots(
   return { market: { slots, deck, discard }, rng: next };
 }
 
-/** Discards dice, refreshes compounds, refills both rows, checks the end. */
+/**
+ * Discards dice, refreshes compounds, checks the end. Rows refill the moment a
+ * card is taken, so the refill here only catches up a row that was left short
+ * because both its deck and its discard were empty at the time.
+ */
 function endRound(state: GameState): GameState {
+  // Dice clear — which is also how white contractor dice are handed back —
+  // along with anything a contractor promised for this round only.
   const players = state.players.map((player) => ({
     ...player,
     dice: [],
+    rolled: false,
+    perks: NO_PERKS,
     compound: player.compound.map((building) => ({ ...building, activated: false })),
   }));
 
@@ -387,14 +578,14 @@ export function applyMove(state: GameState, move: Move): GameState {
         const card = state.blueprints.row.find((c) => c.id === move.cardId);
         if (!card) throw new Error(`No card ${move.cardId} in the blueprint row`);
 
+        // The gap closes at once: the next player always faces a full row.
+        const refilled = refillBlueprintRow(
+          { ...state.blueprints, row: state.blueprints.row.filter((c) => c.id !== card.id) },
+          state.rng,
+        );
+
         const taken = updatePlayer(
-          {
-            ...state,
-            blueprints: {
-              ...state.blueprints,
-              row: state.blueprints.row.filter((c) => c.id !== card.id),
-            },
-          },
+          { ...state, blueprints: refilled.pool, rng: refilled.rng },
           index,
           (p) => ({ ...p, hand: [...p.hand, card] }),
         );
@@ -412,19 +603,39 @@ export function applyMove(state: GameState, move: Move): GameState {
         );
       }
 
+      const extraCost = slot.card.extraCost ?? NO_COST;
+      if (!canAfford(player.resources, extraCost)) {
+        throw new Error(
+          `${slot.card.name} also costs ${describeResourcesForLog(extraCost)}, which ${
+            player.name
+          } cannot pay`,
+        );
+      }
+
       // The contractor never reaches hand: it empties its slot, goes straight
       // to the contractor discard, and its effect resolves at once.
       const contractor = slot.card;
+
+      // Refill before the taken card joins the discard, so a reshuffle here
+      // cannot deal it straight back into the slot it just left.
+      const refilled = refillContractorSlots(
+        {
+          ...state.contractors,
+          slots: state.contractors.slots.map((s) =>
+            s.card?.id === contractor.id ? { ...s, card: null } : s,
+          ),
+        },
+        state.rng,
+      );
+
       const taken = updatePlayer(
         {
           ...state,
           contractors: {
-            slots: state.contractors.slots.map((s) =>
-              s.card?.id === contractor.id ? { ...s, card: null } : s,
-            ),
-            deck: state.contractors.deck,
-            discard: [...state.contractors.discard, contractor],
+            ...refilled.market,
+            discard: [...refilled.market.discard, contractor],
           },
+          rng: refilled.rng,
           // The blueprint spent as payment goes to the blueprint discard.
           blueprints: {
             ...state.blueprints,
@@ -432,38 +643,101 @@ export function applyMove(state: GameState, move: Move): GameState {
           },
         },
         index,
-        (p) => ({ ...p, hand: p.hand.filter((c) => c.id !== payment.id) }),
+        (p) => ({
+          ...p,
+          hand: p.hand.filter((c) => c.id !== payment.id),
+          resources: spendResources(p.resources, extraCost),
+        }),
       );
-      const resolved = applyEffect(taken, index, contractor.effect);
-      return endTurn(
-        log(
-          resolved,
-          `${player.name} took ${contractor.name} for ${payment.name} — ${describeEffectForLog(
-            contractor.effect,
-          )}`,
-        ),
+
+      // Announced before it resolves, so effects that log their own detail —
+      // the Engineer's free build — read in the order they happened.
+      const price = costsNothing(extraCost)
+        ? payment.name
+        : `${payment.name} and ${describeResourcesForLog(extraCost)}`;
+      const announced = log(
+        taken,
+        `${player.name} took ${contractor.name} for ${price} — ${describeEffectForLog(
+          contractor.effect,
+        )}`,
+      );
+      return endTurn(applyEffect(announced, index, contractor.effect));
+    }
+
+    case "setDie": {
+      if (state.phase !== "work") throw new Error("Dice are set in the Work Phase");
+
+      // Before the roll it is one of your own, from a Foreman; after it, a
+      // white extra from a Specialist. Never anything else.
+      const extra = player.rolled;
+      if (extra) {
+        if (player.perks.extraChosen <= 0) {
+          throw new Error(`${player.name} has no extra die to set`);
+        }
+      } else {
+        if (player.perks.chooseOwnFaces <= 0) {
+          throw new Error(`${player.name} has no die faces to choose`);
+        }
+        if (ownDice(player).length >= player.workforce) {
+          throw new Error(`${player.name} has no unrolled dice left to set`);
+        }
+      }
+
+      const die: Die = {
+        id: dieId(player, state.round),
+        face: move.face,
+        color: extra ? EXTRA_DIE_COLOR : player.color,
+        extra,
+        spent: false,
+      };
+
+      const set = updatePlayer(state, index, (p) => ({
+        ...p,
+        dice: [...p.dice, die],
+        perks: extra
+          ? { ...p.perks, extraChosen: p.perks.extraChosen - 1 }
+          : { ...p.perks, chooseOwnFaces: p.perks.chooseOwnFaces - 1 },
+      }));
+      return log(
+        set,
+        `${player.name} set ${extra ? "an extra white die" : "a die"} to ${move.face}`,
       );
     }
 
     case "rollDice": {
       if (state.phase !== "work") throw new Error("Dice are rolled in the Work Phase");
-      if (player.dice.length > 0) throw new Error(`${player.name} already rolled`);
+      if (player.rolled) throw new Error(`${player.name} already rolled`);
+
+      // Whatever a Foreman did not already place, plus any white extras.
+      const own = player.workforce - ownDice(player).length;
 
       let rng = state.rng;
       const dice: Die[] = [];
-      for (let i = 0; i < player.workforce; i++) {
+      for (let i = 0; i < own + player.perks.extraRolled; i++) {
         const [value, next] = nextInt(rng, 6);
         rng = next;
         dice.push({
-          id: `${player.id}-r${state.round}-d${i}`,
+          id: dieId(player, state.round, i),
           face: (value + 1) as DieFace,
-          color: player.color,
+          color: i < own ? player.color : EXTRA_DIE_COLOR,
+          extra: i >= own,
           spent: false,
         });
       }
 
-      const rolled = updatePlayer({ ...state, rng }, index, (p) => ({ ...p, dice }));
-      return log(rolled, `${player.name} rolled ${dice.map((d) => d.face).join(", ")}`);
+      const rolled = updatePlayer({ ...state, rng }, index, (p) => ({
+        ...p,
+        dice: [...p.dice, ...dice],
+        rolled: true,
+        perks: { ...p.perks, extraRolled: 0 },
+      }));
+      const faces = dice.map((d) => d.face).join(", ");
+      return log(
+        rolled,
+        faces.length > 0
+          ? `${player.name} rolled ${faces}`
+          : `${player.name} kept their chosen dice`,
+      );
     }
 
     case "build": {
@@ -477,6 +751,9 @@ export function applyMove(state: GameState, move: Move): GameState {
       }
       if (!canAfford(player.resources, card.buildCost)) {
         throw new Error(`${player.name} cannot afford ${card.name}`);
+      }
+      if (alreadyBuilt(player, card)) {
+        throw new Error(`${player.name} has already built ${card.name}`);
       }
 
       const built = updatePlayer(state, index, (p) => ({
@@ -510,8 +787,11 @@ export function applyMove(state: GameState, move: Move): GameState {
 
     case "endPhase": {
       if (state.phase === "cleanup") return endRound(state);
-      if (state.phase === "work" && player.dice.length === 0) {
+      if (state.phase === "work" && !player.rolled) {
         throw new Error(`${player.name} must roll before passing`);
+      }
+      if (state.phase === "work" && player.perks.extraChosen > 0) {
+        throw new Error(`${player.name} must set their extra die before passing`);
       }
       return endTurn(state);
     }

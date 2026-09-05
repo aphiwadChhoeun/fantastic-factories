@@ -9,6 +9,9 @@ import type { Rng } from "./rng";
 
 export type DieFace = 1 | 2 | 3 | 4 | 5 | 6;
 
+/** Every face, for enumerating the choices a `setDie` move offers. */
+export const DIE_FACES: readonly DieFace[] = [1, 2, 3, 4, 5, 6];
+
 /** Each player takes one colour; every die they roll carries it. */
 export const DIE_COLORS = ["red", "blue", "green", "purple", "yellow", "white"] as const;
 
@@ -18,9 +21,18 @@ export type Die = {
   readonly id: string;
   readonly face: DieFace;
   readonly color: DieColor;
+  /**
+   * A white die lent by a contractor for one Work Phase, rather than one of
+   * the player's own workforce. Flagged rather than inferred from the colour,
+   * since a player can be seated on white.
+   */
+  readonly extra: boolean;
   /** Set once the die has been spent on a build or an activation this round. */
   readonly spent: boolean;
 };
+
+/** Contractor dice are white, whatever colour the player is seated on. */
+export const EXTRA_DIE_COLOR: DieColor = "white";
 
 /**
  * Metal builds, energy powers, goods score.
@@ -50,7 +62,29 @@ export type ActivationRequirement =
  */
 export type Effect =
   | { readonly kind: "gain"; readonly resources: Partial<Resources> }
-  | { readonly kind: "draw"; readonly count: number };
+  | { readonly kind: "draw"; readonly count: number }
+  /**
+   * Draw blueprints off the deck until one is not already standing in the
+   * compound, then build it at once for nothing — no die, no build cost. The
+   * duplicates passed over are discarded.
+   */
+  | { readonly kind: "buildFromDeck" }
+  /**
+   * Reveal the top blueprint and take metal and energy equal to its build
+   * cost. The card itself is revealed only, then discarded.
+   */
+  | { readonly kind: "revealForResources" }
+  /**
+   * Set the face of up to `count` of your own dice instead of rolling them,
+   * at the start of this round's Work Phase.
+   */
+  | { readonly kind: "chooseOwnFaces"; readonly count: number }
+  /**
+   * Extra white dice for this round's Work Phase, discarded with everything
+   * else at cleanup. `chosen` dice have their face picked by the player once
+   * the roll is on the table; the rest are rolled with it.
+   */
+  | { readonly kind: "extraDice"; readonly count: number; readonly chosen: boolean };
 
 export type CardKind = "blueprint" | "contractor";
 
@@ -88,12 +122,22 @@ export type BlueprintCard = CardBase & {
  */
 export type ContractorCard = CardBase & {
   readonly kind: "contractor";
+  /**
+   * Charged on top of the slot's token. Most contractors cost only the token,
+   * and leave this undefined.
+   */
+  readonly extraCost?: Resources;
   readonly effect: Effect;
 };
 
 export type Card = BlueprintCard | ContractorCard;
 
-/** A blueprint standing in a player's compound. */
+/**
+ * A blueprint standing in a player's compound.
+ *
+ * No compound may hold two of the same blueprint. Copies of a card share a
+ * name and differ only by id, so the rules compare names.
+ */
 export type Building = {
   readonly card: BlueprintCard;
   /** Reset during cleanup — a building activates at most once per round. */
@@ -126,6 +170,22 @@ export type ContractorMarket = {
   readonly discard: readonly ContractorCard[];
 };
 
+/**
+ * Contractor benefits that land in this round's Work Phase and expire with it.
+ * Each count is what is *left* to spend: `applyMove` decrements as they go, and
+ * cleanup clears the lot.
+ */
+export type WorkPerks = {
+  /** Own dice whose face may be set instead of rolled — the Foreman. */
+  readonly chooseOwnFaces: number;
+  /** Extra white dice to roll alongside your own — Hired Hands. */
+  readonly extraRolled: number;
+  /** Extra white dice whose face you pick after the roll — the Specialist. */
+  readonly extraChosen: number;
+};
+
+export const NO_PERKS: WorkPerks = { chooseOwnFaces: 0, extraRolled: 0, extraChosen: 0 };
+
 export type Player = {
   readonly id: string;
   readonly name: string;
@@ -139,9 +199,20 @@ export type Player = {
   /** The area in front of the player, where built blueprints stand. */
   readonly compound: readonly Building[];
   readonly resources: Resources;
+  /**
+   * This round's dice: own-colour ones from the workforce, plus any white
+   * extras a contractor handed over. Cleared at cleanup.
+   */
   readonly dice: readonly Die[];
+  /**
+   * Set by `rollDice`, cleared at cleanup. Dice can be on the table before the
+   * roll — a Foreman lets you place them — so the count is not the test for
+   * whether a player has rolled.
+   */
+  readonly rolled: boolean;
   /** How many dice this player rolls each round. */
   readonly workforce: number;
+  readonly perks: WorkPerks;
 };
 
 /**
@@ -181,7 +252,14 @@ export type Move =
       /** The blueprint discarded as payment. Must match the slot's token. */
       readonly paymentCardId: string;
     }
+  /** Rolls everything still owed this round: your workforce, plus white extras. */
   | { readonly type: "rollDice" }
+  /**
+   * Puts one die on the table at a face of your choosing rather than rolling
+   * it: one of your own before the roll (Foreman), or a white extra after it
+   * (Specialist).
+   */
+  | { readonly type: "setDie"; readonly face: DieFace }
   | { readonly type: "build"; readonly cardId: string; readonly dieId: string }
   | { readonly type: "activate"; readonly cardId: string; readonly dieId: string }
   | { readonly type: "endPhase" };
