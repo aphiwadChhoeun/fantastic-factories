@@ -1,6 +1,7 @@
 import type { Player } from "@/engine";
 import { colorSwatch, DIE_SWATCHES } from "@/lib/colors";
 import { CardView } from "./CardView";
+import { HeadquartersView } from "./HeadquartersView";
 import styles from "./game.module.css";
 
 type Props = {
@@ -48,6 +49,8 @@ export function PlayerPanel({ player, active, hideHand = false }: Props) {
           </div>
         )}
       </div>
+
+      <HeadquartersView placements={player.headquarters} color={player.color} />
 
       <div>
         <div className={styles.sectionTitle}>Compound</div>

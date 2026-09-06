@@ -1,9 +1,10 @@
-import { createBlueprintDeck, createContractorDeck, createStartingBuilding } from "./cards";
+import { createBlueprintDeck, createContractorDeck } from "./cards";
 import { createRng, shuffle, type Rng } from "./rng";
 import {
   BLUEPRINT_TYPES,
   DIE_COLORS,
   NO_PERKS,
+  NO_PLACEMENTS,
   type BlueprintCard,
   type CardPool,
   type ContractorCard,
@@ -83,7 +84,9 @@ export function createInitialState(options: SetupOptions = {}): GameState {
     color: colors[index],
     // Hands are blueprints only — contractors resolve the moment you take one.
     hand: blueprintDraw.splice(0, STARTING_HAND),
-    compound: [{ card: createStartingBuilding(`p${index}`), activated: false }],
+    // The compound starts bare. The Headquarters is a tile, not a building.
+    compound: [],
+    headquarters: NO_PLACEMENTS,
     resources: STARTING_RESOURCES,
     dice: [],
     rolled: false,

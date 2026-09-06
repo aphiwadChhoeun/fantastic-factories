@@ -8,9 +8,11 @@ import {
   createInitialState,
   currentPlayer,
   DIE_COLORS,
+  HQ_SECTIONS,
   legalMoves,
   MARKET_ROW_SIZE,
   MAX_ROUNDS,
+  NO_PLACEMENTS,
   STARTING_HAND,
   STARTING_RESOURCES,
   STARTING_WORKFORCE,
@@ -18,7 +20,9 @@ import {
   type Card,
   type ContractorCard,
   type Die,
+  type DieFace,
   type GameState,
+  type HqSectionId,
   type Move,
   type Player,
 } from "@/engine";
@@ -123,7 +127,7 @@ function takeStaged(state: GameState): GameState {
 }
 
 describe("setup", () => {
-  it("deals a hand, a starting compound, and both market rows", () => {
+  it("deals a hand and an empty compound", () => {
     const state = createInitialState({ seed: 42 });
 
     expect(state.players).toHaveLength(2);
@@ -131,7 +135,8 @@ describe("setup", () => {
     expect(state.players[1].isAi).toBe(true);
     for (const player of state.players) {
       expect(player.hand).toHaveLength(STARTING_HAND);
-      expect(player.compound).toHaveLength(1);
+      // Nothing is built yet — the Headquarters is a tile, not a building.
+      expect(player.compound).toEqual([]);
     }
   });
 
@@ -170,10 +175,13 @@ describe("setup", () => {
     expect(new Set(blueprints.map((card) => card.type))).toEqual(new Set(BLUEPRINT_TYPES));
   });
 
-  it("gives the starting building a tool type too", () => {
+  it("gives every player an empty Headquarters", () => {
     const state = createInitialState({ seed: 42 });
     for (const player of state.players) {
-      expect(BLUEPRINT_TYPES).toContain(player.compound[0].card.type);
+      expect(player.headquarters).toEqual(NO_PLACEMENTS);
+      for (const section of HQ_SECTIONS) {
+        expect(player.headquarters[section.id]).toEqual([]);
+      }
     }
   });
 
@@ -418,6 +426,164 @@ describe("the Engineer", () => {
     expect(next.blueprints.discard.map((card) => card.id)).toEqual(
       expect.arrayContaining([duplicate.id, payment.id]),
     );
+  });
+});
+
+describe("the Headquarters", () => {
+  const section = (id: HqSectionId) => HQ_SECTIONS.find((s) => s.id === id)!;
+
+  /** A player in the Work Phase holding exactly these faces, already rolled. */
+  function withDice(
+    state: GameState,
+    faces: readonly DieFace[],
+    patch: Partial<Player> = {},
+  ): GameState {
+    const { color } = state.players[0];
+    return patchPlayer({ ...state, phase: "work" }, 0, {
+      dice: faces.map((face, i) => ({ id: `d${i}`, face, color, extra: false, spent: false })),
+      rolled: true,
+      ...patch,
+    });
+  }
+
+  function place(state: GameState, id: HqSectionId, dieIndex: number): GameState {
+    return applyMove(state, { type: "placeDie", section: id, dieId: `d${dieIndex}` });
+  }
+
+  it("has the three printed sections, three slots each", () => {
+    expect(HQ_SECTIONS.map((s) => s.id)).toEqual(["research", "generate", "mine"]);
+    for (const s of HQ_SECTIONS) expect(s.slots).toBe(3);
+
+    expect(section("research").slots).toBe(3);
+    expect(section("research").accepts).toEqual({ kind: "any" });
+    expect(section("research").reward).toEqual({ kind: "drawBlueprint" });
+
+    expect(section("generate").slots).toBe(3);
+    expect(section("generate").accepts).toEqual({ kind: "atMost", face: 3 });
+    expect(section("generate").reward).toEqual({ kind: "energyByFace" });
+
+    expect(section("mine").slots).toBe(3);
+    expect(section("mine").accepts).toEqual({ kind: "atLeast", face: 4 });
+    expect(section("mine").reward).toEqual({ kind: "gain", resources: { metal: 1 } });
+  });
+
+  it("offers a low die Research and Generate, a high die Research and Mine", () => {
+    const state = withDice(createInitialState({ seed: 3 }), [2, 5]);
+    const sectionsFor = (dieId: string) =>
+      legalMoves(state)
+        .filter((move) => move.type === "placeDie" && move.dieId === dieId)
+        .map((move) => (move.type === "placeDie" ? move.section : null));
+
+    expect(sectionsFor("d0")).toEqual(["research", "generate"]);
+    expect(sectionsFor("d1")).toEqual(["research", "mine"]);
+  });
+
+  it("draws a blueprint off the deck for a die on Research", () => {
+    const state = withDice(createInitialState({ seed: 3 }), [6]);
+    const top = state.blueprints.deck[0];
+    const row = state.blueprints.row.map((card) => card.id);
+
+    const next = place(state, "research", 0);
+    const [player] = next.players;
+
+    expect(player.hand.map((card) => card.id)).toContain(top.id);
+    expect(next.blueprints.deck).toHaveLength(state.blueprints.deck.length - 1);
+    // Off the top of the deck, never out of the market row.
+    expect(next.blueprints.row.map((card) => card.id)).toEqual(row);
+    expect(player.headquarters.research).toEqual([6]);
+    expect(player.dice[0].spent).toBe(true);
+  });
+
+  it("reshuffles the discard when Research empties the deck", () => {
+    const discarded = copiesOf("Depot");
+    const state = withDice(createInitialState({ seed: 3 }), [1]);
+    const empty: GameState = {
+      ...state,
+      blueprints: { ...state.blueprints, deck: [], discard: discarded },
+    };
+
+    const next = place(empty, "research", 0);
+
+    expect(next.players[0].hand).toHaveLength(state.players[0].hand.length + 1);
+    expect(next.blueprints.discard).toEqual([]);
+    expect(next.blueprints.deck).toHaveLength(discarded.length - 1);
+  });
+
+  it("pays energy equal to the die on Generate, and one metal on Mine", () => {
+    const state = withDice(createInitialState({ seed: 3 }), [3, 4], {
+      resources: { metal: 0, energy: 0, goods: 0 },
+    });
+
+    expect(place(state, "generate", 0).players[0].resources.energy).toBe(3);
+    expect(place(state, "mine", 1).players[0].resources.metal).toBe(1);
+  });
+
+  it("refuses a face the section does not take, and a section that is full", () => {
+    const state = withDice(createInitialState({ seed: 3 }), [4, 1]);
+
+    expect(() => place(state, "generate", 0)).toThrow(/takes 3 or less, not a 4/);
+    expect(() => place(state, "mine", 1)).toThrow(/takes 4 or more, not a 1/);
+
+    const full = withDice(createInitialState({ seed: 3 }), [1], {
+      headquarters: { ...NO_PLACEMENTS, generate: [1, 2, 3] },
+    });
+    expect(() => place(full, "generate", 0)).toThrow(/Generate is full/);
+    expect(legalMoves(full).filter((move) => move.type === "placeDie")).toHaveLength(1);
+  });
+
+  it("doubles for a matching die and triples for a third", () => {
+    let state = withDice(createInitialState({ seed: 3 }), [2, 2, 2], {
+      resources: { metal: 0, energy: 0, goods: 0 },
+    });
+
+    // 2 energy, then 2×2, then 2×3 — the bonus is on the die being placed.
+    state = place(state, "generate", 0);
+    expect(state.players[0].resources.energy).toBe(2);
+    state = place(state, "generate", 1);
+    expect(state.players[0].resources.energy).toBe(6);
+    state = place(state, "generate", 2);
+    expect(state.players[0].resources.energy).toBe(12);
+
+    expect(state.players[0].headquarters.generate).toEqual([2, 2, 2]);
+    expect(state.log.at(-1)).toMatch(/placed a 2 on Generate ×3 for matching/);
+  });
+
+  it("counts matches per section, not across the tile", () => {
+    let state = withDice(createInitialState({ seed: 3 }), [5, 5], {
+      resources: { metal: 0, energy: 0, goods: 0 },
+    });
+
+    // A 5 on Research does not make the 5 on Mine a match.
+    state = place(state, "research", 0);
+    state = place(state, "mine", 1);
+
+    expect(state.players[0].resources.metal).toBe(1);
+  });
+
+  it("tops out at triple — three slots is the whole section", () => {
+    let state = withDice(createInitialState({ seed: 3 }), [6, 6, 6, 6], {
+      resources: { metal: 0, energy: 0, goods: 0 },
+    });
+
+    for (let i = 0; i < 3; i++) state = place(state, "mine", i);
+
+    // 1 + 2 + 3, and the fourth 6 has nowhere on Mine to go.
+    expect(state.players[0].resources.metal).toBe(6);
+    expect(() => place(state, "mine", 3)).toThrow(/Mine is full/);
+    expect(legalMoves(state).filter((move) => move.type === "placeDie")).toEqual([
+      { type: "placeDie", section: "research", dieId: "d3" },
+    ]);
+  });
+
+  it("clears its placements at cleanup", () => {
+    const state = withDice(createInitialState({ seed: 3 }), [5], {
+      headquarters: { ...NO_PLACEMENTS, mine: [4, 4] },
+    });
+    const cleaned = applyMove({ ...state, phase: "cleanup" }, { type: "endPhase" });
+
+    for (const player of cleaned.players) {
+      expect(player.headquarters).toEqual(NO_PLACEMENTS);
+    }
   });
 });
 

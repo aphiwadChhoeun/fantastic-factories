@@ -86,6 +86,44 @@ export type Effect =
    */
   | { readonly kind: "extraDice"; readonly count: number; readonly chosen: boolean };
 
+/**
+ * The three sections of the Headquarters tile. Dice go on them during the Work
+ * Phase; the tile itself is never built, bought or discarded.
+ */
+export const HQ_SECTION_IDS = ["research", "generate", "mine"] as const;
+
+export type HqSectionId = (typeof HQ_SECTION_IDS)[number];
+
+/** What a single die placed on a section pays out. */
+export type HqReward =
+  /** One blueprint off the top of the deck — Research. */
+  | { readonly kind: "drawBlueprint" }
+  /** Energy equal to the die's own face — Generate. */
+  | { readonly kind: "energyByFace" }
+  /** The same haul whatever the face — Mine. */
+  | { readonly kind: "gain"; readonly resources: Partial<Resources> };
+
+export type HqSection = {
+  readonly id: HqSectionId;
+  readonly name: string;
+  /** How many dice the section takes in a round. */
+  readonly slots: number;
+  /** Which faces it will take. */
+  readonly accepts: ActivationRequirement;
+  readonly reward: HqReward;
+};
+
+/**
+ * The faces standing on each section this round, in the order they went down.
+ * Cleared at cleanup with the dice themselves.
+ *
+ * Faces rather than dice, because that is all the tile cares about: the payout
+ * reads the face, and matching faces on one section pay a bonus.
+ */
+export type HqPlacements = Readonly<Record<HqSectionId, readonly DieFace[]>>;
+
+export const NO_PLACEMENTS: HqPlacements = { research: [], generate: [], mine: [] };
+
 export type CardKind = "blueprint" | "contractor";
 
 /**
@@ -196,8 +234,13 @@ export type Player = {
    * are taken, so they can never be held.
    */
   readonly hand: readonly BlueprintCard[];
-  /** The area in front of the player, where built blueprints stand. */
+  /**
+   * The area in front of the player, where built blueprints stand. The
+   * Headquarters is not part of it — that tile is not a blueprint.
+   */
   readonly compound: readonly Building[];
+  /** Dice standing on the Headquarters sections this round. */
+  readonly headquarters: HqPlacements;
   readonly resources: Resources;
   /**
    * This round's dice: own-colour ones from the workforce, plus any white
@@ -260,6 +303,8 @@ export type Move =
    * (Specialist).
    */
   | { readonly type: "setDie"; readonly face: DieFace }
+  /** Puts a die on one of the Headquarters sections and takes its payout. */
+  | { readonly type: "placeDie"; readonly section: HqSectionId; readonly dieId: string }
   | { readonly type: "build"; readonly cardId: string; readonly dieId: string }
   | { readonly type: "activate"; readonly cardId: string; readonly dieId: string }
   | { readonly type: "endPhase" };

@@ -1,6 +1,15 @@
 /** Presentation-only helpers. The engine stays free of display concerns. */
 
-import type { ActivationRequirement, Card, Effect, GameState, Move, Resources } from "@/engine";
+import {
+  hqSection,
+  type ActivationRequirement,
+  type Card,
+  type Effect,
+  type GameState,
+  type HqReward,
+  type Move,
+  type Resources,
+} from "@/engine";
 
 export function describeRequirement(requirement: ActivationRequirement): string {
   switch (requirement.kind) {
@@ -48,6 +57,22 @@ export function describeEffect(effect: Effect): string {
   }
 }
 
+/** What one die on a Headquarters section pays, before any matching bonus. */
+export function describeHqReward(reward: HqReward): string {
+  switch (reward.kind) {
+    case "drawBlueprint":
+      return "draw a blueprint";
+    case "energyByFace":
+      return "gain energy equal to the die";
+    case "gain":
+      return `gain ${describeResources({
+        metal: reward.resources.metal ?? 0,
+        energy: reward.resources.energy ?? 0,
+        goods: reward.resources.goods ?? 0,
+      })}`;
+  }
+}
+
 function findCardName(state: GameState, cardId: string): string {
   const player = state.players[state.currentPlayerIndex];
   const held = player.hand.find((card) => card.id === cardId);
@@ -88,6 +113,14 @@ export function describeMove(state: GameState, move: Move): string {
       return state.players[state.currentPlayerIndex].rolled
         ? `Take an extra die showing ${move.face}`
         : `Set a die to ${move.face}`;
+    case "placeDie": {
+      const face = dieFace(state, move.dieId);
+      const section = hqSection(move.section);
+      const placed = state.players[state.currentPlayerIndex].headquarters[move.section];
+      const matches = placed.filter((other) => String(other) === face).length;
+      const bonus = matches > 0 ? ` (×${matches + 1} — matches)` : "";
+      return `${section.name}: place a ${face}${bonus}`;
+    }
     case "build":
       return `Build ${findCardName(state, move.cardId)} with a ${dieFace(state, move.dieId)}`;
     case "activate":

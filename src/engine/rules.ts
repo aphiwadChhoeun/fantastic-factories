@@ -12,12 +12,14 @@
  * the real Fantastic Factories rules go.
  */
 
+import { HQ_SECTIONS, hqPayout, hqSection, matchMultiplier } from "./headquarters";
 import { nextInt, shuffle, type Rng } from "./rng";
 import { MARKET_ROW_SIZE } from "./setup";
 import {
   DIE_FACES,
   EXTRA_DIE_COLOR,
   NO_PERKS,
+  NO_PLACEMENTS,
   PHASE_LABELS,
   type ActivationRequirement,
   type BlueprintCard,
@@ -167,6 +169,13 @@ export function legalMoves(state: GameState): Move[] {
           if (!building.activated && satisfies(building.card.activation, die.face)) {
             moves.push({ type: "activate", cardId: building.card.id, dieId: die.id });
           }
+        }
+        // Last, because the Headquarters is the fallback: it is always there,
+        // so a die that can do something better should be seen doing it first.
+        for (const section of HQ_SECTIONS) {
+          if (player.headquarters[section.id].length >= section.slots) continue;
+          if (!satisfies(section.accepts, die.face)) continue;
+          moves.push({ type: "placeDie", section: section.id, dieId: die.id });
         }
       }
       moves.push({ type: "endPhase" });
@@ -390,6 +399,20 @@ function applyEffect(state: GameState, playerIndex: number, effect: Effect): Gam
   }
 }
 
+/** "any face", "3 or less". Display formatting lives in `lib/format`. */
+function describeRequirementForLog(requirement: ActivationRequirement): string {
+  switch (requirement.kind) {
+    case "any":
+      return "any face";
+    case "exact":
+      return `a ${requirement.face}`;
+    case "atLeast":
+      return `${requirement.face} or more`;
+    case "atMost":
+      return `${requirement.face} or less`;
+  }
+}
+
 /** "2 metal, 1 energy". Display formatting lives in `lib/format`. */
 function describeResourcesForLog(resources: Partial<Resources>): string {
   const parts = (["metal", "energy", "goods"] as const)
@@ -502,6 +525,7 @@ function endRound(state: GameState): GameState {
     dice: [],
     rolled: false,
     perks: NO_PERKS,
+    headquarters: NO_PLACEMENTS,
     compound: player.compound.map((building) => ({ ...building, activated: false })),
   }));
 
@@ -738,6 +762,39 @@ export function applyMove(state: GameState, move: Move): GameState {
           ? `${player.name} rolled ${faces}`
           : `${player.name} kept their chosen dice`,
       );
+    }
+
+    case "placeDie": {
+      if (state.phase !== "work") throw new Error("Dice are placed in the Work Phase");
+      const die = requireUnspentDie(player, move.dieId);
+      const section = hqSection(move.section);
+      const placed = player.headquarters[section.id];
+
+      if (placed.length >= section.slots) {
+        throw new Error(`${section.name} is full — ${section.slots} dice already`);
+      }
+      if (!satisfies(section.accepts, die.face)) {
+        throw new Error(
+          `${section.name} takes ${describeRequirementForLog(section.accepts)}, not a ${die.face}`,
+        );
+      }
+
+      // Matching what is already on the section multiplies the payout.
+      const multiplier = matchMultiplier(placed, die.face);
+      const payout = hqPayout(section.reward, die.face, multiplier);
+
+      const occupied = updatePlayer(state, index, (p) => ({
+        ...spendDie(p, die.id),
+        headquarters: { ...p.headquarters, [section.id]: [...placed, die.face] },
+      }));
+      const bonus = multiplier > 1 ? ` ×${multiplier} for matching` : "";
+      const announced = log(
+        occupied,
+        `${player.name} placed a ${die.face} on ${section.name}${bonus} — ${describeEffectForLog(
+          payout,
+        )}`,
+      );
+      return applyEffect(announced, index, payout);
     }
 
     case "build": {

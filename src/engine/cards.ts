@@ -166,28 +166,6 @@ const CONTRACTORS: readonly { template: ContractorTemplate; copies: number }[] =
   },
 ];
 
-/**
- * Every player starts with one of these already standing in their compound, so
- * the economy has a source. Without it nobody can keep affording blueprints
- * and the game stalls.
- *
- * TODO: the published game hands out a starting card per player; swap this
- * placeholder for it.
- */
-export function createStartingBuilding(playerId: string): BlueprintCard {
-  return {
-    id: `${playerId}-headquarters`,
-    kind: "blueprint",
-    name: "Headquarters",
-    // TODO: placeholder tool type, like the rest of this card.
-    type: "hammer",
-    buildCost: { metal: 0, energy: 0, goods: 0 },
-    buildRequirement: 1,
-    activation: { kind: "any" },
-    effect: { kind: "gain", resources: { metal: 1, energy: 1 } },
-  };
-}
-
 /** Ids are stable, which keeps test failures readable. */
 function expand<T extends { name: string }, K extends string>(
   templates: readonly { template: T; copies: number }[],

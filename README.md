@@ -61,7 +61,32 @@ human is blue and the AI red by default; pass `playerColors` to
 `createInitialState` to change that.
 
 Three resources: **metal** builds, **energy** powers, **goods** score. Players
-start with 4 dice in their colour, 1 metal, 2 energy, and 4 random blueprints.
+start with 4 dice in their colour, 1 metal, 2 energy, 4 random blueprints, and
+a Headquarters.
+
+## The Headquarters
+
+The tile every player starts with. It is not a card: it is never built, bought,
+drafted or discarded, and it is not part of your compound — so it is the one
+place a die can always go. Three sections take dice during the Work Phase and
+pay out per die placed; the dice come off at cleanup.
+
+| Section  | Slots | Takes      | Each die pays                     |
+| -------- | ----: | ---------- | --------------------------------- |
+| Research |     3 | any face   | Draw a blueprint off the deck     |
+| Generate |     3 | 1, 2 or 3  | Energy equal to the die's face    |
+| Mine     |     3 | 4, 5 or 6  | 1 metal                           |
+
+Research draws off the top of the **deck**, not the market row, and reshuffles
+the discard back into the deck when it runs out.
+
+**Matching dice pay a bonus.** A die that matches one already on the same
+section pays double; a third matching die pays triple, which is as far as it
+goes — three slots is the whole section. The bonus is on the die being placed,
+so three 2s on Generate pay 2, then 4, then 6 — twelve energy in all. Matches
+are counted per section: a 5 on Research does nothing for a 5 on Mine.
+
+## The cards
 
 Two card types, each with its own deck and its own market row:
 
@@ -105,15 +130,15 @@ face-up card from either row — there is no blind draw, so the only way to a
 contractor is paying its token. A taken card is replaced from its deck
 immediately, so the next player always sees a full row; a contractor slot keeps
 its token and gets a new card. Work: roll your dice, then spend them to build
-blueprints from hand and activate your compound. Cleanup: dice clear, buildings
-refresh. The game ends when someone reaches 12 goods or 10 cards in their
-compound.
+blueprints from hand, activate your compound, and fill your Headquarters.
+Cleanup: dice clear, the Headquarters empties, buildings refresh. The game ends
+when someone reaches 12 goods or 10 cards in their compound.
 
 ## Filling in the rules
 
 Start in `src/engine/rules.ts`. The implemented slice is: take a card from one
-of the two rows, roll dice, spend dice to build blueprints and activate your
-compound, end the round. Known stubs:
+of the two rows, roll dice, spend dice to build blueprints, activate your
+compound and work your Headquarters, end the round. Known stubs:
 
 - `cards.ts` — the blueprints are invented placeholders; the contractors are
   real, but not yet the whole deck
@@ -124,9 +149,9 @@ compound, end the round. Known stubs:
   spent. Nothing yet changes a die mid-phase, so waiting would gain nothing
 - with only 7 distinct blueprints, and no compound holding a duplicate, the
   10-card `END_COMPOUND_SIZE` is currently unreachable — games end on goods
-- `createStartingBuilding` — a placeholder so the economy has a source
-- `Effect` — only `gain`, `draw` and `buildFromDeck`; the real game needs many
-  more variants
+- the Headquarters is the same for every player. The published game hands out
+  one of several starting tiles
+- `Effect` — the real game needs many more variants than the seven here
 - a `draw` effect always pulls blueprints; no card lets you choose a deck yet
 - blueprint tool types are read by the contractor tokens, nothing else yet
 - contractor slot tokens are fixed to their slot for the whole game; they could

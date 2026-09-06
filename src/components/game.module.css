@@ -175,6 +175,17 @@
   text-decoration: line-through;
 }
 
+/* The Headquarters tile: three sections, sized like cards but never one. */
+.hqSection {
+  gap: 6px;
+}
+
+/* An open slot on a section — a die-sized outline waiting to be filled. */
+.hqSlot {
+  border: 1px dashed currentColor;
+  opacity: 0.3;
+}
+
 .swatch {
   display: inline-block;
   width: 10px;
