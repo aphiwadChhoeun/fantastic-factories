@@ -5,6 +5,7 @@ import {
   DIE_COLORS,
   NO_PERKS,
   NO_PLACEMENTS,
+  PHASE_LABELS,
   type BlueprintCard,
   type CardPool,
   type ContractorCard,
@@ -118,7 +119,7 @@ export function createInitialState(options: SetupOptions = {}): GameState {
     currentPlayerIndex: 0,
     blueprints,
     contractors,
-    log: ["Round 1 — Market Phase"],
+    log: ["Round 1", `${players[0].name} — ${PHASE_LABELS.market}`],
     gameOver: false,
     winner: null,
   };

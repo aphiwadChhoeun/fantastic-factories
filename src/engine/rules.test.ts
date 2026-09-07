@@ -55,9 +55,17 @@ function draftAnyBlueprint(state: GameState): GameState {
   });
 }
 
-/** Walks both players through the Market Phase into the Work Phase. */
+/**
+ * Takes the player to act through their Market Phase into their own Work
+ * Phase. A turn is market then work, so that is one draft, not one per player.
+ */
 function toWorkPhase(state: GameState): GameState {
-  return draftAnyBlueprint(draftAnyBlueprint(state));
+  return draftAnyBlueprint(state);
+}
+
+/** The log as a whole — the last line is usually a phase announcement. */
+function logged(state: GameState, pattern: RegExp): boolean {
+  return state.log.some((line) => pattern.test(line));
 }
 
 function blueprintsIn(hand: readonly Card[]): BlueprintCard[] {
@@ -255,6 +263,51 @@ describe("setup", () => {
   });
 });
 
+describe("turn order", () => {
+  /** Rolls, then passes — the shortest legal Work Phase. */
+  function passWorkPhase(state: GameState): GameState {
+    return applyMove(applyMove(state, { type: "rollDice" }), { type: "endPhase" });
+  }
+
+  it("gives each player a whole turn — market then work — before the next", () => {
+    const start = createInitialState({ seed: 42 });
+    expect([start.phase, start.currentPlayerIndex]).toEqual(["market", 0]);
+
+    // Taking a card ends your Market Phase and opens your own Work Phase.
+    const working = draftAnyBlueprint(start);
+    expect([working.phase, working.currentPlayerIndex]).toEqual(["work", 0]);
+
+    // Only ending the Work Phase passes the turn on, back to a Market Phase.
+    const opponent = passWorkPhase(working);
+    expect([opponent.phase, opponent.currentPlayerIndex]).toEqual(["market", 1]);
+
+    const opponentWorking = draftAnyBlueprint(opponent);
+    expect([opponentWorking.phase, opponentWorking.currentPlayerIndex]).toEqual(["work", 1]);
+
+    // Cleanup runs once, after the last player's turn.
+    const cleanup = passWorkPhase(opponentWorking);
+    expect([cleanup.phase, cleanup.currentPlayerIndex]).toEqual(["cleanup", 0]);
+
+    const round2 = applyMove(cleanup, { type: "endPhase" });
+    expect([round2.round, round2.phase, round2.currentPlayerIndex]).toEqual([2, "market", 0]);
+  });
+
+  it("keeps the opponent out of the market until their own turn", () => {
+    // Player 0 is still mid-turn, so every legal move is theirs.
+    const working = draftAnyBlueprint(createInitialState({ seed: 42 }));
+
+    expect(currentPlayer(working)).toBe(working.players[0]);
+    expect(legalMoves(working)).toEqual([{ type: "rollDice" }]);
+  });
+
+  it("names the player in the log at each phase", () => {
+    const state = draftAnyBlueprint(createInitialState({ seed: 42 }));
+
+    expect(state.log.slice(0, 2)).toEqual(["Round 1", "You — Market Phase"]);
+    expect(state.log.at(-1)).toBe("You — Work Phase");
+  });
+});
+
 describe("the contractor deck", () => {
   const deck = createContractorDeck();
 
@@ -400,7 +453,7 @@ describe("the Engineer", () => {
 
     expect(player.compound.map((b) => b.card.id)).toEqual([built.id, mine.id]);
     expect(next.blueprints.discard.map((card) => card.id)).toContain(duplicate.id);
-    expect(next.log.at(-1)).toMatch(/built Mine for free \(discarded 1/);
+    expect(logged(next, /built Mine for free \(discarded 1/)).toBe(true);
   });
 
   it("builds nothing when every blueprint left is one the player has built", () => {
@@ -421,7 +474,7 @@ describe("the Engineer", () => {
     const next = takeStaged(staged);
 
     expect(next.players[0].compound).toHaveLength(1);
-    expect(next.log.at(-1)).toMatch(/found no new blueprint to build/);
+    expect(logged(next, /found no new blueprint to build/)).toBe(true);
     expect(next.blueprints.deck).toEqual([]);
     expect(next.blueprints.discard.map((card) => card.id)).toEqual(
       expect.arrayContaining([duplicate.id, payment.id]),
@@ -675,7 +728,10 @@ describe("applyMove", () => {
 
     expect(next.blueprints.row.map((card) => card.id)).not.toContain(target.id);
     expect(next.players[0].hand.map((card) => card.id)).toContain(target.id);
-    expect(next.currentPlayerIndex).toBe(1);
+    // Taking a card ends the Market Phase for that player, who carries on
+    // into their own Work Phase rather than passing the turn.
+    expect(next.currentPlayerIndex).toBe(0);
+    expect(next.phase).toBe("work");
   });
 
   it("refills the blueprint row from the deck the moment a card is taken", () => {

@@ -125,14 +125,42 @@ The contractor deck so far — 17 cards, eight kinds:
 cannot pay for is never offered. Extra dice are white and go back at cleanup
 with everything else.
 
-A round runs **Market Phase** → **Work Phase** → **Cleanup**. Market: take one
-face-up card from either row — there is no blind draw, so the only way to a
-contractor is paying its token. A taken card is replaced from its deck
-immediately, so the next player always sees a full row; a contractor slot keeps
-its token and gets a new card. Work: roll your dice, then spend them to build
-blueprints from hand, activate your compound, and fill your Headquarters.
-Cleanup: dice clear, the Headquarters empties, buildings refresh. The game ends
-when someone reaches 12 goods or 10 cards in their compound.
+## The turn
+
+A **turn** is a **Market Phase** then a **Work Phase**, taken by one player from
+start to finish. You take your card and work your dice, and only then does the
+next player begin their own market phase. A **round** is one turn each,
+followed by **Cleanup**.
+
+Market: take one face-up card from either row — there is no blind draw, so the
+only way to a contractor is paying its token. A taken card is replaced from its
+deck immediately, so the next player always sees a full row; a contractor slot
+keeps its token and gets a new card.
+
+Work: roll your dice, then spend them to build blueprints from hand, activate
+your compound, and fill your Headquarters.
+
+Cleanup: dice clear, Headquarters empty, buildings refresh. The game ends when
+someone reaches 12 goods or 10 cards in their compound.
+
+## Playing it
+
+The board is the primary surface. In the Market Phase, cards you can take are
+outlined and clickable — a blueprint is free, so all four always are, while a
+contractor lights up only when you hold a blueprint of its token's type and can
+pay whatever it charges on top. Clicking a contractor you could pay for in more
+than one way asks which blueprint to spend: the candidates in your hand light
+up, and clicking the contractor again backs out.
+
+In the Work Phase you drag a die onto what it should do: a Headquarters
+section, a blueprint in hand to build it, or a building in your compound to
+activate it. Only the places that die can legally go light up while you drag,
+and on a Headquarters section the slot it would fill lights up with them.
+
+The move list on the right stays as the complete, literal view of
+`legalMoves` — it is the debugging surface, the keyboard path, and the only way
+to play the moves with nothing on the board to point at: rolling, passing, and
+naming the face of a die a contractor handed you.
 
 ## Filling in the rules
 
@@ -159,6 +187,8 @@ compound and work your Headquarters, end the round. Known stubs:
 - cards still reach hand from the blueprint deck through `draw` effects; only
   the *move* was removed. Nothing draws contractors from their deck at all.
 - no contractor *dice* — white is currently just another player colour
+- dragging is HTML5 drag-and-drop, so it does not work by keyboard or on
+  touch. The move list is the fallback on both
 - `decideWinner` — most goods, buildings break ties
 - `MAX_ROUNDS` — a safety valve so a half-written rule cannot hang a test run
 

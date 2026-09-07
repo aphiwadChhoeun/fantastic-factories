@@ -465,18 +465,32 @@ function dieId(player: Player, round: number, offset = 0): string {
   return `${player.id}-r${round}-d${player.dice.length + offset}`;
 }
 
-/** Hands the turn to the next player, advancing the phase after a full lap. */
+/** Announces whose turn it is, and that it opens in the Market Phase. */
+function beginTurn(state: GameState, playerIndex: number): GameState {
+  return log(
+    { ...state, phase: "market", currentPlayerIndex: playerIndex },
+    `${state.players[playerIndex].name} — ${PHASE_LABELS.market}`,
+  );
+}
+
+/**
+ * Ends the current phase.
+ *
+ * A turn is market then work, taken by one player start to finish: the market
+ * phase hands over to that same player's work phase, and only ending the work
+ * phase passes the turn on. Cleanup runs once, after the last player's turn.
+ */
 function endTurn(state: GameState): GameState {
-  const nextIndex = (state.currentPlayerIndex + 1) % state.players.length;
-  if (nextIndex !== 0) {
-    return { ...state, currentPlayerIndex: nextIndex };
-  }
+  const player = currentPlayer(state);
 
   switch (state.phase) {
     case "market":
-      return log({ ...state, phase: "work", currentPlayerIndex: 0 }, PHASE_LABELS.work);
-    case "work":
+      return log({ ...state, phase: "work" }, `${player.name} — ${PHASE_LABELS.work}`);
+    case "work": {
+      const next = state.currentPlayerIndex + 1;
+      if (next < state.players.length) return beginTurn(state, next);
       return log({ ...state, phase: "cleanup", currentPlayerIndex: 0 }, PHASE_LABELS.cleanup);
+    }
     case "cleanup":
       return state; // cleanup advances the round itself, in endRound
   }
@@ -554,10 +568,8 @@ function endRound(state: GameState): GameState {
     );
   }
 
-  return log(
-    { ...refilled, round, phase: "market", currentPlayerIndex: 0 },
-    `Round ${round} — ${PHASE_LABELS.market}`,
-  );
+  // The new round opens with the first player's turn, market phase first.
+  return beginTurn(log({ ...refilled, round }, `Round ${round}`), 0);
 }
 
 /**
