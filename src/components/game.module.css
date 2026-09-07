@@ -105,6 +105,43 @@
   justify-content: center;
 }
 
+/*
+ * A card rendered as a button still has to look like a card: browsers give
+ * buttons their own font, colour and alignment.
+ */
+button.card {
+  /* Not the `font` shorthand: that would reset the size `.card` sets. */
+  font-family: inherit;
+  font-weight: inherit;
+  color: inherit;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* You can act on this card right now — take it, or pay with it. */
+.cardHighlight {
+  border-color: #4fb37c;
+  box-shadow: 0 0 0 1px #4fb37c;
+}
+
+.cardHighlight:hover {
+  background: color-mix(in srgb, #4fb37c 12%, transparent);
+}
+
+/* The contractor being paid for, while its payment is being chosen. */
+.cardSelected {
+  border-color: #ecbe45;
+  box-shadow: 0 0 0 2px #ecbe45;
+}
+
+/* The die being dragged can be dropped here. */
+.cardDropTarget {
+  border-color: #5290e8;
+  border-style: solid;
+  box-shadow: 0 0 0 2px #5290e8;
+}
+
 /* A contractor slot: its tool token, then the card sitting on it. */
 .slot {
   display: flex;
@@ -184,6 +221,29 @@
 .hqSlot {
   border: 1px dashed currentColor;
   opacity: 0.3;
+}
+
+/* The slot a drop would actually fill: the next one open on the section. */
+.hqSlotActive {
+  border: 1px solid #5290e8;
+  background: color-mix(in srgb, #5290e8 25%, transparent);
+  opacity: 1;
+}
+
+/* A die with somewhere to go. Anything else is not worth picking up. */
+.dieMovable {
+  cursor: grab;
+}
+
+.dieDragging {
+  opacity: 0.4;
+}
+
+/* A one-line instruction, shown only while it applies. */
+.prompt {
+  margin: 6px 0 0;
+  font-size: 11px;
+  opacity: 0.65;
 }
 
 .swatch {

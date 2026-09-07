@@ -8,10 +8,26 @@ function pileSummary(deck: readonly unknown[], discard: readonly unknown[]): str
 }
 
 /**
+ * Which market cards can be taken right now, and what taking one does. Empty
+ * outside the Market Phase and while the opponent is thinking, which is what
+ * makes the row inert then.
+ */
+export type MarketInteraction = {
+  readonly takeable: ReadonlySet<string>;
+  /** The contractor waiting for the player to choose a payment, if any. */
+  readonly choosingPaymentFor: string | null;
+  readonly onSelect: (cardId: string) => void;
+};
+
+type RowProps = {
+  interaction?: MarketInteraction;
+};
+
+/**
  * The contractor row. Each slot carries a tool token above it: taking the card
  * costs a blueprint of that type from hand.
  */
-function ContractorRow({ market }: { market: ContractorMarket }) {
+function ContractorRow({ market, interaction }: { market: ContractorMarket } & RowProps) {
   return (
     <div>
       <div className={styles.sectionTitle}>
@@ -30,7 +46,17 @@ function ContractorRow({ market }: { market: ContractorMarket }) {
               {BLUEPRINT_TYPE_GLYPHS[slot.token]}
             </span>
             {slot.card ? (
-              <CardView card={slot.card} />
+              <CardView
+                card={slot.card}
+                highlight={interaction?.takeable.has(slot.card.id)}
+                selected={interaction?.choosingPaymentFor === slot.card.id}
+                onSelect={
+                  interaction?.takeable.has(slot.card.id)
+                    ? () => interaction.onSelect(slot.card!.id)
+                    : undefined
+                }
+                selectLabel={`Take ${slot.card.name}, paying a ${slot.token} blueprint`}
+              />
             ) : (
               <div className={`${styles.card} ${styles.cardEmpty}`}>
                 <span className={styles.empty}>Deck and discard exhausted</span>
@@ -43,7 +69,7 @@ function ContractorRow({ market }: { market: ContractorMarket }) {
   );
 }
 
-function BlueprintRow({ pool }: { pool: CardPool<BlueprintCard> }) {
+function BlueprintRow({ pool, interaction }: { pool: CardPool<BlueprintCard> } & RowProps) {
   return (
     <div>
       <div className={styles.sectionTitle}>
@@ -54,7 +80,17 @@ function BlueprintRow({ pool }: { pool: CardPool<BlueprintCard> }) {
       ) : (
         <div className={styles.cardRow}>
           {pool.row.map((card) => (
-            <CardView key={card.id} card={card} />
+            <CardView
+              key={card.id}
+              card={card}
+              highlight={interaction?.takeable.has(card.id)}
+              onSelect={
+                interaction?.takeable.has(card.id)
+                  ? () => interaction.onSelect(card.id)
+                  : undefined
+              }
+              selectLabel={`Draft ${card.name}`}
+            />
           ))}
         </div>
       )}
@@ -65,14 +101,18 @@ function BlueprintRow({ pool }: { pool: CardPool<BlueprintCard> }) {
 type Props = {
   contractors: ContractorMarket;
   blueprints: CardPool<BlueprintCard>;
+  interaction?: MarketInteraction;
 };
 
 /** The market: a tokened contractor row above a blueprint row. */
-export function Marketplace({ contractors, blueprints }: Props) {
+export function Marketplace({ contractors, blueprints, interaction }: Props) {
+  const choosing = interaction?.choosingPaymentFor;
+
   return (
     <section className={styles.section}>
-      <ContractorRow market={contractors} />
-      <BlueprintRow pool={blueprints} />
+      {choosing && <p className={styles.prompt}>Click a highlighted blueprint in hand to pay.</p>}
+      <ContractorRow market={contractors} interaction={interaction} />
+      <BlueprintRow pool={blueprints} interaction={interaction} />
     </section>
   );
 }
