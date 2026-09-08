@@ -88,6 +88,19 @@
   border-style: dashed;
 }
 
+/*
+ * What the card is, in its printed colour — the band across the top of the
+ * real card. Full width, so the colour reads before the word does.
+ */
+.categoryBand {
+  align-self: stretch;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
 .cardTag {
   font-size: 10px;
   text-transform: uppercase;

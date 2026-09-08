@@ -1,7 +1,7 @@
 import { createBlueprintDeck, createContractorDeck } from "./cards";
 import { createRng, shuffle, type Rng } from "./rng";
 import {
-  BLUEPRINT_TYPES,
+  BLUEPRINT_TOOLS,
   DIE_COLORS,
   NO_PERKS,
   NO_PLACEMENTS,
@@ -104,7 +104,7 @@ export function createInitialState(options: SetupOptions = {}): GameState {
   // TODO: unconfirmed — tokens could instead be dealt out or rotate per round.
   const contractors: ContractorMarket = {
     slots: Array.from({ length: MARKET_ROW_SIZE }, (_, index) => ({
-      token: BLUEPRINT_TYPES[index % BLUEPRINT_TYPES.length],
+      token: BLUEPRINT_TOOLS[index % BLUEPRINT_TOOLS.length],
       card: contractorDraw.shift() ?? null,
     })),
     deck: contractorDraw,

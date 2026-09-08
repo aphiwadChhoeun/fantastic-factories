@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import type { BlueprintType, DieColor } from "@/engine";
+import type { BlueprintCategory, BlueprintTool, DieColor } from "@/engine";
 
 /**
  * Swatches for the six die colours. Yellow and white take dark pips; the rest
@@ -23,7 +23,7 @@ export function colorSwatch(color: DieColor): CSSProperties {
  * The four blueprint tool types, colour-coded. Hues are kept clear of each
  * other and carry white text, so the badge reads in either theme.
  */
-export const BLUEPRINT_TYPE_SWATCHES: Record<BlueprintType, CSSProperties> = {
+export const BLUEPRINT_TOOL_SWATCHES: Record<BlueprintTool, CSSProperties> = {
   hammer: { background: "#b85c33", color: "#ffffff" },
   wrench: { background: "#22808a", color: "#ffffff" },
   gear: { background: "#6257b8", color: "#ffffff" },
@@ -31,9 +31,23 @@ export const BLUEPRINT_TYPE_SWATCHES: Record<BlueprintType, CSSProperties> = {
 };
 
 /** Unicode stand-ins until the real icons exist. */
-export const BLUEPRINT_TYPE_GLYPHS: Record<BlueprintType, string> = {
+export const BLUEPRINT_TOOL_GLYPHS: Record<BlueprintTool, string> = {
   hammer: "🔨",
   wrench: "🔧",
   gear: "⚙",
   shovel: "⛏",
+};
+
+/**
+ * The printed colour of each blueprint type, as the card carries it.
+ *
+ * Darker and flatter than the tool badges on purpose: this is a band behind
+ * a word, while a badge is a glyph the eye has to pick out.
+ */
+export const BLUEPRINT_CATEGORY_SWATCHES: Record<BlueprintCategory, CSSProperties> = {
+  production: { background: "#2a6ec9", color: "#ffffff" },
+  utility: { background: "#d4a017", color: "#1a1a1a" },
+  training: { background: "#c0392b", color: "#ffffff" },
+  monument: { background: "#6b7280", color: "#ffffff" },
+  special: { background: "#7a4bbd", color: "#ffffff" },
 };

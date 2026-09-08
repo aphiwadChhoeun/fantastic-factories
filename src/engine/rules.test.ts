@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { createRandomAi } from "@/ai";
 import {
   applyMove,
-  BLUEPRINT_TYPES,
+  BLUEPRINT_CATEGORIES,
+  BLUEPRINT_TOOLS,
   canAfford,
   createBlueprintDeck,
   createContractorDeck,
@@ -21,6 +22,7 @@ import {
   STARTING_RESOURCES,
   STARTING_WORKFORCE,
   type BlueprintCard,
+  type BlueprintCategory,
   type Card,
   type ContractorCard,
   type DieFace,
@@ -118,7 +120,7 @@ function stageContractor(
   deck?: readonly BlueprintCard[],
 ): GameState {
   const staged = patchPlayer(state, 0, patch);
-  const token = staged.players[0].hand[0].type;
+  const token = staged.players[0].hand[0].tool;
   return {
     ...staged,
     contractors: {
@@ -168,8 +170,8 @@ describe("setup", () => {
     const state = createInitialState({ seed: 42 });
     const tokens = state.contractors.slots.map((slot) => slot.token);
 
-    expect(new Set(tokens)).toEqual(new Set(BLUEPRINT_TYPES));
-    expect(tokens).toHaveLength(BLUEPRINT_TYPES.length);
+    expect(new Set(tokens)).toEqual(new Set(BLUEPRINT_TOOLS));
+    expect(tokens).toHaveLength(BLUEPRINT_TOOLS.length);
   });
 
   it("gives every blueprint a tool type, and uses all four", () => {
@@ -183,10 +185,10 @@ describe("setup", () => {
     ];
 
     for (const card of blueprints) {
-      expect(BLUEPRINT_TYPES).toContain(card.type);
+      expect(BLUEPRINT_TOOLS).toContain(card.tool);
     }
     // The deck should exercise the whole palette, not just one or two types.
-    expect(new Set(blueprints.map((card) => card.type))).toEqual(new Set(BLUEPRINT_TYPES));
+    expect(new Set(blueprints.map((card) => card.tool))).toEqual(new Set(BLUEPRINT_TOOLS));
   });
 
   it("gives every player an empty Headquarters", () => {
@@ -488,6 +490,48 @@ describe("the Engineer", () => {
   });
 });
 
+describe("blueprint types", () => {
+  const deck = createBlueprintDeck();
+
+  it("gives every real blueprint its printed type", () => {
+    const printed: Record<string, BlueprintCategory> = {
+      "Aluminum Factory": "production",
+      "Assembly Line": "production",
+      "Battery Factory": "production",
+      Beacon: "monument",
+      Biolab: "production",
+      "Black Market": "utility",
+      "Concrete Plant": "production",
+    };
+
+    for (const [name, type] of Object.entries(printed)) {
+      expect(cardNamed(deck, name).type).toBe(type);
+    }
+  });
+
+  it("leaves the placeholders untyped rather than guessing", () => {
+    // Same rule as prestige: an invented card carries no printed value.
+    for (const name of ["Generator", "Mine", "Warehouse", "Research Lab", "Foundry", "Depot"]) {
+      expect(cardNamed(deck, name).type).toBeUndefined();
+    }
+  });
+
+  it("uses no type outside the five printed ones", () => {
+    for (const card of deck) {
+      if (card.type) expect(BLUEPRINT_CATEGORIES).toContain(card.type);
+    }
+  });
+
+  it("keeps the type apart from the tool — a card carries both", () => {
+    const beacon = cardNamed(deck, "Beacon");
+
+    // The Monument is paid for with a shovel; what it is and what it is worth
+    // as payment are two different things.
+    expect(beacon.type).toBe("monument");
+    expect(beacon.tool).toBe("shovel");
+  });
+});
+
 describe("the Aluminum Factory", () => {
   const factory = cardNamed(createBlueprintDeck(), "Aluminum Factory");
 
@@ -508,7 +552,7 @@ describe("the Aluminum Factory", () => {
   }
 
   it("is a shovel costing 2 metal and 2 energy on top of the discard", () => {
-    expect(factory.type).toBe("shovel");
+    expect(factory.tool).toBe("shovel");
     expect(factory.buildCost).toEqual({ metal: 2, energy: 2, goods: 0 });
   });
 
@@ -643,7 +687,7 @@ describe("the Assembly Line", () => {
   }
 
   it("is a gear costing 2 metal and 1 energy, worth a prestige", () => {
-    expect(line.type).toBe("gear");
+    expect(line.tool).toBe("gear");
     expect(line.buildCost).toEqual({ metal: 2, energy: 1, goods: 0 });
     expect(line.prestige).toBe(1);
     expect(line.perk?.dice).toBe(3);
@@ -699,7 +743,7 @@ describe("the Battery Factory", () => {
   }
 
   it("is a wrench costing 2 metal and 1 energy, worth a prestige", () => {
-    expect(battery.type).toBe("wrench");
+    expect(battery.tool).toBe("wrench");
     expect(battery.buildCost).toEqual({ metal: 2, energy: 1, goods: 0 });
     expect(battery.prestige).toBe(1);
   });
@@ -737,7 +781,7 @@ describe("the Beacon", () => {
 
   it("is a shovel costing 2 metal and 4 energy, and does nothing once up", () => {
     expect(beacons).toHaveLength(4);
-    expect(beacons[0].type).toBe("shovel");
+    expect(beacons[0].tool).toBe("shovel");
     expect(beacons[0].buildCost).toEqual({ metal: 2, energy: 4, goods: 0 });
     expect(beacons[0].perk).toBeUndefined();
   });
@@ -801,7 +845,7 @@ describe("the Biolab", () => {
   }
 
   it("is a gear costing 1 metal and 3 energy, worth a prestige", () => {
-    expect(biolab.type).toBe("gear");
+    expect(biolab.tool).toBe("gear");
     expect(biolab.buildCost).toEqual({ metal: 1, energy: 3, goods: 0 });
     expect(biolab.prestige).toBe(1);
   });
@@ -852,7 +896,7 @@ describe("the Black Market", () => {
   }
 
   it("is a gear costing 3 metal and 2 energy, worth a prestige", () => {
-    expect(market.type).toBe("gear");
+    expect(market.tool).toBe("gear");
     expect(market.buildCost).toEqual({ metal: 3, energy: 2, goods: 0 });
     expect(market.prestige).toBe(1);
     expect(market.perk?.dice).toBe(1);
@@ -955,7 +999,7 @@ describe("the Concrete Plant", () => {
   }
 
   it("is a shovel costing 2 metal and 2 energy, and charges metal by the dice", () => {
-    expect(plant.type).toBe("shovel");
+    expect(plant.tool).toBe("shovel");
     expect(plant.buildCost).toEqual({ metal: 2, energy: 2, goods: 0 });
     expect(plant.perk?.dice).toBe(2);
     expect(plant.perk?.pattern).toBe("matching");
@@ -1256,7 +1300,7 @@ describe("legalMoves", () => {
       if (move.type !== "draft" || move.kind !== "contractor") throw new Error("narrowing");
       const slot = state.contractors.slots.find((s) => s.card?.id === move.cardId);
       const payment = hand.find((card) => card.id === move.paymentCardId);
-      expect(payment?.type).toBe(slot?.token);
+      expect(payment?.tool).toBe(slot?.token);
     }
 
     // And every legal pairing is offered — no more, no fewer. A contractor
@@ -1266,15 +1310,15 @@ describe("legalMoves", () => {
         (slot) =>
           slot.card && canAfford(state.players[0].resources, slot.card.extraCost ?? FREE),
       )
-      .flatMap((slot) => hand.filter((card) => card.type === slot.token));
+      .flatMap((slot) => hand.filter((card) => card.tool === slot.token));
     expect(offers).toHaveLength(pairings.length);
   });
 
   it("offers nothing for a slot whose token no blueprint in hand matches", () => {
     const state = createInitialState({ seed: 3 });
-    const handTypes = new Set(blueprintsIn(state.players[0].hand).map((card) => card.type));
+    const handTools = new Set(blueprintsIn(state.players[0].hand).map((card) => card.tool));
     const unpayable = state.contractors.slots.filter(
-      (slot) => slot.card && !handTypes.has(slot.token),
+      (slot) => slot.card && !handTools.has(slot.token),
     );
     // The scenario only means something if such a slot exists for this seed.
     expect(unpayable.length).toBeGreaterThan(0);
@@ -1401,7 +1445,7 @@ describe("applyMove", () => {
     const state = createInitialState({ seed: 11 });
     const move = takeableContractor(state);
     const slot = state.contractors.slots.find((s) => s.card?.id === move.cardId)!;
-    const wrong = blueprintsIn(state.players[0].hand).find((card) => card.type !== slot.token);
+    const wrong = blueprintsIn(state.players[0].hand).find((card) => card.tool !== slot.token);
     if (!wrong) throw new Error("expected a mismatched blueprint in hand");
 
     expect(() => applyMove(state, { ...move, paymentCardId: wrong.id })).toThrow(
@@ -1437,7 +1481,7 @@ describe("applyMove", () => {
     }
   });
 
-  it("builds by discarding a same-symbol blueprint and paying the cost", () => {
+  it("builds by discarding a same-tool blueprint and paying the cost", () => {
     const state = createInitialState({ seed: 3 });
     // Mine is a shovel costing 1 metal and 1 energy.
     const [card, payment] = copiesOf("Mine");
@@ -1463,7 +1507,7 @@ describe("applyMove", () => {
     expect(player.dice).toEqual([]);
   });
 
-  it("will not build without a matching symbol to discard", () => {
+  it("will not build without a matching tool to discard", () => {
     const state = createInitialState({ seed: 3 });
     const mine = copiesOf("Mine")[0];
     const generator = copiesOf("Generator")[0];

@@ -1,6 +1,10 @@
 import type { DragEvent } from "react";
 import type { Card, DieFace, Resources } from "@/engine";
-import { BLUEPRINT_TYPE_GLYPHS, BLUEPRINT_TYPE_SWATCHES } from "@/lib/colors";
+import {
+  BLUEPRINT_CATEGORY_SWATCHES,
+  BLUEPRINT_TOOL_GLYPHS,
+  BLUEPRINT_TOOL_SWATCHES,
+} from "@/lib/colors";
 import { describeEffect, describePerkCost, describeResources } from "@/lib/format";
 import styles from "./game.module.css";
 
@@ -60,26 +64,32 @@ export function CardView({
     <>
       <span className={styles.cardHeader}>
         <span className={styles.cardName}>{card.name}</span>
-        {/* Icon and colour only — the type name is on hover. */}
+        {/* Icon and colour only — the tool name is on hover. */}
         {card.kind === "blueprint" && (
           <span
             className={styles.typeBadge}
-            style={BLUEPRINT_TYPE_SWATCHES[card.type]}
-            title={`${card.type} blueprint`}
-            aria-label={`${card.type} blueprint`}
+            style={BLUEPRINT_TOOL_SWATCHES[card.tool]}
+            title={`${card.tool} blueprint`}
+            aria-label={`${card.tool} blueprint`}
             role="img"
           >
-            {BLUEPRINT_TYPE_GLYPHS[card.type]}
+            {BLUEPRINT_TOOL_GLYPHS[card.tool]}
           </span>
         )}
       </span>
+      {/* What the card is, in its printed colour. Absent on the placeholders. */}
+      {card.kind === "blueprint" && card.type && (
+        <span className={styles.categoryBand} style={BLUEPRINT_CATEGORY_SWATCHES[card.type]}>
+          {card.type}
+        </span>
+      )}
       {card.kind === "contractor" && card.extraCost && (
         <span className={styles.cardMeta}>Also costs: {describeResources(card.extraCost)}</span>
       )}
       {/* Built, the build cost is history; in hand, both matter. */}
       {card.kind === "blueprint" && !built && (
         <span className={styles.cardMeta}>
-          Build: discard a {card.type}
+          Build: discard a {card.tool}
           {costsResources(card.buildCost) ? `, ${describeResources(card.buildCost)}` : ""}
         </span>
       )}

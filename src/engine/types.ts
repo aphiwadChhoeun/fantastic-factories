@@ -138,13 +138,31 @@ export type CardKind = "blueprint" | "contractor";
 /**
  * Every blueprint carries one of four tool symbols, colour-coded on the card.
  *
- * The symbol is what building costs: to build a blueprint you discard a
- * different blueprint of the same symbol from hand. It is also what a
- * contractor slot's token asks for.
+ * The tool is what building costs: to build a blueprint you discard a
+ * different blueprint of the same tool from hand. It is also what a contractor
+ * slot's token asks for. It is not the card's `type` — that is what the card
+ * *is*, and the tool is only what it is worth as payment.
  */
-export const BLUEPRINT_TYPES = ["hammer", "wrench", "gear", "shovel"] as const;
+export const BLUEPRINT_TOOLS = ["hammer", "wrench", "gear", "shovel"] as const;
 
-export type BlueprintType = (typeof BLUEPRINT_TYPES)[number];
+export type BlueprintTool = (typeof BLUEPRINT_TOOLS)[number];
+
+/**
+ * What a blueprint is, printed as a coloured band across the card: Production
+ * blue, Utility yellow, Training red, Monument grey, Special purple.
+ *
+ * Nothing in the rules turns on it yet — it is the card's identity, and the
+ * cards that care about type have not been written.
+ */
+export const BLUEPRINT_CATEGORIES = [
+  "production",
+  "utility",
+  "training",
+  "monument",
+  "special",
+] as const;
+
+export type BlueprintCategory = (typeof BLUEPRINT_CATEGORIES)[number];
 
 type CardBase = {
   readonly id: string;
@@ -184,9 +202,15 @@ export type BlueprintPerk = {
 /** Built into your compound, where its perk can be used once per round. */
 export type BlueprintCard = CardBase & {
   readonly kind: "blueprint";
-  /** Its tool symbol — hammer, wrench, gear or shovel. */
-  readonly type: BlueprintType;
-  /** Resources spent to build it, on top of discarding a matching symbol. */
+  /**
+   * What the card is — Production, Utility, Training, Monument or Special.
+   * Absent means unknown: the placeholder blueprints have no printed type,
+   * the same way they have no printed prestige.
+   */
+  readonly type?: BlueprintCategory;
+  /** Its tool symbol — hammer, wrench, gear or shovel. What it pays for. */
+  readonly tool: BlueprintTool;
+  /** Resources spent to build it, on top of discarding a matching tool. */
   readonly buildCost: Resources;
   /**
    * Score it is worth at the end, per copy standing. Absent means none — most
@@ -258,7 +282,7 @@ export type CardPool<T extends Card> = {
  * means discarding a blueprint whose tool type matches.
  */
 export type ContractorSlot = {
-  readonly token: BlueprintType;
+  readonly token: BlueprintTool;
   readonly card: ContractorCard | null;
 };
 
@@ -368,12 +392,12 @@ export type Move =
   | { readonly type: "placeDie"; readonly section: HqSectionId; readonly dieId: string }
   /**
    * Builds a blueprint from hand into the compound. No die: you pay by
-   * discarding another blueprint of the same symbol, plus its resource cost.
+   * discarding another blueprint of the same tool, plus its resource cost.
    */
   | {
       readonly type: "build";
       readonly cardId: string;
-      /** The blueprint discarded to pay. Same symbol, different card. */
+      /** The blueprint discarded to pay. Same tool, different card. */
       readonly paymentCardId: string;
     }
   /** Uses a building's perk, putting all the dice it asks for on at once. */

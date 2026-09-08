@@ -92,23 +92,43 @@ Two card types, each with its own deck and its own market row:
 
 - **Blueprints** are built into your **compound** — the area in front of you —
   where each one's **perk** can be worked once per round. Every blueprint
-  carries one of four colour-coded symbols: hammer, wrench, gear, shovel.
+  carries a **type** and a **tool**, and they are not the same thing.
 - **Contractors** never enter your hand. Taking one resolves its effect
   immediately and discards the card.
 
 Setup lays out 4 face-up contractors and 4 face-up blueprints, one row each.
-Each of the four contractor slots carries a **tool token** — one per type. To
-take the contractor on a slot you discard a blueprint of that type from your
-hand as payment, so a slot you have no matching blueprint for is simply not
-available to you.
+Each of the four contractor slots carries a **tool token** — one per tool. To
+take the contractor on a slot you discard a blueprint carrying that tool from
+your hand as payment, so a slot you have no matching blueprint for is simply
+not available to you.
 
 Because contractors resolve on take, your hand only ever holds blueprints —
-that is enforced by the type of `Player.hand`, not by a runtime check.
+that is enforced by the declared type of `Player.hand`, not by a runtime check.
+
+### Type and tool
+
+A blueprint's **type** is what the card is, printed as a coloured band:
+
+| Type       | Colour |
+| ---------- | ------ |
+| Production | blue   |
+| Utility    | yellow |
+| Training   | red    |
+| Monument   | grey   |
+| Special    | purple |
+
+A blueprint's **tool** — hammer, wrench, gear or shovel — is what it is worth
+as payment, and nothing else. Building and contractor tokens both ask for a
+tool; nothing yet asks for a type. A Beacon is a Monument you buy with a
+shovel, and both facts are on the card.
+
+Only the real cards carry a type. The placeholder blueprints have none, the
+same way they have no prestige — inventing one would be inventing rules.
 
 ### Building
 
 **Building costs a card, not a die.** To build a blueprint you discard a
-different blueprint of the **same symbol** from hand, and pay the resource cost
+different blueprint of the **same tool** from hand, and pay the resource cost
 printed on it. So the Aluminum Factory — a shovel costing 2 metal and 2
 energy — needs another shovel out of your hand on top of the resources. No die
 is assigned; dice are for the Headquarters and for working what you have built.
@@ -144,17 +164,17 @@ wins, and an equal score is a draw.
 
 ### The real blueprints so far
 
-| Blueprint        | Copies | Symbol | Build cost         | Perk                                     | Prestige      |
-| ---------------- | -----: | ------ | ------------------ | ---------------------------------------- | ------------- |
-| Aluminum Factory |      3 | shovel | 2 metal + 2 energy | 2 matching dice + 5 energy → 2 goods, 1 metal | 1        |
-| Assembly Line    |      2 | gear   | 2 metal + 1 energy | 3 consecutive dice → 2 goods             | 1             |
-| Battery Factory  |      2 | wrench | 2 metal + 1 energy | 4 energy, no dice → 1 good               | 1             |
-| Beacon           |      4 | shovel | 2 metal + 4 energy | none — it is pure score                  | 1 each, +1 set |
-| Biolab           |      2 | gear   | 1 metal + 3 energy | a 1 + 1 energy → 1 good                  | 1             |
-| Black Market     |      2 | gear   | 3 metal + 2 energy | any die + a blueprint from hand → its build cost back, at most 4 | 1 |
-| Concrete Plant   |      2 | shovel | 2 metal + 2 energy | 2 matching dice + metal equal to them → 2 goods | —      |
+| Blueprint        | Copies | Type       | Tool   | Build cost         | Perk                                     | Prestige      |
+| ---------------- | -----: | ---------- | ------ | ------------------ | ---------------------------------------- | ------------- |
+| Aluminum Factory |      3 | Production | shovel | 2 metal + 2 energy | 2 matching dice + 5 energy → 2 goods, 1 metal | 1        |
+| Assembly Line    |      2 | Production | gear   | 2 metal + 1 energy | 3 consecutive dice → 2 goods             | 1             |
+| Battery Factory  |      2 | Production | wrench | 2 metal + 1 energy | 4 energy, no dice → 1 good               | 1             |
+| Beacon           |      4 | Monument   | shovel | 2 metal + 4 energy | none — it is pure score                  | 1 each, +1 set |
+| Biolab           |      2 | Production | gear   | 1 metal + 3 energy | a 1 + 1 energy → 1 good                  | 1             |
+| Black Market     |      2 | Utility    | gear   | 3 metal + 2 energy | any die + a blueprint from hand → its build cost back, at most 4 | 1 |
+| Concrete Plant   |      2 | Production | shovel | 2 metal + 2 energy | 2 matching dice + metal equal to them → 2 goods | —      |
 
-Every build cost is on top of discarding a blueprint of the same symbol.
+Every build cost is on top of discarding a blueprint of the same tool.
 
 **Consecutive** means a run with no gaps and no repeats: 2, 3, 4. Order does
 not matter, so a roll of 4, 2, 3 works the Assembly Line.
@@ -213,7 +233,7 @@ than one way asks which blueprint to spend: the candidates in your hand light
 up, and clicking the contractor again backs out.
 
 Building works the same way, from your hand: click a blueprint you can build
-and the cards that could pay for it — same symbol — light up to be discarded.
+and the cards that could pay for it — same tool — light up to be discarded.
 
 In the Work Phase you drag a die onto what it should do: a Headquarters
 section, or a building in your compound to work its perk. Only the places that
@@ -260,6 +280,8 @@ compound and work your Headquarters, end the round. Known stubs:
   eats is discarded rather than kept. Taking less than the cap is not offered
 - the Concrete Plant is worth no prestige, which is the one real blueprint so
   far that is not
+- no rule reads a blueprint's type yet. Training and Special have no cards, and
+  the placeholders have no type at all
 - a perk that wants several dice must ask for matching ones or accept any
   combination; there is no "one 3 and one 5" yet
 - contractor slot tokens are fixed to their slot for the whole game; they could

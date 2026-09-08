@@ -6,11 +6,11 @@
  * from the market and are discarded immediately.
  *
  * A blueprint's `buildCost` is on top of the real price of building: another
- * blueprint of the same symbol, discarded from hand.
+ * blueprint of the same tool, discarded from hand.
  *
  * TODO: the first seven blueprints below are real cards; the rest are still
- * invented, and are worth no prestige because their real values are unknown.
- * The contractors are real, but not yet the whole deck.
+ * invented, and carry neither a printed type nor prestige because their real
+ * values are unknown. The contractors are real, but not yet the whole deck.
  */
 
 import type {
@@ -37,7 +37,8 @@ const BLUEPRINTS: readonly { template: BlueprintTemplate; copies: number }[] = [
     copies: 3,
     template: {
       name: "Aluminum Factory",
-      type: "shovel",
+      type: "production",
+      tool: "shovel",
       buildCost: { metal: 2, energy: 2, goods: 0 },
       prestige: 1,
       perk: {
@@ -53,7 +54,8 @@ const BLUEPRINTS: readonly { template: BlueprintTemplate; copies: number }[] = [
     copies: 2,
     template: {
       name: "Assembly Line",
-      type: "gear",
+      type: "production",
+      tool: "gear",
       buildCost: { metal: 2, energy: 1, goods: 0 },
       prestige: 1,
       perk: {
@@ -69,7 +71,8 @@ const BLUEPRINTS: readonly { template: BlueprintTemplate; copies: number }[] = [
     copies: 2,
     template: {
       name: "Battery Factory",
-      type: "wrench",
+      type: "production",
+      tool: "wrench",
       buildCost: { metal: 2, energy: 1, goods: 0 },
       prestige: 1,
       // No dice at all: the energy is the whole price.
@@ -86,7 +89,8 @@ const BLUEPRINTS: readonly { template: BlueprintTemplate; copies: number }[] = [
     copies: 4,
     template: {
       name: "Beacon",
-      type: "shovel",
+      type: "monument",
+      tool: "shovel",
       buildCost: { metal: 2, energy: 4, goods: 0 },
       // Pure score, and the one blueprint you may stand more than one of:
       // one prestige each, plus one for having any at all.
@@ -99,7 +103,8 @@ const BLUEPRINTS: readonly { template: BlueprintTemplate; copies: number }[] = [
     copies: 2,
     template: {
       name: "Biolab",
-      type: "gear",
+      type: "production",
+      tool: "gear",
       buildCost: { metal: 1, energy: 3, goods: 0 },
       prestige: 1,
       perk: {
@@ -115,7 +120,8 @@ const BLUEPRINTS: readonly { template: BlueprintTemplate; copies: number }[] = [
     copies: 2,
     template: {
       name: "Black Market",
-      type: "gear",
+      type: "utility",
+      tool: "gear",
       buildCost: { metal: 3, energy: 2, goods: 0 },
       prestige: 1,
       // The die is free; the price is a card out of hand, and what it paid for
@@ -133,7 +139,8 @@ const BLUEPRINTS: readonly { template: BlueprintTemplate; copies: number }[] = [
     copies: 2,
     template: {
       name: "Concrete Plant",
-      type: "shovel",
+      type: "production",
+      tool: "shovel",
       buildCost: { metal: 2, energy: 2, goods: 0 },
       // Cheap dice, cheap goods: a pair of 1s buys two goods for one metal,
       // and a pair of 6s buys the same two for six.
@@ -151,7 +158,7 @@ const BLUEPRINTS: readonly { template: BlueprintTemplate; copies: number }[] = [
     copies: 6,
     template: {
       name: "Generator",
-      type: "wrench",
+      tool: "wrench",
       buildCost: { metal: 1, energy: 0, goods: 0 },
       perk: oneDie({ kind: "gain", resources: { energy: 2 } }),
     },
@@ -160,7 +167,7 @@ const BLUEPRINTS: readonly { template: BlueprintTemplate; copies: number }[] = [
     copies: 5,
     template: {
       name: "Mine",
-      type: "shovel",
+      tool: "shovel",
       buildCost: { metal: 1, energy: 1, goods: 0 },
       perk: oneDie({ kind: "gain", resources: { metal: 2 } }, { kind: "atMost", face: 4 }),
     },
@@ -169,7 +176,7 @@ const BLUEPRINTS: readonly { template: BlueprintTemplate; copies: number }[] = [
     copies: 5,
     template: {
       name: "Warehouse",
-      type: "shovel",
+      tool: "shovel",
       buildCost: { metal: 3, energy: 1, goods: 0 },
       perk: oneDie({ kind: "gain", resources: { goods: 3 } }, { kind: "atMost", face: 3 }),
     },
@@ -178,7 +185,7 @@ const BLUEPRINTS: readonly { template: BlueprintTemplate; copies: number }[] = [
     copies: 5,
     template: {
       name: "Research Lab",
-      type: "gear",
+      tool: "gear",
       buildCost: { metal: 2, energy: 1, goods: 0 },
       perk: oneDie({ kind: "draw", count: 2 }, { kind: "exact", face: 6 }),
     },
@@ -187,7 +194,7 @@ const BLUEPRINTS: readonly { template: BlueprintTemplate; copies: number }[] = [
     copies: 4,
     template: {
       name: "Foundry",
-      type: "hammer",
+      tool: "hammer",
       buildCost: { metal: 3, energy: 0, goods: 0 },
       perk: oneDie({ kind: "gain", resources: { metal: 1, goods: 1 } }, { kind: "atLeast", face: 2 }),
     },
@@ -196,7 +203,7 @@ const BLUEPRINTS: readonly { template: BlueprintTemplate; copies: number }[] = [
     copies: 4,
     template: {
       name: "Depot",
-      type: "wrench",
+      tool: "wrench",
       buildCost: { metal: 1, energy: 2, goods: 0 },
       perk: oneDie({ kind: "draw", count: 1 }, { kind: "exact", face: 1 }),
     },

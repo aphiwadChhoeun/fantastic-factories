@@ -1,5 +1,5 @@
 import type { BlueprintCard, CardPool, ContractorMarket } from "@/engine";
-import { BLUEPRINT_TYPE_GLYPHS, BLUEPRINT_TYPE_SWATCHES } from "@/lib/colors";
+import { BLUEPRINT_TOOL_GLYPHS, BLUEPRINT_TOOL_SWATCHES } from "@/lib/colors";
 import { CardView } from "./CardView";
 import styles from "./game.module.css";
 
@@ -38,12 +38,12 @@ function ContractorRow({ market, interaction }: { market: ContractorMarket } & R
           <div key={`${slot.token}-${index}`} className={styles.slot}>
             <span
               className={styles.token}
-              style={BLUEPRINT_TYPE_SWATCHES[slot.token]}
+              style={BLUEPRINT_TOOL_SWATCHES[slot.token]}
               title={`Costs a ${slot.token} blueprint`}
               aria-label={`Costs a ${slot.token} blueprint`}
               role="img"
             >
-              {BLUEPRINT_TYPE_GLYPHS[slot.token]}
+              {BLUEPRINT_TOOL_GLYPHS[slot.token]}
             </span>
             {slot.card ? (
               <CardView

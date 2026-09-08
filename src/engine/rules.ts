@@ -24,6 +24,7 @@ import {
   type ActivationRequirement,
   type BlueprintCard,
   type BlueprintPerk,
+  type BlueprintTool,
   type Building,
   type Card,
   type DicePattern,
@@ -143,13 +144,13 @@ function ownDice(player: Player): Die[] {
 }
 
 /** Blueprints in hand that could pay a slot carrying `token`. */
-function paymentsFor(player: Player, token: BlueprintCard["type"]): BlueprintCard[] {
-  return player.hand.filter((card) => card.type === token);
+function paymentsFor(player: Player, token: BlueprintTool): BlueprintCard[] {
+  return player.hand.filter((card) => card.tool === token);
 }
 
-/** Blueprints in hand that could pay to build `card` — same symbol, not itself. */
-function sameSymbol(player: Player, card: BlueprintCard): BlueprintCard[] {
-  return player.hand.filter((other) => other.id !== card.id && other.type === card.type);
+/** Blueprints in hand that could pay to build `card` — same tool, not itself. */
+function sameTool(player: Player, card: BlueprintCard): BlueprintCard[] {
+  return player.hand.filter((other) => other.id !== card.id && other.tool === card.tool);
 }
 
 /**
@@ -300,12 +301,12 @@ export function legalMoves(state: GameState): Move[] {
 
       const moves: Move[] = [];
 
-      // Building takes no die: it costs another blueprint of the same symbol,
+      // Building takes no die: it costs another blueprint of the same tool,
       // discarded from hand, plus the card's resource cost.
       for (const card of player.hand) {
         if (!canAfford(player.resources, card.buildCost)) continue;
         if (alreadyBuilt(player, card)) continue;
-        for (const payment of sameSymbol(player, card)) {
+        for (const payment of sameTool(player, card)) {
           moves.push({ type: "build", cardId: card.id, paymentCardId: payment.id });
         }
       }
@@ -876,9 +877,9 @@ export function applyMove(state: GameState, move: Move): GameState {
 
       const payment = player.hand.find((c) => c.id === move.paymentCardId);
       if (!payment) throw new Error(`${player.name} does not hold ${move.paymentCardId}`);
-      if (payment.type !== slot.token) {
+      if (payment.tool !== slot.token) {
         throw new Error(
-          `${slot.card.name} costs a ${slot.token} blueprint, but ${payment.name} is ${payment.type}`,
+          `${slot.card.name} costs a ${slot.token} blueprint, but ${payment.name} is ${payment.tool}`,
         );
       }
 
@@ -1062,9 +1063,9 @@ export function applyMove(state: GameState, move: Move): GameState {
       if (payment.id === card.id) {
         throw new Error(`${card.name} cannot pay for itself`);
       }
-      if (payment.type !== card.type) {
+      if (payment.tool !== card.tool) {
         throw new Error(
-          `${card.name} costs a ${card.type} blueprint, but ${payment.name} is ${payment.type}`,
+          `${card.name} costs a ${card.tool} blueprint, but ${payment.name} is ${payment.tool}`,
         );
       }
       if (!canAfford(player.resources, card.buildCost)) {
