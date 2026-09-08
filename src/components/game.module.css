@@ -246,6 +246,18 @@ button.card {
   opacity: 0.65;
 }
 
+/*
+ * The last question of a multi-part choice, asked where it arises: which
+ * resources to take, or which run of dice to work. Everything a player can
+ * point at is pointed at instead.
+ */
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
 .swatch {
   display: inline-block;
   width: 10px;

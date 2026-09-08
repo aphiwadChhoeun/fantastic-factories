@@ -3,7 +3,8 @@
 import { useMemo, useState } from "react";
 import { PHASE_LABELS, type Move } from "@/engine";
 import { useGame } from "@/hooks/useGame";
-import { indexMoves, paymentsFor } from "@/lib/board";
+import { indexMoves, paymentOf, paymentsFor } from "@/lib/board";
+import { describeMove } from "@/lib/format";
 import { GameLog } from "./GameLog";
 import { Marketplace, type MarketInteraction } from "./Marketplace";
 import { MoveList } from "./MoveList";
@@ -16,29 +17,56 @@ import styles from "./game.module.css";
  */
 const DEFAULT_SEED = 1;
 
+/**
+ * A choice in progress, as the parts of it settled so far. Held as ids rather
+ * than as moves so that every render can re-check it against the live move
+ * list: a card that has been taken, or a die that has been spent, simply stops
+ * being a choice.
+ */
+type Pending = {
+  /** The card clicked, or dropped on. */
+  readonly cardId: string;
+  /** The die dropped on it, when the choice started with a drag. */
+  readonly dieId?: string;
+  /** The blueprint being discarded to pay, once that much is settled. */
+  readonly paymentCardId?: string;
+};
+
 export function Game() {
   const [seed, setSeed] = useState(DEFAULT_SEED);
   const { state, moves, active, isAiTurn, play, reset } = useGame(seed);
 
-  /**
-   * The card waiting on a payment, once one has been clicked: a contractor
-   * being taken, or a blueprint being built. Both cost a card from hand.
-   */
-  const [chosen, setChosen] = useState<string | null>(null);
+  const [pending, setPending] = useState<Pending | null>(null);
   const [dragged, setDragged] = useState<string | null>(null);
 
   const board = useMemo(() => indexMoves(moves, active.dice), [moves, active.dice]);
   const playable = !state.gameOver && !isAiTurn;
 
-  /** Every way to pay for `cardId`, whether it is taken or built. */
-  const optionsFor = (cardId: string): readonly Move[] =>
-    board.takes.get(cardId) ?? board.builds.get(cardId) ?? [];
+  /** Every move that still fits a choice: taking a card, building, working. */
+  function optionsFor(choice: Pending): readonly Move[] {
+    const all = choice.dieId
+      ? (board.dice.get(choice.dieId)?.activations.get(choice.cardId) ?? [])
+      : (board.takes.get(choice.cardId) ?? board.builds.get(choice.cardId) ?? []);
+    return choice.paymentCardId
+      ? all.filter((move) => paymentOf(move) === choice.paymentCardId)
+      : all;
+  }
 
-  // Both selections are checked against the current move list rather than
-  // cleared when it changes: a card that has been taken, or a die that has
-  // been spent, simply stops being selected.
-  const choosingPaymentFor = chosen && optionsFor(chosen).length > 1 ? chosen : null;
+  const options = pending ? optionsFor(pending) : [];
+  // A choice stands only while more than one move still fits it, so one that
+  // has been settled — or overtaken — needs no clearing.
+  const choice = options.length > 1 ? pending : null;
   const dragging = dragged && board.dice.has(dragged) ? dragged : null;
+
+  const payers = new Set(
+    options.map(paymentOf).filter((cardId): cardId is string => cardId !== undefined),
+  );
+  // With several blueprints in hand that could pay, the hand is the next
+  // question. Anything still open after that is spelled out as buttons —
+  // which resources the Black Market pays, or which run works an Assembly Line.
+  const payments = choice && payers.size > 1 ? paymentsFor(options) : null;
+  const choices =
+    choice && !payments ? options.map((move) => ({ move, label: describeMove(state, move) })) : [];
 
   const status = state.gameOver
     ? state.winner === null
@@ -52,45 +80,42 @@ export function Game() {
     reset(next);
   }
 
+  /** Plays a choice the moment only one move fits it, and otherwise asks on. */
+  function resolve(next: Pending) {
+    const fitting = optionsFor(next);
+    if (fitting.length === 0) return;
+
+    setPending(fitting.length === 1 ? null : next);
+    if (fitting.length === 1) play(fitting[0]);
+  }
+
   /**
-   * A blueprint in the row is taken outright. Taking a contractor and building
-   * a blueprint both cost a card discarded from hand: with one candidate that
-   * is unambiguous, with several the player picks, and clicking the card again
-   * backs out.
+   * A blueprint in the row is taken outright. Taking a contractor, building a
+   * blueprint and feeding the Black Market all cost a card discarded from
+   * hand: with one candidate that is unambiguous, with several the player
+   * picks, and clicking the card being paid for again backs out.
    */
   function selectCard(cardId: string) {
-    if (choosingPaymentFor === cardId) {
-      setChosen(null);
+    if (choice?.cardId === cardId) {
+      setPending(null);
       return;
     }
 
-    // Mid-choice, a click in hand is the payment rather than a new choice.
-    const pending = choosingPaymentFor ? paymentsFor(optionsFor(choosingPaymentFor)) : null;
-    const payment = pending?.get(cardId);
-    if (payment) {
-      setChosen(null);
-      play(payment);
+    // Mid-choice, a click in hand names the payment rather than starting over.
+    if (choice && payments?.has(cardId)) {
+      resolve({ ...choice, paymentCardId: cardId });
       return;
     }
-
-    const options = optionsFor(cardId);
-    if (options.length === 0) return;
-    if (options.length === 1) {
-      play(options[0]);
-      return;
-    }
-    setChosen(cardId);
+    resolve({ cardId });
   }
 
   const marketInteraction: MarketInteraction | undefined = playable
     ? {
         takeable: new Set(board.takes.keys()),
-        choosingPaymentFor,
+        choosingPaymentFor: choice?.cardId ?? null,
         onSelect: selectCard,
       }
     : undefined;
-
-  const payments = choosingPaymentFor ? paymentsFor(optionsFor(choosingPaymentFor)) : null;
 
   function panelFor(playerIndex: number): PanelInteraction | undefined {
     if (!playable || playerIndex !== state.currentPlayerIndex) return undefined;
@@ -102,9 +127,16 @@ export function Game() {
       buildable: new Set(board.builds.keys()),
       freeActivations: board.freeActivations,
       payments,
-      pending: choosingPaymentFor,
+      choices,
+      pending: choice?.cardId ?? null,
       onSelectCard: selectCard,
-      onPlay: (move: Move) => play(move),
+      onDropDie: (cardId: string) => {
+        if (dragging) resolve({ cardId, dieId: dragging });
+      },
+      onPlay: (move: Move) => {
+        setPending(null);
+        play(move);
+      },
     };
   }
 

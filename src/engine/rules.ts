@@ -23,6 +23,7 @@ import {
   PHASE_LABELS,
   type ActivationRequirement,
   type BlueprintCard,
+  type BlueprintPerk,
   type Building,
   type Card,
   type DicePattern,
@@ -152,6 +153,51 @@ function sameSymbol(player: Player, card: BlueprintCard): BlueprintCard[] {
 }
 
 /**
+ * What a perk charges for a particular set of dice: its printed cost, plus a
+ * face-scaled part for the perks that read their price off the table. Charged
+ * once for the set, so a Concrete Plant's 3, 3 costs three metal and not six.
+ *
+ * Exported because the board wants to warn about a price before the dice are
+ * chosen, and this is the only place that knows how one is worked out.
+ */
+export function perkCost(perk: BlueprintPerk, faces: readonly DieFace[]): Resources {
+  const { cost, costByFace } = perk;
+  if (!costByFace || faces.length === 0) return cost;
+
+  const face = faces[0];
+  return {
+    metal: cost.metal + (costByFace === "metal" ? face : 0),
+    energy: cost.energy + (costByFace === "energy" ? face : 0),
+    goods: cost.goods + (costByFace === "goods" ? face : 0),
+  };
+}
+
+/**
+ * The ways to take a discarded blueprint's build cost back, capped at `max`.
+ * Under the cap there is one answer — all of it. Over it the player says which
+ * resources to take, so every split is a move of its own.
+ *
+ * Goods never appear in a build cost, so nothing is lost by paying out none.
+ */
+function gainSplits(cost: Resources, max: number): Resources[] {
+  if (cost.metal + cost.energy <= max) {
+    return [{ metal: cost.metal, energy: cost.energy, goods: 0 }];
+  }
+
+  const splits: Resources[] = [];
+  for (let metal = 0; metal <= cost.metal; metal++) {
+    const energy = max - metal;
+    if (energy < 0 || energy > cost.energy) continue;
+    splits.push({ metal, energy, goods: 0 });
+  }
+  return splits;
+}
+
+function sameResources(a: Resources, b: Resources): boolean {
+  return a.metal === b.metal && a.energy === b.energy && a.goods === b.goods;
+}
+
+/**
  * Every distinct set of dice that could work a building's perk right now. A
  * perk that takes no dice yields one empty set — it is still a move.
  */
@@ -161,15 +207,14 @@ function perkDice(player: Player, building: Building): Die[][] {
   // A perk takes all its dice at once, so a used one is simply full. One that
   // takes none is marked used by `worked` instead.
   if (building.worked) return [];
-  if (!canAfford(player.resources, perk.cost)) return [];
 
   const usable = unspentDice(player).filter((die) => satisfies(perk.accepts, die.face));
-  const sets = combinations(usable, perk.dice).filter((set) =>
-    fitsPattern(
-      perk.pattern,
-      set.map((die) => die.face),
-    ),
-  );
+  const sets = combinations(usable, perk.dice).filter((set) => {
+    const faces = set.map((die) => die.face);
+    // Affordability is per set, not per perk: a face-scaled price means the
+    // same card is cheap on a pair of 1s and out of reach on a pair of 6s.
+    return fitsPattern(perk.pattern, faces) && canAfford(player.resources, perkCost(perk, faces));
+  });
 
   // Two dice showing the same face are interchangeable, so sets that differ
   // only by which of them was picked are the same move to a player.
@@ -266,12 +311,24 @@ export function legalMoves(state: GameState): Move[] {
       }
 
       for (const building of player.compound) {
+        const effect = building.card.perk?.effect;
         for (const dice of perkDice(player, building)) {
-          moves.push({
-            type: "activate",
-            cardId: building.card.id,
-            dieIds: dice.map((die) => die.id),
-          });
+          const dieIds = dice.map((die) => die.id);
+          const cardId = building.card.id;
+
+          // The Black Market eats a card out of hand and pays back what that
+          // card cost, so every blueprint held is a different move — and one
+          // that cost more than the cap is several, one per way to take it.
+          if (effect?.kind === "discardForResources") {
+            for (const payment of player.hand) {
+              for (const gain of gainSplits(payment.buildCost, effect.max)) {
+                moves.push({ type: "activate", cardId, dieIds, paymentCardId: payment.id, gain });
+              }
+            }
+            continue;
+          }
+
+          moves.push({ type: "activate", cardId, dieIds });
         }
       }
 
@@ -464,6 +521,36 @@ function revealForResources(state: GameState, playerIndex: number): GameState {
   );
 }
 
+/**
+ * Feeds a blueprint out of hand to the Black Market and pays out `gain` — the
+ * card's own build cost, or as much of it as the cap allows. Both the card and
+ * the split were checked by the move that got here.
+ */
+function discardForResources(
+  state: GameState,
+  playerIndex: number,
+  card: BlueprintCard,
+  gain: Resources,
+): GameState {
+  const player = state.players[playerIndex];
+  const traded = updatePlayer(
+    {
+      ...state,
+      blueprints: { ...state.blueprints, discard: [...state.blueprints.discard, card] },
+    },
+    playerIndex,
+    (p) => ({
+      ...p,
+      hand: p.hand.filter((c) => c.id !== card.id),
+      resources: addResources(p.resources, gain),
+    }),
+  );
+  return log(
+    traded,
+    `${player.name} sold ${card.name} — gained ${describeResourcesForLog(gain)}`,
+  );
+}
+
 function grantPerks(state: GameState, playerIndex: number, grant: Partial<WorkPerks>): GameState {
   return updatePlayer(state, playerIndex, (player) => ({
     ...player,
@@ -476,13 +563,64 @@ function grantPerks(state: GameState, playerIndex: number, grant: Partial<WorkPe
 }
 
 /**
+ * The parts of an effect the card cannot decide for itself, settled by the
+ * move that played it. Only the Black Market needs any: which blueprint it
+ * eats, and which resources to take when that card cost more than it pays.
+ */
+type EffectChoice = {
+  readonly discard?: BlueprintCard;
+  readonly gain?: Resources;
+};
+
+/**
+ * Reads an activation's card-and-payout choice off the move, and checks it.
+ * Perks that ask for neither get an empty choice, and a move that offers one
+ * anyway is a mistake worth hearing about.
+ */
+function discardChoice(
+  player: Player,
+  cardName: string,
+  effect: Effect,
+  move: Extract<Move, { type: "activate" }>,
+): EffectChoice {
+  if (effect.kind !== "discardForResources") {
+    if (move.paymentCardId) throw new Error(`${cardName} does not take a blueprint`);
+    return {};
+  }
+
+  if (!move.paymentCardId) throw new Error(`${cardName} needs a blueprint to discard`);
+  const discard = player.hand.find((card) => card.id === move.paymentCardId);
+  if (!discard) throw new Error(`${player.name} does not hold ${move.paymentCardId}`);
+
+  // A card that cost more than the cap pays out only part of it, and which
+  // part is the player's call — so it has to be on the move.
+  const allowed = gainSplits(discard.buildCost, effect.max);
+  if (!move.gain && allowed.length > 1) {
+    throw new Error(`${cardName} pays at most ${effect.max} — say which resources to take`);
+  }
+  const gain = move.gain ?? allowed[0];
+  if (!allowed.some((split) => sameResources(split, gain))) {
+    throw new Error(
+      `${discard.name} does not pay ${describeResourcesForLog(gain)} at ${cardName}`,
+    );
+  }
+
+  return { discard, gain };
+}
+
+/**
  * TODO: this is where new `Effect` variants get handled. Keep it exhaustive —
  * the switch has no default so TypeScript will flag any variant you forget.
  *
  * A `draw` effect pulls blueprints; contractors can only be taken from the
  * market by paying a token. TODO: some real cards may let you choose a deck.
  */
-function applyEffect(state: GameState, playerIndex: number, effect: Effect): GameState {
+function applyEffect(
+  state: GameState,
+  playerIndex: number,
+  effect: Effect,
+  choice: EffectChoice = {},
+): GameState {
   switch (effect.kind) {
     case "gain":
       return updatePlayer(state, playerIndex, (player) => ({
@@ -503,6 +641,12 @@ function applyEffect(state: GameState, playerIndex: number, effect: Effect): Gam
         playerIndex,
         effect.chosen ? { extraChosen: effect.count } : { extraRolled: effect.count },
       );
+    case "discardForResources": {
+      // Only an activation carries these, and only after checking them.
+      const { discard, gain } = choice;
+      if (!discard || !gain) throw new Error("No blueprint chosen to discard");
+      return discardForResources(state, playerIndex, discard, gain);
+    }
   }
 }
 
@@ -550,6 +694,9 @@ function describeEffectForLog(effect: Effect): string {
       const dice = `${effect.count} extra white ${effect.count === 1 ? "die" : "dice"}`;
       return effect.chosen ? `gets ${dice} at a face of their choice` : `rolls ${dice}`;
     }
+    // Logs the card and the haul itself, once both are known.
+    case "discardForResources":
+      return "selling a blueprint";
   }
 }
 
@@ -979,28 +1126,29 @@ export function applyMove(state: GameState, move: Move): GameState {
       if (!fitsPattern(perk.pattern, faces)) {
         throw new Error(`${building.card.name} needs ${perk.pattern} dice`);
       }
-      if (!canAfford(player.resources, perk.cost)) {
-        throw new Error(
-          `${building.card.name} costs ${describeResourcesForLog(perk.cost)} to use`,
-        );
+      // Some perks read their price off the dice, so it is only known now.
+      const cost = perkCost(perk, faces);
+      if (!canAfford(player.resources, cost)) {
+        throw new Error(`${building.card.name} costs ${describeResourcesForLog(cost)} to use`);
       }
+
+      // A perk that eats a card takes it from hand on top of everything else.
+      const choice = discardChoice(player, building.card.name, perk.effect, move);
 
       const used = updatePlayer(state, index, (p) => ({
         ...dice.reduce((spent, die) => spendDie(spent, die.id), p),
         compound: p.compound.map((b) =>
           b.card.id === building.card.id ? { ...b, dice: faces, worked: true } : b,
         ),
-        resources: spendResources(p.resources, perk.cost),
+        resources: spendResources(p.resources, cost),
       }));
-      const paid = costsNothing(perk.cost)
-        ? ""
-        : ` for ${describeResourcesForLog(perk.cost)}`;
+      const paid = costsNothing(cost) ? "" : ` for ${describeResourcesForLog(cost)}`;
       const withDice = faces.length > 0 ? ` with ${faces.join(", ")}` : "";
       const announced = log(
         used,
         `${player.name} worked ${building.card.name}${withDice}${paid}`,
       );
-      return applyEffect(announced, index, perk.effect);
+      return applyEffect(announced, index, perk.effect, choice);
     }
 
     case "endPhase": {

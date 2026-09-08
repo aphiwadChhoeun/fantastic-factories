@@ -3,6 +3,7 @@ import { createRandomAi } from "@/ai";
 import {
   applyMove,
   BLUEPRINT_TYPES,
+  canAfford,
   createBlueprintDeck,
   createContractorDeck,
   createInitialState,
@@ -32,6 +33,8 @@ import {
 
 /** Guards against a rules bug turning a test run into an infinite loop. */
 const MOVE_LIMIT = 20_000;
+
+const FREE: Resources = { metal: 0, energy: 0, goods: 0 };
 
 function playToEnd(state: GameState, choose: (state: GameState) => Move): GameState {
   let current = state;
@@ -783,6 +786,210 @@ describe("the Beacon", () => {
   });
 });
 
+describe("the Biolab", () => {
+  const biolab = cardNamed(createBlueprintDeck(), "Biolab");
+
+  function withBiolab(faces: readonly DieFace[], energy = 3): GameState {
+    const state = createInitialState({ seed: 3 });
+    const { color } = state.players[0];
+    return patchPlayer({ ...state, phase: "work" }, 0, {
+      compound: [{ card: biolab, dice: [], worked: false }],
+      dice: faces.map((face, i) => ({ id: `d${i}`, face, color, extra: false, spent: false })),
+      rolled: true,
+      resources: { metal: 0, energy, goods: 0 },
+    });
+  }
+
+  it("is a gear costing 1 metal and 3 energy, worth a prestige", () => {
+    expect(biolab.type).toBe("gear");
+    expect(biolab.buildCost).toEqual({ metal: 1, energy: 3, goods: 0 });
+    expect(biolab.prestige).toBe(1);
+  });
+
+  it("takes a 1 and one energy, and pays a good", () => {
+    const state = withBiolab([1, 4, 5, 6]);
+    const next = applyMove(state, { type: "activate", cardId: biolab.id, dieIds: ["d0"] });
+
+    expect(next.players[0].resources).toEqual({ metal: 0, energy: 2, goods: 1 });
+    expect(next.players[0].compound[0].dice).toEqual([1]);
+  });
+
+  it("takes nothing but a 1, and not without the energy", () => {
+    const activations = (state: GameState) =>
+      legalMoves(state).filter((move) => move.type === "activate");
+
+    expect(activations(withBiolab([2, 3, 4, 5]))).toEqual([]);
+    expect(activations(withBiolab([1, 1, 4, 5]))).toHaveLength(1);
+    expect(activations(withBiolab([1, 4, 5, 6], 0))).toEqual([]);
+
+    expect(() =>
+      applyMove(withBiolab([2, 3, 4, 5]), { type: "activate", cardId: biolab.id, dieIds: ["d0"] }),
+    ).toThrow(/A 2 does not work Biolab/);
+  });
+});
+
+describe("the Black Market", () => {
+  const market = cardNamed(createBlueprintDeck(), "Black Market");
+  /** 2 metal, 1 energy — three resources, so it pays out whole. */
+  const line = cardNamed(createBlueprintDeck(), "Assembly Line");
+  /** 2 metal, 4 energy — six, so the cap of four bites and the player picks. */
+  const beacon = copiesOf("Beacon")[0];
+
+  function withMarket(hand: readonly BlueprintCard[]): GameState {
+    const state = createInitialState({ seed: 3 });
+    const { color } = state.players[0];
+    return patchPlayer({ ...state, phase: "work" }, 0, {
+      compound: [{ card: market, dice: [], worked: false }],
+      dice: [{ id: "d0", face: 5, color, extra: false, spent: false }],
+      rolled: true,
+      hand: [...hand],
+      resources: { metal: 0, energy: 0, goods: 0 },
+    });
+  }
+
+  function offers(state: GameState) {
+    return legalMoves(state).filter((move) => move.type === "activate");
+  }
+
+  it("is a gear costing 3 metal and 2 energy, worth a prestige", () => {
+    expect(market.type).toBe("gear");
+    expect(market.buildCost).toEqual({ metal: 3, energy: 2, goods: 0 });
+    expect(market.prestige).toBe(1);
+    expect(market.perk?.dice).toBe(1);
+    expect(market.perk?.accepts).toEqual({ kind: "any" });
+    expect(market.perk?.cost).toEqual({ metal: 0, energy: 0, goods: 0 });
+  });
+
+  it("eats a blueprint and pays back what it cost", () => {
+    const state = withMarket([line]);
+    const [move] = offers(state);
+
+    const next = applyMove(state, move);
+
+    expect(next.players[0].resources).toEqual({ metal: 2, energy: 1, goods: 0 });
+    expect(next.players[0].hand).toEqual([]);
+    expect(next.blueprints.discard).toContain(line);
+    expect(logged(next, /sold Assembly Line — gained 2 metal, 1 energy/)).toBe(true);
+  });
+
+  it("offers one move per blueprint in hand, and none with an empty hand", () => {
+    expect(offers(withMarket([line, cardNamed(createBlueprintDeck(), "Biolab")]))).toHaveLength(2);
+    expect(offers(withMarket([]))).toEqual([]);
+  });
+
+  it("caps the payout at four, and offers every way to take it", () => {
+    const gains = offers(withMarket([beacon])).map((move) =>
+      move.type === "activate" ? move.gain : undefined,
+    );
+
+    // A Beacon cost 2 metal and 4 energy; four of those six come back.
+    expect(gains).toEqual([
+      { metal: 0, energy: 4, goods: 0 },
+      { metal: 1, energy: 3, goods: 0 },
+      { metal: 2, energy: 2, goods: 0 },
+    ]);
+  });
+
+  it("refuses a haul the discarded card does not pay", () => {
+    const state = withMarket([beacon]);
+    const activate = (gain: Resources): Move => ({
+      type: "activate",
+      cardId: market.id,
+      dieIds: ["d0"],
+      paymentCardId: beacon.id,
+      gain,
+    });
+
+    // Over the cap, and under it but more metal than the Beacon ever cost.
+    expect(() => applyMove(state, activate({ metal: 2, energy: 4, goods: 0 }))).toThrow(
+      /does not pay/,
+    );
+    expect(() => applyMove(state, activate({ metal: 3, energy: 1, goods: 0 }))).toThrow(
+      /does not pay/,
+    );
+    expect(() =>
+      applyMove(state, { type: "activate", cardId: market.id, dieIds: ["d0"] }),
+    ).toThrow(/needs a blueprint to discard/);
+  });
+
+  it("leaves every other perk alone — nothing else takes a card", () => {
+    const battery = cardNamed(createBlueprintDeck(), "Battery Factory");
+    const state = patchPlayer(withMarket([line]), 0, {
+      compound: [{ card: battery, dice: [], worked: false }],
+      resources: { metal: 0, energy: 4, goods: 0 },
+    });
+
+    expect(() =>
+      applyMove(state, {
+        type: "activate",
+        cardId: battery.id,
+        dieIds: [],
+        paymentCardId: line.id,
+      }),
+    ).toThrow(/does not take a blueprint/);
+  });
+});
+
+describe("the Concrete Plant", () => {
+  const plant = cardNamed(createBlueprintDeck(), "Concrete Plant");
+
+  function withPlant(faces: readonly DieFace[], metal: number): GameState {
+    const state = createInitialState({ seed: 3 });
+    const { color } = state.players[0];
+    return patchPlayer({ ...state, phase: "work" }, 0, {
+      compound: [{ card: plant, dice: [], worked: false }],
+      dice: faces.map((face, i) => ({ id: `d${i}`, face, color, extra: false, spent: false })),
+      rolled: true,
+      resources: { metal, energy: 0, goods: 0 },
+    });
+  }
+
+  function pairs(state: GameState) {
+    return legalMoves(state)
+      .filter((move) => move.type === "activate")
+      .map((move) =>
+        move.type === "activate"
+          ? move.dieIds.map((id) => state.players[0].dice.find((d) => d.id === id)!.face)
+          : [],
+      );
+  }
+
+  it("is a shovel costing 2 metal and 2 energy, and charges metal by the dice", () => {
+    expect(plant.type).toBe("shovel");
+    expect(plant.buildCost).toEqual({ metal: 2, energy: 2, goods: 0 });
+    expect(plant.perk?.dice).toBe(2);
+    expect(plant.perk?.pattern).toBe("matching");
+    expect(plant.perk?.costByFace).toBe("metal");
+    expect(plant.perk?.effect).toEqual({ kind: "gain", resources: { goods: 2 } });
+  });
+
+  it("charges metal equal to the pair, not to both dice", () => {
+    const next = applyMove(withPlant([3, 3, 5, 1], 4), {
+      type: "activate",
+      cardId: plant.id,
+      dieIds: ["d0", "d1"],
+    });
+
+    expect(next.players[0].resources).toEqual({ metal: 1, energy: 0, goods: 2 });
+    expect(next.players[0].compound[0].dice).toEqual([3, 3]);
+  });
+
+  it("prices each pair on its own — a cheap one is offered when a dear one is not", () => {
+    // Two metal buys the pair of 2s and nowhere near the pair of 5s.
+    expect(pairs(withPlant([2, 2, 5, 5], 2))).toEqual([[2, 2]]);
+    expect(pairs(withPlant([2, 2, 5, 5], 5))).toHaveLength(2);
+    expect(pairs(withPlant([2, 2, 5, 5], 1))).toEqual([]);
+
+    expect(() =>
+      applyMove(withPlant([5, 5, 1, 2], 4), {
+        type: "activate",
+        cardId: plant.id,
+        dieIds: ["d0", "d1"],
+      }),
+    ).toThrow(/costs 5 metal to use/);
+  });
+});
+
 describe("prestige", () => {
   it("counts one card's prestige once, and ignores cards worth none", () => {
     const generator = copiesOf("Generator")[0];
@@ -1052,9 +1259,13 @@ describe("legalMoves", () => {
       expect(payment?.type).toBe(slot?.token);
     }
 
-    // And every legal pairing is offered — no more, no fewer.
+    // And every legal pairing is offered — no more, no fewer. A contractor
+    // that also charges resources is only a pairing if they can be paid.
     const pairings = state.contractors.slots
-      .filter((slot) => slot.card)
+      .filter(
+        (slot) =>
+          slot.card && canAfford(state.players[0].resources, slot.card.extraCost ?? FREE),
+      )
       .flatMap((slot) => hand.filter((card) => card.type === slot.token));
     expect(offers).toHaveLength(pairings.length);
   });

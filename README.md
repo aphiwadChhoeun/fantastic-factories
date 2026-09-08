@@ -126,6 +126,12 @@ top; and some take no dice at all.
 A perk takes all its dice at once, so you need the whole set before you can
 work it and no die is ever left stranded on a half-filled card.
 
+Two perks charge something other than a printed price. The Concrete Plant reads
+its cost off the table — metal equal to the pair of dice put on it, once for
+the pair and not once each — so the same card is cheap on two 1s and dear on
+two 6s. The Black Market charges a card instead: a blueprint out of hand, which
+pays back what that blueprint would have cost to build.
+
 ### Scoring
 
 **Your score is your goods plus the prestige standing in your compound.**
@@ -133,7 +139,8 @@ Blueprints in hand are worth nothing — prestige only counts once built. Metal
 and energy are not score either; they are what you spend to get there.
 
 Most of the placeholder blueprints are worth no prestige; the real ones are
-worth 1 each. The highest score wins, and an equal score is a draw.
+worth 1 each, bar the Concrete Plant, which is worth none. The highest score
+wins, and an equal score is a draw.
 
 ### The real blueprints so far
 
@@ -143,11 +150,19 @@ worth 1 each. The highest score wins, and an equal score is a draw.
 | Assembly Line    |      2 | gear   | 2 metal + 1 energy | 3 consecutive dice → 2 goods             | 1             |
 | Battery Factory  |      2 | wrench | 2 metal + 1 energy | 4 energy, no dice → 1 good               | 1             |
 | Beacon           |      4 | shovel | 2 metal + 4 energy | none — it is pure score                  | 1 each, +1 set |
+| Biolab           |      2 | gear   | 1 metal + 3 energy | a 1 + 1 energy → 1 good                  | 1             |
+| Black Market     |      2 | gear   | 3 metal + 2 energy | any die + a blueprint from hand → its build cost back, at most 4 | 1 |
+| Concrete Plant   |      2 | shovel | 2 metal + 2 energy | 2 matching dice + metal equal to them → 2 goods | —      |
 
 Every build cost is on top of discarding a blueprint of the same symbol.
 
 **Consecutive** means a run with no gaps and no repeats: 2, 3, 4. Order does
 not matter, so a roll of 4, 2, 3 works the Assembly Line.
+
+**The Black Market pays at most four.** A blueprint that cost less than that
+pays out whole; one that cost more pays four, and the player says which four —
+a Beacon, at 2 metal and 4 energy, can be sold for any of 4 energy, 1 metal and
+3 energy, or 2 metal and 2 energy.
 
 **The Beacon is the one blueprint you may stand more than one of**, and it is
 the only card that scores as a set: one prestige each plus one for having any,
@@ -207,6 +222,12 @@ slot it would fill lights up with them. Dropping a die on a perk that wants two
 plays both at once. A perk that takes no dice — the Battery Factory — has
 nothing to drag at it, so it is clicked instead.
 
+A drop that leaves something open asks rather than guessing. The Black Market
+wants a blueprint out of hand, so the candidates light up as they do for a
+build; once the card is settled, anything still open — which four resources to
+take for it, or which run of three works an Assembly Line — is spelled out as
+buttons under your compound. Clicking the card being worked backs out.
+
 A building says what is stopping it when that is not obvious: `needs 5 energy`,
 `worked this round`.
 
@@ -221,20 +242,24 @@ Start in `src/engine/rules.ts`. The implemented slice is: take a card from one
 of the two rows, roll dice, spend dice to build blueprints, activate your
 compound and work your Headquarters, end the round. Known stubs:
 
-- `cards.ts` — the blueprints are invented placeholders; the contractors are
-  real, but not yet the whole deck
+- `cards.ts` — seven blueprints are real and six are invented placeholders;
+  the contractors are real, but not yet the whole deck
 - the Investor discards the blueprint it reveals rather than keeping it, and
   the Specialist's extra die is white like the Hired Hands dice — neither is
   spelled out on the card
 - a Specialist die must be set straight after the roll, before anything is
   spent. Nothing yet changes a die mid-phase, so waiting would gain nothing
 - an equal score is a draw. No tiebreak is defined
-- 11 distinct blueprints and a Beacon that stacks four deep put the 10-card
-  `END_COMPOUND_SIZE` in reach again, but only just
+- 14 distinct blueprints and a Beacon that stacks four deep put the 10-card
+  `END_COMPOUND_SIZE` comfortably in reach
 - the Headquarters is the same for every player. The published game hands out
   one of several starting tiles
-- `Effect` — the real game needs many more variants than the seven here
+- `Effect` — the real game needs many more variants than the eight here
 - a `draw` effect always pulls blueprints; no card lets you choose a deck yet
+- the Black Market's cap is read as four resources in total, and the card it
+  eats is discarded rather than kept. Taking less than the cap is not offered
+- the Concrete Plant is worth no prestige, which is the one real blueprint so
+  far that is not
 - a perk that wants several dice must ask for matching ones or accept any
   combination; there is no "one 3 and one 5" yet
 - contractor slot tokens are fixed to their slot for the whole game; they could

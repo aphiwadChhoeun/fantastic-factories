@@ -55,6 +55,8 @@ export function describeEffect(effect: Effect): string {
         ? `Take ${dice} at a face of your choice after rolling`
         : `Roll ${dice} this round`;
     }
+    case "discardForResources":
+      return `Discard a blueprint from hand — gain its build cost back, up to ${effect.max}`;
   }
 }
 
@@ -70,8 +72,10 @@ export function describePerkCost(perk: BlueprintPerk): string {
   const accepts =
     perk.dice > 1 && perk.accepts.kind !== "any" ? ` (${describeRequirement(perk.accepts)})` : "";
   const cost = costsSomething(perk.cost) ? describeResources(perk.cost) : "";
+  // A price read off the dice cannot be a number until they are on the table.
+  const scaled = perk.costByFace ? `${perk.costByFace} equal to the dice` : "";
 
-  return [`${dice}${accepts}`, cost].filter(Boolean).join(" + ") || "nothing";
+  return [`${dice}${accepts}`, cost, scaled].filter(Boolean).join(" + ") || "nothing";
 }
 
 function costsSomething(resources: Resources): boolean {
@@ -149,8 +153,17 @@ export function describeMove(state: GameState, move: Move): string {
       )}`;
     case "activate": {
       const name = findCardName(state, move.cardId);
-      if (move.dieIds.length === 0) return `Work ${name}`;
-      return `Work ${name} with ${move.dieIds.map((id) => dieFace(state, id)).join(", ")}`;
+      const dice =
+        move.dieIds.length === 0
+          ? ""
+          : ` with ${move.dieIds.map((id) => dieFace(state, id)).join(", ")}`;
+      // The Black Market: what it eats, and what it pays for it.
+      const traded = move.paymentCardId
+        ? ` — sell ${findCardName(state, move.paymentCardId)}${
+            move.gain ? ` for ${describeResources(move.gain)}` : ""
+          }`
+        : "";
+      return `Work ${name}${dice}${traded}`;
     }
     case "endPhase":
       return state.phase === "cleanup" ? "Start next round" : "End turn";
@@ -160,6 +173,6 @@ export function describeMove(state: GameState, move: Move): string {
 /** Stable key for a move, so React lists do not need array indices. */
 export function moveKey(move: Move): string {
   return Object.entries(move)
-    .map(([key, value]) => `${key}:${value}`)
+    .map(([key, value]) => `${key}:${JSON.stringify(value)}`)
     .join("|");
 }

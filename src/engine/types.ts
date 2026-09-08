@@ -84,7 +84,16 @@ export type Effect =
    * else at cleanup. `chosen` dice have their face picked by the player once
    * the roll is on the table; the rest are rolled with it.
    */
-  | { readonly kind: "extraDice"; readonly count: number; readonly chosen: boolean };
+  | { readonly kind: "extraDice"; readonly count: number; readonly chosen: boolean }
+  /**
+   * Discard a blueprint from hand and take its build cost back as metal and
+   * energy — the Black Market. Never more than `max` in total: a card that
+   * cost more than that pays out only part, and the player says which part.
+   *
+   * Which card, and which part, ride on the move rather than the card, so this
+   * is the one effect that cannot resolve on its own.
+   */
+  | { readonly kind: "discardForResources"; readonly max: number };
 
 /**
  * The three sections of the Headquarters tile. Dice go on them during the Work
@@ -161,6 +170,14 @@ export type BlueprintPerk = {
   readonly accepts: ActivationRequirement;
   /** Resources paid to use it, on top of the dice. Usually nothing. */
   readonly cost: Resources;
+  /**
+   * A price read off the dice rather than printed: this much of this resource,
+   * equal to the face put on it. The Concrete Plant takes two matching dice and
+   * charges metal equal to the pair, so a 3, 3 costs 3 metal.
+   *
+   * Charged once for the set, not per die, and added to `cost`.
+   */
+  readonly costByFace?: keyof Resources;
   readonly effect: Effect;
 };
 
@@ -360,7 +377,21 @@ export type Move =
       readonly paymentCardId: string;
     }
   /** Uses a building's perk, putting all the dice it asks for on at once. */
-  | { readonly type: "activate"; readonly cardId: string; readonly dieIds: readonly string[] }
+  | {
+      readonly type: "activate";
+      readonly cardId: string;
+      readonly dieIds: readonly string[];
+      /**
+       * A blueprint discarded from hand, for a perk that eats one — the Black
+       * Market. Every other perk leaves this out.
+       */
+      readonly paymentCardId?: string;
+      /**
+       * Which resources to take, when the payout is capped and so has to be
+       * chosen. Only the Black Market pays this way.
+       */
+      readonly gain?: Resources;
+    }
   | { readonly type: "endPhase" };
 
 export type GameState = {

@@ -14,10 +14,13 @@ export type DieTargets = {
   /** Headquarters section id -> the placement. */
   readonly sections: ReadonlyMap<HqSectionId, Move>;
   /**
-   * Compound card id -> the activation this die takes part in. A perk that
+   * Compound card id -> the activations this die takes part in. A perk that
    * wants two dice appears under both of them, and playing it spends both.
+   *
+   * A list rather than a move, because a perk can want more than dice: the
+   * Black Market offers one activation per blueprint in hand it could eat.
    */
-  readonly activations: ReadonlyMap<string, Move>;
+  readonly activations: ReadonlyMap<string, readonly Move[]>;
 };
 
 export type BoardMoves = {
@@ -89,7 +92,7 @@ export function indexMoves(moves: readonly Move[], rolled: readonly Die[] = []):
         const standIns = rolled.filter((die) => !die.spent && wanted.has(die.face));
         const targets = standIns.length > 0 ? standIns.map((die) => die.id) : move.dieIds;
         for (const dieId of targets) {
-          (targetsFor(dice, dieId).activations as Map<string, Move>).set(move.cardId, move);
+          push(targetsFor(dice, dieId).activations as Map<string, Move[]>, move.cardId, move);
         }
         break;
       }
@@ -102,17 +105,33 @@ export function indexMoves(moves: readonly Move[], rolled: readonly Die[] = []):
   return { takes, builds, freeActivations, dice };
 }
 
+/** The blueprint a move spends out of hand, if it spends one. */
+export function paymentOf(move: Move): string | undefined {
+  switch (move.type) {
+    case "draft":
+      return move.kind === "contractor" ? move.paymentCardId : undefined;
+    case "build":
+      return move.paymentCardId;
+    case "activate":
+      return move.paymentCardId;
+    default:
+      return undefined;
+  }
+}
+
 /**
  * The blueprints in hand that could pay for a pending choice, by card id.
- * Taking a contractor and building a blueprint both cost a card from hand, so
- * both go through here.
+ * Taking a contractor, building a blueprint and feeding the Black Market all
+ * cost a card from hand, so all three go through here.
+ *
+ * A list per card, because paying with it need not settle everything: the
+ * Black Market still has to be told which resources to take for it.
  */
-export function paymentsFor(options: readonly Move[]): ReadonlyMap<string, Move> {
-  const payments = new Map<string, Move>();
+export function paymentsFor(options: readonly Move[]): ReadonlyMap<string, readonly Move[]> {
+  const payments = new Map<string, Move[]>();
   for (const move of options) {
-    if (move.type === "build" || (move.type === "draft" && move.kind === "contractor")) {
-      payments.set(move.paymentCardId, move);
-    }
+    const cardId = paymentOf(move);
+    if (cardId) push(payments, cardId, move);
   }
   return payments;
 }

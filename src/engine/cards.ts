@@ -8,7 +8,7 @@
  * A blueprint's `buildCost` is on top of the real price of building: another
  * blueprint of the same symbol, discarded from hand.
  *
- * TODO: the first four blueprints below are real cards; the rest are still
+ * TODO: the first seven blueprints below are real cards; the rest are still
  * invented, and are worth no prestige because their real values are unknown.
  * The contractors are real, but not yet the whole deck.
  */
@@ -93,6 +93,58 @@ const BLUEPRINTS: readonly { template: BlueprintTemplate; copies: number }[] = [
       prestige: 1,
       prestigeBonus: 1,
       duplicable: true,
+    },
+  },
+  {
+    copies: 2,
+    template: {
+      name: "Biolab",
+      type: "gear",
+      buildCost: { metal: 1, energy: 3, goods: 0 },
+      prestige: 1,
+      perk: {
+        dice: 1,
+        pattern: "any",
+        accepts: { kind: "exact", face: 1 },
+        cost: { metal: 0, energy: 1, goods: 0 },
+        effect: { kind: "gain", resources: { goods: 1 } },
+      },
+    },
+  },
+  {
+    copies: 2,
+    template: {
+      name: "Black Market",
+      type: "gear",
+      buildCost: { metal: 3, energy: 2, goods: 0 },
+      prestige: 1,
+      // The die is free; the price is a card out of hand, and what it paid for
+      // comes back as resources — up to four of them.
+      perk: {
+        dice: 1,
+        pattern: "any",
+        accepts: { kind: "any" },
+        cost: FREE,
+        effect: { kind: "discardForResources", max: 4 },
+      },
+    },
+  },
+  {
+    copies: 2,
+    template: {
+      name: "Concrete Plant",
+      type: "shovel",
+      buildCost: { metal: 2, energy: 2, goods: 0 },
+      // Cheap dice, cheap goods: a pair of 1s buys two goods for one metal,
+      // and a pair of 6s buys the same two for six.
+      perk: {
+        dice: 2,
+        pattern: "matching",
+        accepts: { kind: "any" },
+        cost: FREE,
+        costByFace: "metal",
+        effect: { kind: "gain", resources: { goods: 2 } },
+      },
     },
   },
   {

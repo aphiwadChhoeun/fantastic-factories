@@ -1,8 +1,15 @@
 import type { DragEvent } from "react";
-import { canAfford, scoreOf, type Building, type Move, type Player } from "@/engine";
+import {
+  canAfford,
+  perkCost,
+  scoreOf,
+  type Building,
+  type Move,
+  type Player,
+} from "@/engine";
 import type { DieTargets } from "@/lib/board";
 import { colorSwatch, DIE_SWATCHES } from "@/lib/colors";
-import { describeResources } from "@/lib/format";
+import { describeResources, moveKey } from "@/lib/format";
 import { CardView } from "./CardView";
 import { HeadquartersView } from "./HeadquartersView";
 import styles from "./game.module.css";
@@ -24,11 +31,18 @@ export type PanelInteraction = {
   /** Buildings whose perk takes no dice, and so is clicked rather than dragged. */
   readonly freeActivations: ReadonlyMap<string, Move>;
   /** Hand cards that could pay for whatever is mid-choice, if anything. */
-  readonly payments: ReadonlyMap<string, Move> | null;
-  /** The card mid-choice — a contractor being taken, or a build being paid for. */
+  readonly payments: ReadonlyMap<string, readonly Move[]> | null;
+  /**
+   * Whatever a choice still leaves open once the cards are settled, spelled
+   * out: which resources to take, or which run of dice to work.
+   */
+  readonly choices: readonly { readonly move: Move; readonly label: string }[];
+  /** The card mid-choice — one being taken, built, or worked. */
   readonly pending: string | null;
   /** Clicking a hand card: starts a build, pays for one, or cancels. */
   readonly onSelectCard: (cardId: string) => void;
+  /** Dropping the die being dragged onto a building in the compound. */
+  readonly onDropDie: (cardId: string) => void;
   readonly onPlay: (move: Move) => void;
 };
 
@@ -41,8 +55,17 @@ function perkNote(player: Player, building: Building): string | undefined {
   const { perk, prestigeBonus } = building.card;
   if (!perk) return prestigeBonus ? "scores, and stacks" : "scores only";
   if (building.worked) return "worked this round";
+  // The Black Market's price is a card out of hand, not a resource.
+  if (perk.effect.kind === "discardForResources" && player.hand.length === 0) {
+    return "needs a blueprint in hand";
+  }
   if (!canAfford(player.resources, perk.cost)) {
     return `needs ${describeResources(perk.cost)}`;
+  }
+  // A price read off the dice is not a number until they are chosen, so the
+  // most that can be said in advance is that even the cheapest face is short.
+  if (perk.costByFace && !canAfford(player.resources, perkCost(perk, [1]))) {
+    return `needs ${perk.costByFace} for its dice`;
   }
   return undefined;
 }
@@ -134,34 +157,60 @@ export function PlayerPanel({ player, active, hideHand = false, interaction }: P
         ) : (
           <div className={styles.cardRow}>
             {player.compound.map((building) => {
-              const move = targets?.activations.get(building.card.id);
+              const cardId = building.card.id;
+              const droppable = targets?.activations.has(cardId) ?? false;
               // A perk that takes no dice has nothing to drag at it, so it is
               // worked by clicking the card instead.
-              const free = interaction?.freeActivations.get(building.card.id);
+              const free = interaction?.freeActivations.get(cardId);
+              // The card mid-choice stays clickable, to back out of it.
+              const choosing = interaction?.pending === cardId;
               return (
                 <CardView
-                  key={building.card.id}
+                  key={cardId}
                   card={building.card}
                   built
                   note={perkNote(player, building)}
                   dice={building.dice}
                   spent={building.worked}
                   highlight={Boolean(free)}
-                  onSelect={free ? () => interaction?.onPlay(free) : undefined}
-                  selectLabel={`Work ${building.card.name}`}
-                  dropTarget={Boolean(move)}
-                  onDropDie={move ? () => interaction?.onPlay(move) : undefined}
+                  selected={choosing}
+                  onSelect={
+                    choosing
+                      ? () => interaction?.onSelectCard(cardId)
+                      : free
+                        ? () => interaction?.onPlay(free)
+                        : undefined
+                  }
+                  selectLabel={
+                    choosing ? `Cancel ${building.card.name}` : `Work ${building.card.name}`
+                  }
+                  dropTarget={droppable}
+                  onDropDie={droppable ? () => interaction?.onDropDie(cardId) : undefined}
                 />
               );
             })}
+          </div>
+        )}
+        {interaction && interaction.choices.length > 0 && (
+          <div className={styles.choices}>
+            {interaction.choices.map(({ move, label }) => (
+              <button
+                key={moveKey(move)}
+                type="button"
+                className={styles.moveButton}
+                onClick={() => interaction.onPlay(move)}
+              >
+                {label}
+              </button>
+            ))}
           </div>
         )}
       </div>
 
       <div>
         <div className={styles.sectionTitle}>Hand</div>
-        {/* The payment comes from hand whether a card is being taken or built. */}
-        {interaction?.pending && (
+        {/* The payment comes from hand whether a card is taken, built or sold. */}
+        {interaction?.payments && (
           <p className={styles.prompt}>Click a highlighted blueprint to discard as payment.</p>
         )}
         {hideHand ? (
