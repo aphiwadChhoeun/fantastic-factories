@@ -1,6 +1,8 @@
 import type { DragEvent } from "react";
 import {
+  AUTOMA_PRODUCTION,
   canAfford,
+  countByCategory,
   perkCost,
   scoreOf,
   type Building,
@@ -70,16 +72,52 @@ function perkNote(player: Player, building: Building): string | undefined {
   return undefined;
 }
 
+/**
+ * What the automaton's compound is worth to it, type by type: how many cards
+ * stand of each, and which colour die answers for them.
+ *
+ * This is the whole of its Work Phase, so it is worth showing plainly — a die
+ * pays a good when its face is at most the count beside its colour. Monuments
+ * and untyped placeholders answer to no colour and so appear nowhere here.
+ */
+function ProductionSummary({ player }: { player: Player }) {
+  return (
+    <div>
+      <div className={styles.sectionTitle}>Produces on</div>
+      <div className={styles.automaTypes}>
+        {AUTOMA_PRODUCTION.map(({ color, category }) => {
+          const standing = countByCategory(player.compound, category);
+          return (
+            <span
+              key={color}
+              className={styles.cardMeta}
+              title={
+                standing === 0
+                  ? `Nothing of this type — the ${color} die cannot pay`
+                  : `The ${color} die pays a good on ${standing} or less`
+              }
+            >
+              <span className={styles.swatch} style={colorSwatch(color)} />
+              {category} <strong>{standing}</strong>
+            </span>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 type Props = {
   player: Player;
   active: boolean;
-  /** Hide an AI opponent's hand; blueprints are private information. */
-  hideHand?: boolean;
   interaction?: PanelInteraction;
 };
 
-export function PlayerPanel({ player, active, hideHand = false, interaction }: Props) {
+export function PlayerPanel({ player, active, interaction }: Props) {
   const targets = interaction?.targets ?? null;
+  // The automaton holds no cards and never places a die on its Headquarters,
+  // so both sections would be permanently empty furniture.
+  const automaton = player.isAi;
 
   function startDrag(event: DragEvent, dieId: string) {
     event.dataTransfer.effectAllowed = "move";
@@ -101,9 +139,10 @@ export function PlayerPanel({ player, active, hideHand = false, interaction }: P
           {active ? " — to act" : ""}
         </span>
         <span className={styles.cardMeta}>
-          {player.resources.metal} metal · {player.resources.energy} energy ·{" "}
+          {/* The automaton buys nothing, so it is never dealt anything to buy with. */}
+          {!automaton && `${player.resources.metal} metal · ${player.resources.energy} energy · `}
           {player.resources.goods} goods · {player.compound.length} in compound ·{" "}
-          <strong title="Goods plus prestige built">{scoreOf(player)} score</strong>
+          <strong title="Goods plus prestige standing">{scoreOf(player)} score</strong>
         </span>
       </header>
 
@@ -143,12 +182,16 @@ export function PlayerPanel({ player, active, hideHand = false, interaction }: P
         )}
       </div>
 
-      <HeadquartersView
-        placements={player.headquarters}
-        color={player.color}
-        targets={targets?.sections ?? null}
-        onPlay={interaction?.onPlay}
-      />
+      {automaton ? (
+        <ProductionSummary player={player} />
+      ) : (
+        <HeadquartersView
+          placements={player.headquarters}
+          color={player.color}
+          targets={targets?.sections ?? null}
+          onPlay={interaction?.onPlay}
+        />
+      )}
 
       <div>
         <div className={styles.sectionTitle}>Compound</div>
@@ -207,15 +250,15 @@ export function PlayerPanel({ player, active, hideHand = false, interaction }: P
         )}
       </div>
 
+      {/* The automaton has no hand — a card it takes goes straight up. */}
+      {!automaton && (
       <div>
         <div className={styles.sectionTitle}>Hand</div>
         {/* The payment comes from hand whether a card is taken, built or sold. */}
         {interaction?.payments && (
           <p className={styles.prompt}>Click a highlighted blueprint to discard as payment.</p>
         )}
-        {hideHand ? (
-          <p className={styles.empty}>{player.hand.length} card(s), hidden.</p>
-        ) : player.hand.length === 0 ? (
+        {player.hand.length === 0 ? (
           <p className={styles.empty}>No cards.</p>
         ) : (
           <div className={styles.cardRow}>
@@ -242,6 +285,7 @@ export function PlayerPanel({ player, active, hideHand = false, interaction }: P
           </div>
         )}
       </div>
+      )}
     </section>
   );
 }

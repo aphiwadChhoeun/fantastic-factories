@@ -28,6 +28,7 @@ src/
   engine/     pure rules — no React, no DOM, no network
     types.ts    GameState, Player, Card, Die, Move, Phase
     cards.ts    placeholder blueprint deck
+    automa.ts   the opponent's own rules — it plays a different game
     setup.ts    createInitialState({ seed })
     rules.ts    legalMoves / applyMove / end conditions
     rng.ts      seeded PRNG
@@ -55,14 +56,15 @@ deterministic and what undo and replay would build on.
 
 ## Rules so far
 
-Dice come in six colours — red, blue, green, purple, yellow, white. Each player
-takes one colour and every die they roll carries it, so up to six can play. The
-human is blue and the AI red by default; pass `playerColors` to
-`createInitialState` to change that.
+Dice come in six colours — red, blue, green, purple, yellow, white. A human
+player takes one colour and every die they roll carries it, so up to six can
+play. The human is blue by default; pass `playerColors` to
+`createInitialState` to change that. The automaton is seated on a colour like
+anyone else, but rolls one die of *each* colour instead — see below.
 
-Three resources: **metal** builds, **energy** powers, **goods** score. Players
-start with 4 dice in their colour, 1 metal, 2 energy, 4 random blueprints, and
-a Headquarters.
+Three resources: **metal** builds, **energy** powers, **goods** score. A human
+starts with 4 dice in their colour, 1 metal, 2 energy, 4 random blueprints, and
+a Headquarters. The automaton starts with none of the first four.
 
 ## The Headquarters
 
@@ -205,6 +207,52 @@ The contractor deck so far — 17 cards, eight kinds:
 cannot pay for is never offered. Extra dice are white and go back at cleanup
 with everything else.
 
+## The automaton
+
+The opponent does not play the game you play. It never builds, never spends,
+never holds a card and never touches its Headquarters. It rolls **five dice —
+one red, blue, purple, yellow and green — at the top of its turn** and reads
+the whole turn off them.
+
+It starts with **three blueprints already standing** in its compound, dealt
+face up. A Monument dealt there is set aside and another card dealt in its
+place, so it opens with three cards it could produce from. Its compound is
+kept grouped by type.
+
+**Market Phase — the green die decides.**
+
+| Green | What it does                                                     |
+| ----: | ---------------------------------------------------------------- |
+| 1–4   | Take that blueprint from the row, counting from the left          |
+| 5     | Reveal the top blueprint, then sweep the whole blueprint row away |
+| 6     | Reveal the top blueprint, then sweep the whole contractor row away|
+
+Whatever it takes goes straight into its compound. It pays nothing — no card,
+no metal, no energy — and a card it takes is never built, just stood up.
+
+**Work Phase — the other four dice pay out.** Each colour answers for one type
+of card in its compound, and pays **one good if its face is at most the number
+of cards of that type standing**:
+
+| Die    | Counts  |
+| ------ | ------- |
+| red    | Training |
+| blue   | Production |
+| purple | Special |
+| yellow | Utility |
+
+So a blue 2 pays a good against two or more Production cards, and nothing
+against one. Four dice, so at most four goods a turn.
+
+**Monument has no die**, which is why one is never dealt into its opening
+compound — it can still take one from the market, where it counts for prestige
+and produces nothing.
+
+The automaton is offered **exactly one legal move at each point of its turn**,
+so the automaton lives in the engine and any `Ai` implementation plays it
+correctly. Its turn is still `Move`s through `applyMove`: a seed and a move
+list replay it like any other game.
+
 ## The turn
 
 A **turn** is a **Market Phase** then a **Work Phase**, taken by one player from
@@ -280,8 +328,20 @@ compound and work your Headquarters, end the round. Known stubs:
   eats is discarded rather than kept. Taking less than the cap is not offered
 - the Concrete Plant is worth no prestige, which is the one real blueprint so
   far that is not
-- no rule reads a blueprint's type yet. Training and Special have no cards, and
-  the placeholders have no type at all
+- **the automaton can barely produce, because most of the deck is untyped.**
+  29 of the 46 blueprint copies are placeholders with no printed type, so they
+  answer to no die and pay nothing. Training and Special have no cards at all,
+  which leaves two of its four dice permanently dead. It scores mostly on
+  prestige until the real cards land. Nothing to fix in the rules — the deck
+  has to catch up
+- no rule reads a blueprint's type outside the automaton's Work Phase
+- sweeping a row refills it at once, so the human still faces a full market.
+  Denial rather than churn would be the other reading
+- the automaton takes no notice of duplicates: it will stand up two of the same
+  blueprint, where a human may build only one. Only its *opening* deal rejects
+  a card, and only a Monument
+- an automaton turn is three moves — roll, market, work — so it is three ticks
+  of the `AI_THINK_MS` pause rather than one
 - a perk that wants several dice must ask for matching ones or accept any
   combination; there is no "one 3 and one 5" yet
 - contractor slot tokens are fixed to their slot for the whole game; they could

@@ -164,6 +164,35 @@ export const BLUEPRINT_CATEGORIES = [
 
 export type BlueprintCategory = (typeof BLUEPRINT_CATEGORIES)[number];
 
+/**
+ * The automaton opponent answers for its compound with one die per type of
+ * card in it, in that type's own colour. Four types, four dice.
+ *
+ * Monument has no die and so never produces — it is the one printed type the
+ * automaton cannot turn into goods.
+ */
+export const AUTOMA_PRODUCTION: readonly {
+  readonly color: DieColor;
+  readonly category: BlueprintCategory;
+}[] = [
+  { color: "red", category: "training" },
+  { color: "blue", category: "production" },
+  { color: "purple", category: "special" },
+  { color: "yellow", category: "utility" },
+];
+
+/** The fifth die. It answers for no cards; it decides what the automaton takes. */
+export const AUTOMA_MARKET_COLOR: DieColor = "green";
+
+/**
+ * One die of each colour, rolled together at the top of the automaton's turn.
+ * Never white — that is a contractor's loan, and the automaton takes none.
+ */
+export const AUTOMA_DIE_COLORS: readonly DieColor[] = [
+  ...AUTOMA_PRODUCTION.map((pair) => pair.color),
+  AUTOMA_MARKET_COLOR,
+];
+
 type CardBase = {
   readonly id: string;
   readonly name: string;
@@ -400,6 +429,19 @@ export type Move =
       /** The blueprint discarded to pay. Same tool, different card. */
       readonly paymentCardId: string;
     }
+  /**
+   * The automaton's whole Market Phase, read off its green die: take a card
+   * from the row, or reveal one and sweep a row away.
+   *
+   * Illegal for a human, and the only move an automaton is offered — which is
+   * what lets any `Ai` implementation play it correctly.
+   */
+  | { readonly type: "automaMarket" }
+  /**
+   * The automaton's whole Work Phase: each of its four remaining dice pays a
+   * good if its face is at most the number of cards of that die's type.
+   */
+  | { readonly type: "automaWork" }
   /** Uses a building's perk, putting all the dice it asks for on at once. */
   | {
       readonly type: "activate";

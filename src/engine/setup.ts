@@ -1,6 +1,8 @@
+import { AUTOMA_COMPOUND_SIZE, dealAutomaCompound } from "./automa";
 import { createBlueprintDeck, createContractorDeck } from "./cards";
 import { createRng, shuffle, type Rng } from "./rng";
 import {
+  AUTOMA_DIE_COLORS,
   BLUEPRINT_TOOLS,
   DIE_COLORS,
   NO_PERKS,
@@ -30,6 +32,12 @@ export const STARTING_WORKFORCE = 4;
 
 /** Metal to build with, energy to power it, no goods until you produce them. */
 export const STARTING_RESOURCES: Resources = { metal: 1, energy: 2, goods: 0 };
+
+/**
+ * The automaton buys nothing, so it is dealt nothing to buy with. Its goods
+ * come straight off its dice.
+ */
+export const AUTOMA_RESOURCES: Resources = { metal: 0, energy: 0, goods: 0 };
 
 /** Human first, then the AI seats, in palette order. */
 export const DEFAULT_PLAYER_COLORS: readonly DieColor[] = ["blue", "red"];
@@ -78,27 +86,43 @@ export function createInitialState(options: SetupOptions = {}): GameState {
   const blueprintDraw: BlueprintCard[] = [...blueprintCards];
   const contractorDraw: ContractorCard[] = [...contractorCards];
 
-  const players: Player[] = playerNames.map((name, index) => ({
-    id: `p${index}`,
-    name,
-    isAi: index > 0,
-    color: colors[index],
-    // Hands are blueprints only — contractors resolve the moment you take one.
-    hand: blueprintDraw.splice(0, STARTING_HAND),
-    // The compound starts bare. The Headquarters is a tile, not a building.
-    compound: [],
-    headquarters: NO_PLACEMENTS,
-    resources: STARTING_RESOURCES,
-    dice: [],
-    rolled: false,
-    workforce: STARTING_WORKFORCE,
-    perks: NO_PERKS,
-  }));
+  // Monuments dealt into an automaton's opening compound are set aside and
+  // replaced, and end up in the blueprint discard once it is built below.
+  const setAside: BlueprintCard[] = [];
+
+  const players: Player[] = playerNames.map((name, index) => {
+    const isAi = index > 0;
+    // The automaton opens with three cards already standing and nothing in
+    // hand: it takes cards straight into its compound and never holds one.
+    const dealt = isAi
+      ? dealAutomaCompound(blueprintDraw, AUTOMA_COMPOUND_SIZE)
+      : { compound: [], setAside: [] };
+    setAside.push(...dealt.setAside);
+
+    return {
+      id: `p${index}`,
+      name,
+      isAi,
+      color: colors[index],
+      // Hands are blueprints only — contractors resolve the moment you take one.
+      hand: isAi ? [] : blueprintDraw.splice(0, STARTING_HAND),
+      // A human's compound starts bare. The Headquarters is a tile, not a
+      // building, so it is not in here for anyone.
+      compound: dealt.compound,
+      headquarters: NO_PLACEMENTS,
+      resources: isAi ? AUTOMA_RESOURCES : STARTING_RESOURCES,
+      dice: [],
+      rolled: false,
+      // The automaton rolls one die of each colour instead of a workforce.
+      workforce: isAi ? AUTOMA_DIE_COLORS.length : STARTING_WORKFORCE,
+      perks: NO_PERKS,
+    };
+  });
 
   const blueprints: CardPool<BlueprintCard> = {
     row: blueprintDraw.splice(0, MARKET_ROW_SIZE),
     deck: blueprintDraw,
-    discard: [],
+    discard: setAside,
   };
   // One token per tool type, fixed to its slot for the whole game.
   // TODO: unconfirmed — tokens could instead be dealt out or rotate per round.

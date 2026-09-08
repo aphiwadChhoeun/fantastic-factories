@@ -2,6 +2,11 @@ import { describe, expect, it } from "vitest";
 import { createRandomAi } from "@/ai";
 import {
   applyMove,
+  AUTOMA_COMPOUND_SIZE,
+  AUTOMA_DIE_COLORS,
+  dealAutomaCompound,
+  groupByCategory,
+  standing,
   BLUEPRINT_CATEGORIES,
   BLUEPRINT_TOOLS,
   canAfford,
@@ -23,8 +28,11 @@ import {
   STARTING_WORKFORCE,
   type BlueprintCard,
   type BlueprintCategory,
+  type Building,
   type Card,
   type ContractorCard,
+  type Die,
+  type DieColor,
   type DieFace,
   type GameState,
   type HqSectionId,
@@ -143,16 +151,29 @@ function takeStaged(state: GameState): GameState {
 }
 
 describe("setup", () => {
-  it("deals a hand and an empty compound", () => {
+  it("deals the human a hand and an empty compound", () => {
     const state = createInitialState({ seed: 42 });
+    const [human, automaton] = state.players;
 
     expect(state.players).toHaveLength(2);
-    expect(state.players[0].isAi).toBe(false);
-    expect(state.players[1].isAi).toBe(true);
-    for (const player of state.players) {
-      expect(player.hand).toHaveLength(STARTING_HAND);
-      // Nothing is built yet — the Headquarters is a tile, not a building.
-      expect(player.compound).toEqual([]);
+    expect(human.isAi).toBe(false);
+    expect(automaton.isAi).toBe(true);
+
+    expect(human.hand).toHaveLength(STARTING_HAND);
+    // Nothing is built yet — the Headquarters is a tile, not a building.
+    expect(human.compound).toEqual([]);
+  });
+
+  it("deals the automaton a standing compound and no hand at all", () => {
+    const state = createInitialState({ seed: 42 });
+    const automaton = state.players[1];
+
+    // It takes cards straight into its compound, so it never holds one.
+    expect(automaton.hand).toEqual([]);
+    expect(automaton.compound).toHaveLength(AUTOMA_COMPOUND_SIZE);
+    for (const building of automaton.compound) {
+      expect(building.dice).toEqual([]);
+      expect(building.worked).toBe(false);
     }
   });
 
@@ -210,30 +231,37 @@ describe("setup", () => {
     expect(state.blueprints.discard).toEqual([]);
   });
 
-  it("starts each player with four blueprints, one metal and two energy", () => {
-    const state = createInitialState({ seed: 42 });
+  it("starts the human with four blueprints, one metal and two energy", () => {
+    const human = createInitialState({ seed: 42 }).players[0];
 
     expect(STARTING_HAND).toBe(4);
-    for (const player of state.players) {
-      expect(player.hand).toHaveLength(4);
-      for (const card of player.hand) expect(card.kind).toBe("blueprint");
-      expect(player.resources).toEqual({ metal: 1, energy: 2, goods: 0 });
-      expect(player.resources).toEqual(STARTING_RESOURCES);
-    }
+    expect(human.hand).toHaveLength(4);
+    for (const card of human.hand) expect(card.kind).toBe("blueprint");
+    expect(human.resources).toEqual({ metal: 1, energy: 2, goods: 0 });
+    expect(human.resources).toEqual(STARTING_RESOURCES);
   });
 
-  it("deals every player a distinct colour and four dice in it", () => {
+  it("starts the automaton with nothing to spend — it buys nothing", () => {
+    const automaton = createInitialState({ seed: 42 }).players[1];
+
+    expect(automaton.resources).toEqual({ metal: 0, energy: 0, goods: 0 });
+  });
+
+  it("deals every player a distinct colour, and dice to match how they play", () => {
     const state = createInitialState({ seed: 42 });
     const colors = state.players.map((player) => player.color);
 
-    expect(STARTING_WORKFORCE).toBe(4);
     expect(new Set(colors).size).toBe(colors.length);
     for (const color of colors) {
       expect(DIE_COLORS).toContain(color);
     }
-    for (const player of state.players) {
-      expect(player.workforce).toBe(4);
-    }
+
+    // A human rolls a workforce in their own colour; the automaton rolls one
+    // die of each of five colours, which is a different thing entirely.
+    expect(STARTING_WORKFORCE).toBe(4);
+    expect(state.players[0].workforce).toBe(4);
+    expect(state.players[1].workforce).toBe(AUTOMA_DIE_COLORS.length);
+    expect(AUTOMA_DIE_COLORS).toEqual(["red", "blue", "purple", "yellow", "green"]);
   });
 
   it("honours explicitly chosen colours", () => {
@@ -289,11 +317,15 @@ describe("turn order", () => {
     const opponent = passWorkPhase(working);
     expect([opponent.phase, opponent.currentPlayerIndex]).toEqual(["market", 1]);
 
-    const opponentWorking = draftAnyBlueprint(opponent);
-    expect([opponentWorking.phase, opponentWorking.currentPlayerIndex]).toEqual(["work", 1]);
+    // The automaton takes the same two phases, but plays them off its dice:
+    // it rolls at the top of the turn and its green die does the shopping.
+    const automaWorking = applyMove(applyMove(opponent, { type: "rollDice" }), {
+      type: "automaMarket",
+    });
+    expect([automaWorking.phase, automaWorking.currentPlayerIndex]).toEqual(["work", 1]);
 
     // Cleanup runs once, after the last player's turn.
-    const cleanup = passWorkPhase(opponentWorking);
+    const cleanup = applyMove(automaWorking, { type: "automaWork" });
     expect([cleanup.phase, cleanup.currentPlayerIndex]).toEqual(["cleanup", 0]);
 
     const round2 = applyMove(cleanup, { type: "endPhase" });
@@ -1268,6 +1300,281 @@ describe("the Headquarters", () => {
     for (const player of cleaned.players) {
       expect(player.headquarters).toEqual(NO_PLACEMENTS);
     }
+  });
+});
+
+describe("the automaton", () => {
+  const factory = cardNamed(createBlueprintDeck(), "Aluminum Factory"); // production
+  const market = cardNamed(createBlueprintDeck(), "Black Market"); // utility
+  const beacons = copiesOf("Beacon"); // monument — no die answers for it
+  const generator = cardNamed(createBlueprintDeck(), "Generator"); // untyped placeholder
+
+  /** The automaton to act in its Market Phase, dice already on the table. */
+  function staged(
+    faces: Partial<Record<DieColor, DieFace>>,
+    compound?: readonly Building[],
+  ): GameState {
+    const state = createInitialState({ seed: 42 });
+    const dice: Die[] = AUTOMA_DIE_COLORS.map((color, i) => ({
+      id: `a${i}`,
+      face: faces[color] ?? 6,
+      color,
+      extra: false,
+      spent: false,
+    }));
+    return patchPlayer({ ...state, currentPlayerIndex: 1 }, 1, {
+      dice,
+      rolled: true,
+      ...(compound ? { compound } : {}),
+    });
+  }
+
+  function working(faces: Partial<Record<DieColor, DieFace>>, compound: readonly Building[]) {
+    return { ...staged(faces, compound), phase: "work" as const };
+  }
+
+  describe("setup", () => {
+    it("passes over a Monument and deals another in its place", () => {
+      const line = cardNamed(createBlueprintDeck(), "Assembly Line");
+      const biolab = cardNamed(createBlueprintDeck(), "Biolab");
+      const draw = [beacons[0], factory, beacons[1], line, biolab];
+
+      const { compound, setAside } = dealAutomaCompound(draw, 3);
+
+      expect(compound.map((b) => b.card.name)).toEqual([
+        "Aluminum Factory",
+        "Assembly Line",
+        "Biolab",
+      ]);
+      expect(setAside).toEqual([beacons[0], beacons[1]]);
+      expect(draw).toEqual([]);
+    });
+
+    it("never opens with a Monument, whatever the shuffle", () => {
+      for (let seed = 1; seed <= 30; seed++) {
+        const state = createInitialState({ seed });
+        expect(state.players[1].compound).toHaveLength(AUTOMA_COMPOUND_SIZE);
+        for (const building of state.players[1].compound) {
+          expect(building.card.type).not.toBe("monument");
+        }
+      }
+    });
+
+    it("throws the passed-over Monuments into the blueprint discard", () => {
+      let sawOne = false;
+      for (let seed = 1; seed <= 30; seed++) {
+        const state = createInitialState({ seed });
+        // Nothing else reaches the discard at setup, so anything there was
+        // dealt to the automaton and rejected.
+        for (const card of state.blueprints.discard) expect(card.type).toBe("monument");
+        sawOne ||= state.blueprints.discard.length > 0;
+      }
+      expect(sawOne).toBe(true);
+    });
+
+    it("keeps the compound grouped by type", () => {
+      const mixed = [beacons[0], market, factory].map(standing);
+
+      expect(groupByCategory(mixed).map((b) => b.card.name)).toEqual([
+        "Aluminum Factory", // production
+        "Black Market", // utility
+        "Beacon", // monument
+      ]);
+    });
+  });
+
+  describe("its turn", () => {
+    it("rolls one die of each colour at the top of the turn, not in the Work Phase", () => {
+      const start = { ...createInitialState({ seed: 42 }), currentPlayerIndex: 1 };
+      expect(legalMoves(start)).toEqual([{ type: "rollDice" }]);
+
+      const rolled = applyMove(start, { type: "rollDice" });
+      const dice = rolled.players[1].dice;
+
+      expect(dice.map((die) => die.color)).toEqual([...AUTOMA_DIE_COLORS]);
+      for (const die of dice) {
+        expect(die.face).toBeGreaterThanOrEqual(1);
+        expect(die.face).toBeLessThanOrEqual(6);
+        expect(die.extra).toBe(false);
+      }
+      // The roll is its Market Phase opening, so the phase has not moved on.
+      expect(rolled.phase).toBe("market");
+    });
+
+    it("is offered exactly one move at every point of its turn", () => {
+      let state: GameState = { ...createInitialState({ seed: 42 }), currentPlayerIndex: 1 };
+      for (const expected of ["rollDice", "automaMarket", "automaWork"]) {
+        const moves = legalMoves(state);
+        expect(moves).toHaveLength(1);
+        expect(moves[0].type).toBe(expected);
+        state = applyMove(state, moves[0]);
+      }
+    });
+  });
+
+  describe("its Market Phase", () => {
+    it("takes the blueprint the green die points at, counting from the left", () => {
+      for (const face of [1, 2, 3, 4] as const) {
+        const state = staged({ green: face });
+        const wanted = state.blueprints.row[face - 1];
+
+        const next = applyMove(state, { type: "automaMarket" });
+
+        expect(next.players[1].compound.map((b) => b.card.id)).toContain(wanted.id);
+        expect(next.blueprints.row.map((c) => c.id)).not.toContain(wanted.id);
+        // The row closes up at once, as it does for a human take.
+        expect(next.blueprints.row).toHaveLength(MARKET_ROW_SIZE);
+      }
+    });
+
+    it("stands the card up for free — nothing is paid and nothing is held", () => {
+      const state = staged({ green: 1 });
+      const next = applyMove(state, { type: "automaMarket" });
+
+      expect(next.players[1].resources).toEqual({ metal: 0, energy: 0, goods: 0 });
+      expect(next.players[1].hand).toEqual([]);
+      expect(next.players[1].compound).toHaveLength(AUTOMA_COMPOUND_SIZE + 1);
+    });
+
+    it("reveals the top of the deck and sweeps the blueprint row on a 5", () => {
+      const state = staged({ green: 5 });
+      const [top] = state.blueprints.deck;
+      const swept = state.blueprints.row;
+
+      const next = applyMove(state, { type: "automaMarket" });
+
+      expect(next.players[1].compound.map((b) => b.card.id)).toContain(top.id);
+      for (const card of swept) {
+        expect(next.blueprints.discard.map((c) => c.id)).toContain(card.id);
+        expect(next.blueprints.row.map((c) => c.id)).not.toContain(card.id);
+      }
+      // Swept, then refilled: the human still faces a full row.
+      expect(next.blueprints.row).toHaveLength(MARKET_ROW_SIZE);
+      expect(logged(next, /swept the blueprint row away/)).toBe(true);
+    });
+
+    it("reveals the top of the deck and sweeps the contractor row on a 6", () => {
+      const state = staged({ green: 6 });
+      const [top] = state.blueprints.deck;
+      const swept = state.contractors.slots.flatMap((slot) => (slot.card ? [slot.card] : []));
+
+      const next = applyMove(state, { type: "automaMarket" });
+
+      expect(next.players[1].compound.map((b) => b.card.id)).toContain(top.id);
+      for (const card of swept) {
+        expect(next.contractors.discard.map((c) => c.id)).toContain(card.id);
+      }
+      // Tokens stay put; only the cards change.
+      expect(next.contractors.slots.map((slot) => slot.token)).toEqual(
+        state.contractors.slots.map((slot) => slot.token),
+      );
+      for (const slot of next.contractors.slots) expect(slot.card).not.toBeNull();
+      // A 6 leaves the blueprint row alone.
+      expect(next.blueprints.row).toEqual(state.blueprints.row);
+    });
+
+    it("takes nothing when the slot the die points at is empty", () => {
+      const state = staged({ green: 4 });
+      const empty: GameState = {
+        ...state,
+        blueprints: { row: [], deck: [], discard: [] },
+      };
+
+      const next = applyMove(empty, { type: "automaMarket" });
+
+      expect(next.players[1].compound).toHaveLength(AUTOMA_COMPOUND_SIZE);
+      expect(logged(next, /slot 4 was empty/)).toBe(true);
+      // The turn still moves on — a wasted die is not a stuck game.
+      expect(next.phase).toBe("work");
+    });
+
+    it("spends the green die, whatever it said", () => {
+      const next = applyMove(staged({ green: 2 }), { type: "automaMarket" });
+      const green = next.players[1].dice.find((die) => die.color === "green");
+
+      expect(green?.spent).toBe(true);
+    });
+  });
+
+  describe("its Work Phase", () => {
+    /** Blue answers for Production, so this compound is what blue counts. */
+    const twoProduction = [factory, cardNamed(createBlueprintDeck(), "Biolab")].map(standing);
+
+    it("pays a good when the die is at most the cards of its type", () => {
+      // Two Production cards: blue pays on a 1 or a 2, and not on a 3.
+      for (const [face, goods] of [
+        [1, 1],
+        [2, 1],
+        [3, 0],
+      ] as const) {
+        const next = applyMove(
+          working({ blue: face, red: 6, purple: 6, yellow: 6 }, twoProduction),
+          { type: "automaWork" },
+        );
+        expect(next.players[1].resources.goods).toBe(goods);
+      }
+    });
+
+    it("counts each colour against its own type, and adds them up", () => {
+      const compound = [factory, market].map(standing); // 1 production, 1 utility
+
+      const next = applyMove(
+        working({ blue: 1, yellow: 1, red: 1, purple: 1 }, compound),
+        { type: "automaWork" },
+      );
+
+      // Blue and yellow each find their one card; red and purple find none.
+      expect(next.players[1].resources.goods).toBe(2);
+      expect(logged(next, /produced 2 goods — production, utility/)).toBe(true);
+    });
+
+    it("never produces from a Monument — no die answers for one", () => {
+      const next = applyMove(
+        working({ red: 1, blue: 1, purple: 1, yellow: 1 }, beacons.map(standing)),
+        { type: "automaWork" },
+      );
+
+      expect(next.players[1].resources.goods).toBe(0);
+      expect(logged(next, /produced nothing/)).toBe(true);
+    });
+
+    it("never produces from an untyped placeholder either", () => {
+      const next = applyMove(
+        working({ red: 1, blue: 1, purple: 1, yellow: 1 }, [standing(generator)]),
+        { type: "automaWork" },
+      );
+
+      expect(next.players[1].resources.goods).toBe(0);
+    });
+
+    it("ignores the green die, which has already had its say", () => {
+      const compound = [factory].map(standing);
+      // Green shows a 1, but green answers for no type.
+      const next = applyMove(working({ green: 1, red: 6, blue: 6, purple: 6, yellow: 6 }, compound), {
+        type: "automaWork",
+      });
+
+      expect(next.players[1].resources.goods).toBe(0);
+    });
+
+    it("ends the turn, and clears its dice at cleanup", () => {
+      const next = applyMove(working({ blue: 1 }, [standing(factory)]), { type: "automaWork" });
+
+      expect(next.phase).toBe("cleanup");
+      expect(next.players[1].dice.every((die) => die.spent)).toBe(true);
+
+      const round2 = applyMove(next, { type: "endPhase" });
+      expect(round2.players[1].dice).toEqual([]);
+      expect(round2.players[1].rolled).toBe(false);
+    });
+  });
+
+  it("keeps its moves to itself, and the human's away from it", () => {
+    const human = createInitialState({ seed: 42 });
+    expect(() => applyMove(human, { type: "automaMarket" })).toThrow(/shops for themselves/);
+
+    const automaton = staged({ green: 1 });
+    expect(() => applyMove(automaton, { type: "draft", kind: "blueprint", cardId: "x" })).toThrow();
   });
 });
 

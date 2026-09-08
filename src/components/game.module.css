@@ -101,6 +101,13 @@
   letter-spacing: 0.08em;
 }
 
+/* The automaton's compound, counted by type — the whole of its Work Phase. */
+.automaTypes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}
+
 .cardTag {
   font-size: 10px;
   text-transform: uppercase;

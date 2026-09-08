@@ -165,6 +165,12 @@ export function describeMove(state: GameState, move: Move): string {
         : "";
       return `Work ${name}${dice}${traded}`;
     }
+    // The automaton's two moves. They are never offered to a human, but the
+    // move list shows whatever is legal, so they still need a name.
+    case "automaMarket":
+      return "Read the green die";
+    case "automaWork":
+      return "Produce goods";
     case "endPhase":
       return state.phase === "cleanup" ? "Start next round" : "End turn";
   }

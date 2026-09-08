@@ -12,10 +12,13 @@
  * the real Fantastic Factories rules go.
  */
 
+import { automaMarketAction, automaPayouts, groupByCategory, standing } from "./automa";
 import { HQ_SECTIONS, hqPayout, hqSection, matchMultiplier } from "./headquarters";
 import { nextInt, shuffle, type Rng } from "./rng";
 import { MARKET_ROW_SIZE } from "./setup";
 import {
+  AUTOMA_DIE_COLORS,
+  AUTOMA_MARKET_COLOR,
   DIE_FACES,
   EXTRA_DIE_COLOR,
   NO_PERKS,
@@ -29,6 +32,7 @@ import {
   type Card,
   type DicePattern,
   type Die,
+  type DieColor,
   type DieFace,
   type Effect,
   type GameState,
@@ -253,6 +257,12 @@ export function legalMoves(state: GameState): Move[] {
 
   switch (state.phase) {
     case "market": {
+      // The automaton does not shop. It rolls at the top of its turn and its
+      // green die decides the rest, so it is only ever offered one move.
+      if (player.isAi) {
+        return player.rolled ? [{ type: "automaMarket" }] : [{ type: "rollDice" }];
+      }
+
       const moves: Move[] = [];
 
       // A contractor costs a blueprint of its slot's tool type, so a slot with
@@ -281,6 +291,10 @@ export function legalMoves(state: GameState): Move[] {
     }
 
     case "work": {
+      // The automaton's dice were rolled before its market phase, and there is
+      // nothing to decide: they pay out or they do not.
+      if (player.isAi) return [{ type: "automaWork" }];
+
       // Nothing else happens until the dice are on the table.
       if (!player.rolled) {
         const moves: Move[] = [];
@@ -715,6 +729,24 @@ function requireUnspentDie(player: Player, id: string): Die {
   return die;
 }
 
+/** The automaton's die of a given colour — each one answers a question. */
+function automaDie(player: Player, color: DieColor): Die {
+  const die = player.dice.find((d) => d.color === color && !d.spent);
+  if (!die) throw new Error(`${player.name} has no ${color} die to read`);
+  return die;
+}
+
+/**
+ * Stands a card up in the automaton's compound. Nothing is paid and nothing is
+ * built — it simply joins its own type's group.
+ */
+function stand(state: GameState, index: number, card: BlueprintCard): GameState {
+  return updatePlayer(state, index, (player) => ({
+    ...player,
+    compound: groupByCategory([...player.compound, standing(card)]),
+  }));
+}
+
 /** Unique within a round: a player's dice pool only ever grows. */
 function dieId(player: Player, round: number, offset = 0): string {
   return `${player.id}-r${round}-d${player.dice.length + offset}`;
@@ -985,8 +1017,38 @@ export function applyMove(state: GameState, move: Move): GameState {
     }
 
     case "rollDice": {
-      if (state.phase !== "work") throw new Error("Dice are rolled in the Work Phase");
       if (player.rolled) throw new Error(`${player.name} already rolled`);
+
+      // The automaton rolls at the top of its turn instead of at the start of
+      // its Work Phase, because its green die is what shops for it.
+      if (player.isAi) {
+        if (state.phase !== "market") {
+          throw new Error(`${player.name} rolls at the start of its turn`);
+        }
+
+        let rng = state.rng;
+        const dice: Die[] = AUTOMA_DIE_COLORS.map((color, i) => {
+          const [value, next] = nextInt(rng, 6);
+          rng = next;
+          return {
+            id: dieId(player, state.round, i),
+            face: (value + 1) as DieFace,
+            color,
+            extra: false,
+            spent: false,
+          };
+        });
+
+        const rolled = updatePlayer({ ...state, rng }, index, (p) => ({
+          ...p,
+          dice,
+          rolled: true,
+        }));
+        const faces = dice.map((die) => `${die.color} ${die.face}`).join(", ");
+        return log(rolled, `${player.name} rolled ${faces}`);
+      }
+
+      if (state.phase !== "work") throw new Error("Dice are rolled in the Work Phase");
 
       // Whatever a Foreman did not already place, plus any white extras.
       const own = player.workforce - ownDice(player).length;
@@ -1150,6 +1212,116 @@ export function applyMove(state: GameState, move: Move): GameState {
         `${player.name} worked ${building.card.name}${withDice}${paid}`,
       );
       return applyEffect(announced, index, perk.effect, choice);
+    }
+
+    case "automaMarket": {
+      if (state.phase !== "market") throw new Error("The market is shopped in the Market Phase");
+      if (!player.isAi) throw new Error(`${player.name} shops for themselves`);
+
+      const die = automaDie(player, AUTOMA_MARKET_COLOR);
+      const action = automaMarketAction(die.face);
+      const read = `${player.name} read a ${die.face}`;
+      // The green die is used up saying this, whatever it said.
+      const base = updatePlayer(state, index, (p) => spendDie(p, die.id));
+
+      if (action.kind === "takeFromRow") {
+        const seat = action.index + 1;
+        const card = base.blueprints.row[action.index];
+        if (!card) return endTurn(log(base, `${read} — slot ${seat} was empty`));
+
+        const refilled = refillBlueprintRow(
+          { ...base.blueprints, row: base.blueprints.row.filter((c) => c.id !== card.id) },
+          base.rng,
+        );
+        const taken = stand(
+          { ...base, blueprints: refilled.pool, rng: refilled.rng },
+          index,
+          card,
+        );
+        return endTurn(log(taken, `${read} — took ${card.name} from slot ${seat}`));
+      }
+
+      // A 5 or a 6 hands it the top of the deck and then clears a whole row
+      // out from under everyone.
+      const draw = takeFromDeck(base.blueprints, 1, base.rng);
+      const [revealed] = draw.drawn;
+      const drawn: GameState = {
+        ...base,
+        rng: draw.rng,
+        blueprints: { ...base.blueprints, deck: draw.deck, discard: draw.discard },
+      };
+      const stood = revealed ? stand(drawn, index, revealed) : drawn;
+      const opening = revealed
+        ? `${read} — revealed ${revealed.name}`
+        : `${read} — the blueprint deck was empty`;
+
+      if (action.sweep === "blueprints") {
+        // Refill from the deck before the swept cards join the discard, so a
+        // reshuffle cannot deal the same row straight back out.
+        const swept = stood.blueprints.row;
+        const refilled = refillBlueprintRow({ ...stood.blueprints, row: [] }, stood.rng);
+        return endTurn(
+          log(
+            {
+              ...stood,
+              rng: refilled.rng,
+              blueprints: {
+                ...refilled.pool,
+                discard: [...refilled.pool.discard, ...swept],
+              },
+            },
+            `${opening}, and swept the blueprint row away`,
+          ),
+        );
+      }
+
+      const swept = stood.contractors.slots.flatMap((slot) => (slot.card ? [slot.card] : []));
+      const refilled = refillContractorSlots(
+        {
+          ...stood.contractors,
+          slots: stood.contractors.slots.map((slot) => ({ ...slot, card: null })),
+        },
+        stood.rng,
+      );
+      return endTurn(
+        log(
+          {
+            ...stood,
+            rng: refilled.rng,
+            contractors: {
+              ...refilled.market,
+              discard: [...refilled.market.discard, ...swept],
+            },
+          },
+          `${opening}, and swept the contractor row away`,
+        ),
+      );
+    }
+
+    case "automaWork": {
+      if (state.phase !== "work") throw new Error("Goods are produced in the Work Phase");
+      if (!player.isAi) throw new Error(`${player.name} works for themselves`);
+
+      const payouts = automaPayouts(player.compound, player.dice);
+      const paid = payouts.filter((payout) => payout.produced);
+
+      const worked = updatePlayer(state, index, (p) => ({
+        ...p,
+        // Nothing else reads them, and spent dice show as done on the board.
+        dice: p.dice.map((die) => ({ ...die, spent: true })),
+        resources: addResources(p.resources, { goods: paid.length }),
+      }));
+
+      return endTurn(
+        log(
+          worked,
+          paid.length === 0
+            ? `${player.name} produced nothing`
+            : `${player.name} produced ${paid.length} good${paid.length === 1 ? "" : "s"} — ${paid
+                .map((payout) => payout.category)
+                .join(", ")}`,
+        ),
+      );
     }
 
     case "endPhase": {

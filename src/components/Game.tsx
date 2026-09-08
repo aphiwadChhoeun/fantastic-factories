@@ -159,7 +159,6 @@ export function Game() {
               key={player.id}
               player={player}
               active={!state.gameOver && index === state.currentPlayerIndex}
-              hideHand={player.isAi}
               interaction={panelFor(index)}
             />
           ))}
