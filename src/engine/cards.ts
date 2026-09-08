@@ -186,8 +186,7 @@ const BLUEPRINTS: readonly { template: BlueprintTemplate; copies: number }[] = [
       name: "Foundry",
       type: "utility",
       tool: "gear",
-      // Nothing but the gear discarded to build it.
-      buildCost: FREE,
+      buildCost: { metal: 2, energy: 1, goods: 0 },
       prestige: 1,
       // Energy in, metal out, at whatever rate the die says: a 5 costs five
       // energy and pays five metal.

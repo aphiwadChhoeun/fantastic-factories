@@ -1546,10 +1546,10 @@ describe("the Foundry", () => {
       );
   }
 
-  it("is a Utility gear that costs nothing but the discard", () => {
+  it("is a Utility gear costing 2 metal and 1 energy, worth a prestige", () => {
     expect(foundry.type).toBe("utility");
     expect(foundry.tool).toBe("gear");
-    expect(foundry.buildCost).toEqual({ metal: 0, energy: 0, goods: 0 });
+    expect(foundry.buildCost).toEqual({ metal: 2, energy: 1, goods: 0 });
     expect(foundry.prestige).toBe(1);
     expect(foundry.perk?.costByFace).toBe("energy");
     expect(foundry.perk?.effect).toEqual({ kind: "gainByFace", resource: "metal" });

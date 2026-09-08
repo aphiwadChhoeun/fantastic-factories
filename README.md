@@ -191,7 +191,7 @@ Twenty-six cards, eleven of them distinct — every one a real card.
 | Concrete Plant   |      2 | Production | shovel | 2 metal + 2 energy | 2 matching dice + metal equal to them → 2 goods | —      |
 | Dojo             |      2 | Training   | gear   | 1 metal + 2 energy | 1 energy → turn an unspent die over        | —             |
 | Fitness Center   |      3 | Training   | wrench | 1 metal            | 1 energy → take 1 off an unspent die       | —             |
-| Foundry          |      2 | Utility    | gear   | nothing            | any die + energy equal to it → that much metal | 1         |
+| Foundry          |      2 | Utility    | gear   | 2 metal + 1 energy | any die + energy equal to it → that much metal | 1         |
 | Fulfillment Center |    2 | Production | hammer | 2 metal + 1 energy | a 4 + 2 energy → 1 good, 1 metal           | 1             |
 
 Every build cost is on top of discarding a blueprint of the same tool.
@@ -343,8 +343,6 @@ compound and work your Headquarters, end the round. Known stubs:
   discard reshuffles often. Nothing breaks; games just repeat themselves
 - `cards.ts` — every blueprint is now a real card, but neither deck is
   complete. The scaffold's invented placeholders are gone
-- the Foundry's card gave no resource cost to build, so it is read as costing
-  nothing but the gear discarded for it — much the cheapest card in the deck
 - the Investor discards the blueprint it reveals rather than keeping it, and
   the Specialist's extra die is white like the Hired Hands dice — neither is
   spelled out on the card
