@@ -61,6 +61,13 @@ export function describeEffect(effect: Effect): string {
       return `Discard a blueprint from hand — gain its build cost back, up to ${effect.max}`;
     case "flipDie":
       return "Turn an unspent die over to its opposite face — 5 becomes 2";
+    case "stepDie": {
+      const pips = Math.abs(effect.by);
+      const way = effect.by < 0 ? "off" : "onto";
+      return `Take ${pips} ${way} an unspent die — a ${effect.by < 0 ? "1" : "6"} is too far`;
+    }
+    case "gainByFace":
+      return `Gain ${effect.resource} equal to the die placed`;
   }
 }
 
@@ -77,7 +84,9 @@ export function describePerkCost(perk: BlueprintPerk): string {
     perk.dice > 1 && perk.accepts.kind !== "any" ? ` (${describeRequirement(perk.accepts)})` : "";
   const cost = costsSomething(perk.cost) ? describeResources(perk.cost) : "";
   // A price read off the dice cannot be a number until they are on the table.
-  const scaled = perk.costByFace ? `${perk.costByFace} equal to the dice` : "";
+  const scaled = perk.costByFace
+    ? `${perk.costByFace} equal to the ${perk.dice === 1 ? "die" : "dice"}`
+    : "";
 
   return [`${dice}${accepts}`, cost, scaled].filter(Boolean).join(" + ") || "nothing";
 }
@@ -118,6 +127,26 @@ function findCardName(state: GameState, cardId: string): string {
 function dieFace(state: GameState, dieId: string): string {
   const die = state.players[state.currentPlayerIndex].dice.find((d) => d.id === dieId);
   return die ? String(die.face) : "?";
+}
+
+/**
+ * What a die-changing perk would leave its target showing. The engine has
+ * already decided the move is legal; this only has to name the result.
+ */
+function changedFaceLabel(
+  state: GameState,
+  move: Extract<Move, { type: "activate" }>,
+  face: string,
+): string {
+  if (face === "?") return "?";
+  const current = Number(face) as DieFace;
+  const effect = state.players[state.currentPlayerIndex].compound.find(
+    (building) => building.card.id === move.cardId,
+  )?.card.perk?.effect;
+
+  if (effect?.kind === "flipDie") return String(oppositeFace(current));
+  if (effect?.kind === "stepDie") return String(current + effect.by);
+  return "?";
 }
 
 export function describeMove(state: GameState, move: Move): string {
@@ -167,11 +196,11 @@ export function describeMove(state: GameState, move: Move): string {
             move.gain ? ` for ${describeResources(move.gain)}` : ""
           }`
         : "";
-      // The Dojo: which die it turns over, and what it becomes.
+      // A perk that changes a die: which one, and what it becomes. The card
+      // itself says how, so the label reads off its effect.
       if (move.targetDieId) {
         const face = dieFace(state, move.targetDieId);
-        const turned = face === "?" ? "?" : oppositeFace(Number(face) as DieFace);
-        return `Work ${name} — turn a ${face} over to a ${turned}`;
+        return `Work ${name} — turn a ${face} into a ${changedFaceLabel(state, move, face)}`;
       }
       return `Work ${name}${dice}${traded}`;
     }

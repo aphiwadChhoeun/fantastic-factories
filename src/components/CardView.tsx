@@ -77,8 +77,8 @@ export function CardView({
           </span>
         )}
       </span>
-      {/* What the card is, in its printed colour. Absent on the placeholders. */}
-      {card.kind === "blueprint" && card.type && (
+      {/* What the card is, in its printed colour. */}
+      {card.kind === "blueprint" && (
         <span className={styles.categoryBand} style={BLUEPRINT_CATEGORY_SWATCHES[card.type]}>
           {card.type}
         </span>

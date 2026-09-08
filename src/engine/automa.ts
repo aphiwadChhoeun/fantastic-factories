@@ -53,14 +53,11 @@ export function standing(card: BlueprintCard): Building {
 
 /**
  * The automaton's compound is kept grouped by type, so what it produces can be
- * counted at a glance. Placeholder blueprints have no printed type and trail
- * the groups; within a group the order cards arrived is kept.
+ * counted at a glance. Groups run in printed order; within a group the order
+ * cards arrived is kept.
  */
 export function groupByCategory(compound: readonly Building[]): Building[] {
-  const rank = (building: Building) => {
-    const index = building.card.type ? BLUEPRINT_CATEGORIES.indexOf(building.card.type) : -1;
-    return index === -1 ? BLUEPRINT_CATEGORIES.length : index;
-  };
+  const rank = (building: Building) => BLUEPRINT_CATEGORIES.indexOf(building.card.type);
   return [...compound].sort((a, b) => rank(a) - rank(b));
 }
 

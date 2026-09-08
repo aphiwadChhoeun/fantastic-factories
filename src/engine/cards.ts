@@ -1,36 +1,26 @@
 /**
- * Placeholder cards so the loop has something to chew on.
+ * The two decks.
  *
- * Two separate decks. Blueprints are built into your compound, where their
- * perk can be used once per round; contractors resolve the moment you take one
- * from the market and are discarded immediately.
+ * Blueprints are built into your compound, where their perk can be used once
+ * per round; contractors resolve the moment you take one from the market and
+ * are discarded immediately.
  *
  * A blueprint's `buildCost` is on top of the real price of building: another
  * blueprint of the same tool, discarded from hand.
  *
- * TODO: the first eight blueprints below are real cards; the rest are still
- * invented, and carry neither a printed type nor prestige because their real
- * values are unknown. The contractors are real, but not yet the whole deck.
+ * Every card here is a real one — the invented placeholders the project was
+ * scaffolded with are gone.
+ *
+ * TODO: neither deck is complete. The rest of the published blueprints and
+ * contractors go here.
  */
 
-import type {
-  ActivationRequirement,
-  BlueprintCard,
-  BlueprintPerk,
-  ContractorCard,
-  Effect,
-  Resources,
-} from "./types";
+import type { BlueprintCard, ContractorCard, Resources } from "./types";
 
 type BlueprintTemplate = Omit<BlueprintCard, "id" | "kind">;
 type ContractorTemplate = Omit<ContractorCard, "id" | "kind">;
 
 const FREE: Resources = { metal: 0, energy: 0, goods: 0 };
-
-/** The common shape: one die of any face, nothing else to pay. */
-function oneDie(effect: Effect, accepts: ActivationRequirement = { kind: "any" }): BlueprintPerk {
-  return { dice: 1, pattern: "any", accepts, cost: FREE, effect };
-}
 
 const BLUEPRINTS: readonly { template: BlueprintTemplate; copies: number }[] = [
   {
@@ -173,57 +163,59 @@ const BLUEPRINTS: readonly { template: BlueprintTemplate; copies: number }[] = [
     },
   },
   {
-    copies: 6,
+    copies: 3,
     template: {
-      name: "Generator",
+      name: "Fitness Center",
+      type: "training",
       tool: "wrench",
       buildCost: { metal: 1, energy: 0, goods: 0 },
-      perk: oneDie({ kind: "gain", resources: { energy: 2 } }),
+      // Takes no die of its own, like the Dojo — it nudges one and hands it
+      // back. A 1 has nowhere to go, so it is simply not on offer.
+      perk: {
+        dice: 0,
+        pattern: "any",
+        accepts: { kind: "any" },
+        cost: { metal: 0, energy: 1, goods: 0 },
+        effect: { kind: "stepDie", by: -1 },
+      },
     },
   },
   {
-    copies: 5,
-    template: {
-      name: "Mine",
-      tool: "shovel",
-      buildCost: { metal: 1, energy: 1, goods: 0 },
-      perk: oneDie({ kind: "gain", resources: { metal: 2 } }, { kind: "atMost", face: 4 }),
-    },
-  },
-  {
-    copies: 5,
-    template: {
-      name: "Warehouse",
-      tool: "shovel",
-      buildCost: { metal: 3, energy: 1, goods: 0 },
-      perk: oneDie({ kind: "gain", resources: { goods: 3 } }, { kind: "atMost", face: 3 }),
-    },
-  },
-  {
-    copies: 5,
-    template: {
-      name: "Research Lab",
-      tool: "gear",
-      buildCost: { metal: 2, energy: 1, goods: 0 },
-      perk: oneDie({ kind: "draw", count: 2 }, { kind: "exact", face: 6 }),
-    },
-  },
-  {
-    copies: 4,
+    copies: 2,
     template: {
       name: "Foundry",
-      tool: "hammer",
-      buildCost: { metal: 3, energy: 0, goods: 0 },
-      perk: oneDie({ kind: "gain", resources: { metal: 1, goods: 1 } }, { kind: "atLeast", face: 2 }),
+      type: "utility",
+      tool: "gear",
+      // Nothing but the gear discarded to build it.
+      buildCost: FREE,
+      prestige: 1,
+      // Energy in, metal out, at whatever rate the die says: a 5 costs five
+      // energy and pays five metal.
+      perk: {
+        dice: 1,
+        pattern: "any",
+        accepts: { kind: "any" },
+        cost: FREE,
+        costByFace: "energy",
+        effect: { kind: "gainByFace", resource: "metal" },
+      },
     },
   },
   {
-    copies: 4,
+    copies: 2,
     template: {
-      name: "Depot",
-      tool: "wrench",
-      buildCost: { metal: 1, energy: 2, goods: 0 },
-      perk: oneDie({ kind: "draw", count: 1 }, { kind: "exact", face: 1 }),
+      name: "Fulfillment Center",
+      type: "production",
+      tool: "hammer",
+      buildCost: { metal: 2, energy: 1, goods: 0 },
+      prestige: 1,
+      perk: {
+        dice: 1,
+        pattern: "any",
+        accepts: { kind: "exact", face: 4 },
+        cost: { metal: 0, energy: 2, goods: 0 },
+        effect: { kind: "gain", resources: { goods: 1, metal: 1 } },
+      },
     },
   },
 ];

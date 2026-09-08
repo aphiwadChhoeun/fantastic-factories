@@ -107,10 +107,23 @@ export type Effect =
    * is not spent and does not go on the card: it stays on the table showing
    * its new face, to be used for whatever it now fits.
    *
-   * Which die rides on the move, so this is the other effect that cannot
+   * Which die rides on the move, so this is one of the effects that cannot
    * resolve on its own.
    */
-  | { readonly kind: "flipDie" };
+  | { readonly kind: "flipDie" }
+  /**
+   * Nudge an unspent die `by` pips — the Fitness Center takes one off. Like a
+   * flip, the die stays on the table at its new face.
+   *
+   * A step that would run off the die is simply not allowed, which is why a 1
+   * cannot be taken any lower.
+   */
+  | { readonly kind: "stepDie"; readonly by: number }
+  /**
+   * Gain this resource equal to the face of the die placed on the perk — the
+   * Foundry turns energy into metal at whatever rate the die says.
+   */
+  | { readonly kind: "gainByFace"; readonly resource: keyof Resources };
 
 /**
  * The three sections of the Headquarters tile. Dice go on them during the Work
@@ -250,10 +263,11 @@ export type BlueprintCard = CardBase & {
   readonly kind: "blueprint";
   /**
    * What the card is — Production, Utility, Training, Monument or Special.
-   * Absent means unknown: the placeholder blueprints have no printed type,
-   * the same way they have no printed prestige.
+   * Required: every blueprint in the deck is a real card with a printed type,
+   * and the automaton reads types off its dice, so a card without one would
+   * quietly answer to nothing.
    */
-  readonly type?: BlueprintCategory;
+  readonly type: BlueprintCategory;
   /** Its tool symbol — hammer, wrench, gear or shovel. What it pays for. */
   readonly tool: BlueprintTool;
   /** Resources spent to build it, on top of discarding a matching tool. */

@@ -344,13 +344,15 @@ export function legalMoves(state: GameState): Move[] {
             continue;
           }
 
-          // The Dojo names the die it turns over rather than one it spends,
-          // so it is one move per face on the table — two dice showing the
-          // same number turn over to the same thing.
-          if (effect?.kind === "flipDie") {
+          // A perk that changes a die names the one it acts on rather than one
+          // it spends, so it is one move per face on the table — two dice
+          // showing the same number change to the same thing. A face it cannot
+          // touch is no move at all.
+          if (effect && changesDie(effect)) {
             const seen = new Set<DieFace>();
             for (const die of unspentDice(player)) {
               if (seen.has(die.face)) continue;
+              if (changedFace(effect, die.face) === null) continue;
               seen.add(die.face);
               moves.push({ type: "activate", cardId, dieIds, targetDieId: die.id });
             }
@@ -580,18 +582,41 @@ function discardForResources(
   );
 }
 
+/** Perks that change a die on the table rather than spending one. */
+function changesDie(effect: Effect): boolean {
+  return effect.kind === "flipDie" || effect.kind === "stepDie";
+}
+
 /**
- * Turns a die over where it lies. It is not spent and it does not go on the
- * card — the whole point is to use it afterwards at the face it now shows.
+ * What such a perk would leave a die showing, or null if it cannot touch that
+ * face at all — a step that would run off the die is no move, which is what
+ * keeps the Fitness Center off a 1.
  */
-function flipDie(state: GameState, playerIndex: number, target: Die): GameState {
+function changedFace(effect: Effect, face: DieFace): DieFace | null {
+  if (effect.kind === "flipDie") return oppositeFace(face);
+  if (effect.kind === "stepDie") {
+    const next = face + effect.by;
+    return next >= 1 && next <= 6 ? (next as DieFace) : null;
+  }
+  return null;
+}
+
+/**
+ * Changes a die where it lies. It is not spent and it does not go on the card
+ * — the whole point is to use it afterwards at the face it now shows.
+ */
+function setDieFace(
+  state: GameState,
+  playerIndex: number,
+  target: Die,
+  face: DieFace,
+): GameState {
   const player = state.players[playerIndex];
-  const face = oppositeFace(target.face);
-  const flipped = updatePlayer(state, playerIndex, (p) => ({
+  const changed = updatePlayer(state, playerIndex, (p) => ({
     ...p,
     dice: p.dice.map((die) => (die.id === target.id ? { ...die, face } : die)),
   }));
-  return log(flipped, `${player.name} turned a ${target.face} over to a ${face}`);
+  return log(changed, `${player.name} turned a ${target.face} into a ${face}`);
 }
 
 function grantPerks(state: GameState, playerIndex: number, grant: Partial<WorkPerks>): GameState {
@@ -615,6 +640,8 @@ type EffectChoice = {
   readonly gain?: Resources;
   /** The die a perk acts on without spending — the Dojo turns it over. */
   readonly target?: Die;
+  /** The faces placed on the perk, for a payout that reads one. */
+  readonly faces?: readonly DieFace[];
 };
 
 /**
@@ -628,20 +655,24 @@ function activationChoice(
   effect: Effect,
   move: Extract<Move, { type: "activate" }>,
 ): EffectChoice {
-  if (effect.kind === "flipDie") {
+  if (changesDie(effect)) {
     if (move.paymentCardId) throw new Error(`${cardName} does not take a blueprint`);
-    if (!move.targetDieId) throw new Error(`${cardName} needs a die to turn over`);
+    if (!move.targetDieId) throw new Error(`${cardName} needs a die to change`);
     // Unspent, because a die already on a card or a section is done with.
-    return { target: requireUnspentDie(player, move.targetDieId) };
+    const target = requireUnspentDie(player, move.targetDieId);
+    if (changedFace(effect, target.face) === null) {
+      throw new Error(`${cardName} cannot change a ${target.face}`);
+    }
+    return { target };
   }
 
   if (effect.kind !== "discardForResources") {
     if (move.paymentCardId) throw new Error(`${cardName} does not take a blueprint`);
-    if (move.targetDieId) throw new Error(`${cardName} does not turn a die over`);
+    if (move.targetDieId) throw new Error(`${cardName} does not change a die`);
     return {};
   }
 
-  if (move.targetDieId) throw new Error(`${cardName} does not turn a die over`);
+  if (move.targetDieId) throw new Error(`${cardName} does not change a die`);
   if (!move.paymentCardId) throw new Error(`${cardName} needs a blueprint to discard`);
   const discard = player.hand.find((card) => card.id === move.paymentCardId);
   if (!discard) throw new Error(`${player.name} does not hold ${move.paymentCardId}`);
@@ -701,10 +732,27 @@ function applyEffect(
       if (!discard || !gain) throw new Error("No blueprint chosen to discard");
       return discardForResources(state, playerIndex, discard, gain);
     }
-    case "flipDie": {
+    case "flipDie":
+    case "stepDie": {
       const { target } = choice;
-      if (!target) throw new Error("No die chosen to turn over");
-      return flipDie(state, playerIndex, target);
+      // Both were checked by the activation that got here.
+      const face = target && changedFace(effect, target.face);
+      if (!target || face === null || face === undefined) {
+        throw new Error("No die chosen to change");
+      }
+      return setDieFace(state, playerIndex, target, face);
+    }
+    case "gainByFace": {
+      const face = choice.faces?.[0];
+      if (face === undefined) throw new Error("No die placed to read");
+      return updatePlayer(state, playerIndex, (player) => ({
+        ...player,
+        resources: addResources(player.resources, {
+          metal: effect.resource === "metal" ? face : 0,
+          energy: effect.resource === "energy" ? face : 0,
+          goods: effect.resource === "goods" ? face : 0,
+        }),
+      }));
     }
   }
 }
@@ -756,9 +804,13 @@ function describeEffectForLog(effect: Effect): string {
     // Logs the card and the haul itself, once both are known.
     case "discardForResources":
       return "selling a blueprint";
-    // Logs which die, and what it turned over to.
+    // These log which die, and what it became.
     case "flipDie":
       return "turning a die over";
+    case "stepDie":
+      return `taking ${Math.abs(effect.by)} off a die`;
+    case "gainByFace":
+      return `gaining ${effect.resource} equal to the die`;
   }
 }
 
@@ -1243,7 +1295,10 @@ export function applyMove(state: GameState, move: Move): GameState {
       }
 
       // A perk that eats a card, or turns a die over, says which on the move.
-      const choice = activationChoice(player, building.card.name, perk.effect, move);
+      const choice = {
+        ...activationChoice(player, building.card.name, perk.effect, move),
+        faces,
+      };
 
       const used = updatePlayer(state, index, (p) => ({
         ...dice.reduce((spent, die) => spendDie(spent, die.id), p),

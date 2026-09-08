@@ -78,7 +78,7 @@ function perkNote(player: Player, building: Building): string | undefined {
  *
  * This is the whole of its Work Phase, so it is worth showing plainly — a die
  * pays a good when its face is at most the count beside its colour. Monuments
- * and untyped placeholders answer to no colour and so appear nowhere here.
+ * answer to no colour and so appear nowhere here.
  */
 function ProductionSummary({ player }: { player: Player }) {
   return (
@@ -212,7 +212,9 @@ export function PlayerPanel({ player, active, interaction }: Props) {
                   key={cardId}
                   card={building.card}
                   built
-                  note={perkNote(player, building)}
+                  // The automaton never works a perk, so "needs 2 energy"
+                  // would be reporting a failure it is not having.
+                  note={automaton ? undefined : perkNote(player, building)}
                   dice={building.dice}
                   spent={building.worked}
                   highlight={Boolean(free)}

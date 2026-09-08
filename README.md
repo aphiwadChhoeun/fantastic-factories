@@ -27,7 +27,7 @@ build once after cloning.
 src/
   engine/     pure rules — no React, no DOM, no network
     types.ts    GameState, Player, Card, Die, Move, Phase
-    cards.ts    placeholder blueprint deck
+    cards.ts    the blueprint and contractor decks
     automa.ts   the opponent's own rules — it plays a different game
     setup.ts    createInitialState({ seed })
     rules.ts    legalMoves / applyMove / end conditions
@@ -124,8 +124,9 @@ as payment, and nothing else. Building and contractor tokens both ask for a
 tool; nothing yet asks for a type. A Beacon is a Monument you buy with a
 shovel, and both facts are on the card.
 
-Only the real cards carry a type. The placeholder blueprints have none, the
-same way they have no prestige — inventing one would be inventing rules.
+Every blueprint carries both, and the type is required by the type system —
+a card without one would answer to no die of the automaton's and go quietly
+uncounted.
 
 ### Building
 
@@ -141,9 +142,9 @@ by id, so the rule compares names.
 ### Perks
 
 A built blueprint usually has a **perk**: dice go on it and it pays out, once
-per round. Most take a single die of some face — a Mine works on a 4 or less
-and pays 2 metal. Some take several, in a pattern; some charge resources on
-top; and some take no dice at all.
+per round. Most take a single die of some face — a Fulfillment Center works on
+a 4 and pays a good and a metal. Some take several, in a pattern; some charge
+resources on top; and some take no dice at all.
 
 A perk takes all its dice at once, so you need the whole set before you can
 work it and no die is ever left stranded on a half-filled card.
@@ -154,11 +155,16 @@ the pair and not once each — so the same card is cheap on two 1s and dear on
 two 6s. The Black Market charges a card instead: a blueprint out of hand, which
 pays back what that blueprint would have cost to build.
 
-**The Dojo pays out in dice rather than in goods.** For an energy it turns an
-unspent die over to the face on the other side — opposite faces on a d6 add up
-to seven, so a 5 becomes a 2 and a 6 becomes a 1. The die is not spent and does
-not go on the card: it stays on the table showing its new face, for whatever it
-now fits. Once a round, like any perk, and only your own dice.
+**Two perks pay out in dice rather than in goods.** The Dojo turns an unspent
+die over to the face on the other side — opposite faces on a d6 add up to
+seven, so a 5 becomes a 2. The Fitness Center takes one pip off instead, which
+is why it cannot touch a 1: there is nowhere below it. Either way the die is
+not spent and does not go on the card. It stays on the table showing its new
+face, for whatever it now fits. Once a round each, and only your own dice.
+
+**The Foundry's payout is the die too.** Place any die, pay energy equal to its
+face, and take that much metal — a 5 costs five energy and pays five metal. It
+is the one card that reads the die on both sides of the trade.
 
 ### Scoring
 
@@ -166,11 +172,13 @@ now fits. Once a round, like any perk, and only your own dice.
 Blueprints in hand are worth nothing — prestige only counts once built. Metal
 and energy are not score either; they are what you spend to get there.
 
-Most of the placeholder blueprints are worth no prestige; the real ones are
-worth 1 each, bar the Concrete Plant, which is worth none. The highest score
-wins, and an equal score is a draw.
+Most blueprints are worth 1 prestige; the Concrete Plant, Dojo and Fitness
+Center are worth none, and the Beacon scores as a set. The highest score wins,
+and an equal score is a draw.
 
 ### The real blueprints so far
+
+Twenty-six cards, eleven of them distinct — every one a real card.
 
 | Blueprint        | Copies | Type       | Tool   | Build cost         | Perk                                     | Prestige      |
 | ---------------- | -----: | ---------- | ------ | ------------------ | ---------------------------------------- | ------------- |
@@ -182,6 +190,9 @@ wins, and an equal score is a draw.
 | Black Market     |      2 | Utility    | gear   | 3 metal + 2 energy | any die + a blueprint from hand → its build cost back, at most 4 | 1 |
 | Concrete Plant   |      2 | Production | shovel | 2 metal + 2 energy | 2 matching dice + metal equal to them → 2 goods | —      |
 | Dojo             |      2 | Training   | gear   | 1 metal + 2 energy | 1 energy → turn an unspent die over        | —             |
+| Fitness Center   |      3 | Training   | wrench | 1 metal            | 1 energy → take 1 off an unspent die       | —             |
+| Foundry          |      2 | Utility    | gear   | nothing            | any die + energy equal to it → that much metal | 1         |
+| Fulfillment Center |    2 | Production | hammer | 2 metal + 1 energy | a 4 + 2 energy → 1 good, 1 metal           | 1             |
 
 Every build cost is on top of discarding a blueprint of the same tool.
 
@@ -297,8 +308,9 @@ slot it would fill lights up with them. Dropping a die on a perk that wants two
 plays both at once. A perk that takes no dice — the Battery Factory — has
 nothing to drag at it, so it is clicked instead.
 
-The Dojo is dragged at like anything else, even though it spends no die: drop
-the die you want turned over onto it and it comes back showing the other face.
+The Dojo and the Fitness Center are dragged at like anything else, even though
+they spend no die: drop the die you want changed onto one and it comes back
+showing its new face.
 
 A drop that leaves something open asks rather than guessing. The Black Market
 wants a blueprint out of hand, so the candidates light up as they do for a
@@ -320,32 +332,39 @@ Start in `src/engine/rules.ts`. The implemented slice is: take a card from one
 of the two rows, roll dice, spend dice to build blueprints, activate your
 compound and work your Headquarters, end the round. Known stubs:
 
-- `cards.ts` — seven blueprints are real and six are invented placeholders;
-  the contractors are real, but not yet the whole deck
+- **the deck is 26 cards and short in places.** Only two of them are hammers,
+  both Fulfillment Centers — and building one costs a hammer out of hand, so it
+  takes holding both copies at once. In practice it is close to unbuildable,
+  and the contractor row's hammer token is close to unpayable. Special has no
+  cards at all, which leaves the automaton's purple die dead. Both are holes in
+  the deck rather than in the rules
+- **26 cards is a small deck.** Setup deals eleven of them — four to hand, four
+  to the row, three to the automaton — so the draw pile turns over fast and the
+  discard reshuffles often. Nothing breaks; games just repeat themselves
+- `cards.ts` — every blueprint is now a real card, but neither deck is
+  complete. The scaffold's invented placeholders are gone
+- the Foundry's card gave no resource cost to build, so it is read as costing
+  nothing but the gear discarded for it — much the cheapest card in the deck
 - the Investor discards the blueprint it reveals rather than keeping it, and
   the Specialist's extra die is white like the Hired Hands dice — neither is
   spelled out on the card
-- a Specialist die must be set straight after the roll, before anything is
-  spent. Nothing yet changes a die mid-phase, so waiting would gain nothing
 - an equal score is a draw. No tiebreak is defined
-- 14 distinct blueprints and a Beacon that stacks four deep put the 10-card
-  `END_COMPOUND_SIZE` comfortably in reach
+- 11 distinct blueprints and a Beacon that stacks four deep put the 10-card
+  `END_COMPOUND_SIZE` only just in reach for a human — the automaton, dealt
+  three and taking one a turn, gets there in seven rounds
 - the Headquarters is the same for every player. The published game hands out
   one of several starting tiles
-- `Effect` — the real game needs many more variants than the eight here
+- `Effect` — the real game needs many more variants than the ten here
 - a `draw` effect always pulls blueprints; no card lets you choose a deck yet
 - the Black Market's cap is read as four resources in total, and the card it
   eats is discarded rather than kept. Taking less than the cap is not offered
-- the Concrete Plant is worth no prestige, which is the one real blueprint so
-  far that is not
-- **the automaton can barely produce, because most of the deck is untyped.**
-  29 of the 48 blueprint copies are placeholders with no printed type, so they
-  answer to no die and pay nothing. Of the rest: 11 Production, 4 Monument
-  (which never pays), 2 Utility and 2 Training, and no Special at all — so its
-  purple die is dead and its red one has two cards in the whole deck to hope
-  for. It scores mostly on prestige until the real cards land. Nothing to fix
-  in the rules; the deck has to catch up
+- the automaton's dice are lopsided against the deck it draws from: 13
+  Production copies to 5 Training, 4 Utility, 4 Monument (which never pays)
+  and no Special. Its blue die does most of the work and its purple one none
 - no rule reads a blueprint's type outside the automaton's Work Phase
+- a Specialist die is set before anything is spent, but the Dojo and the
+  Fitness Center now *do* change a die mid-phase. Whether a Specialist die
+  should be settled that early is worth another look
 - sweeping a row refills it at once, so the human still faces a full market.
   Denial rather than churn would be the other reading
 - the automaton takes no notice of duplicates: it will stand up two of the same
