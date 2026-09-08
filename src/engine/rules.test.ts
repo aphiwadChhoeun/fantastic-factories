@@ -15,12 +15,14 @@ import {
   createInitialState,
   currentPlayer,
   DIE_COLORS,
+  DIE_FACES,
   END_GOODS,
   HQ_SECTIONS,
   legalMoves,
   MARKET_ROW_SIZE,
   MAX_ROUNDS,
   NO_PLACEMENTS,
+  oppositeFace,
   prestigeOf,
   scoreOf,
   STARTING_HAND,
@@ -228,7 +230,9 @@ describe("setup", () => {
     for (const card of state.contractors.deck) expect(card.kind).toBe("contractor");
     for (const card of state.blueprints.deck) expect(card.kind).toBe("blueprint");
     expect(state.contractors.discard).toEqual([]);
-    expect(state.blueprints.discard).toEqual([]);
+    // Nothing has been played yet, so the only cards in a discard are the
+    // Monuments the automaton's opening deal turned down.
+    for (const card of state.blueprints.discard) expect(card.type).toBe("monument");
   });
 
   it("starts the human with four blueprints, one metal and two energy", () => {
@@ -1300,6 +1304,140 @@ describe("the Headquarters", () => {
     for (const player of cleaned.players) {
       expect(player.headquarters).toEqual(NO_PLACEMENTS);
     }
+  });
+});
+
+describe("the Dojo", () => {
+  const dojo = cardNamed(createBlueprintDeck(), "Dojo");
+
+  function withDojo(faces: readonly DieFace[], energy = 2): GameState {
+    const state = createInitialState({ seed: 3 });
+    const { color } = state.players[0];
+    return patchPlayer({ ...state, phase: "work" }, 0, {
+      compound: [{ card: dojo, dice: [], worked: false }],
+      dice: faces.map((face, i) => ({ id: `d${i}`, face, color, extra: false, spent: false })),
+      rolled: true,
+      resources: { metal: 0, energy, goods: 0 },
+    });
+  }
+
+  function flips(state: GameState) {
+    return legalMoves(state)
+      .filter((move) => move.type === "activate")
+      .map((move) =>
+        move.type === "activate" && move.targetDieId
+          ? state.players[0].dice.find((d) => d.id === move.targetDieId)!.face
+          : null,
+      );
+  }
+
+  it("is a Training gear costing 1 metal and 2 energy, worth no prestige", () => {
+    expect(dojo.type).toBe("training");
+    expect(dojo.tool).toBe("gear");
+    expect(dojo.buildCost).toEqual({ metal: 1, energy: 2, goods: 0 });
+    expect(dojo.prestige).toBeUndefined();
+    // It takes no die of its own — the die it names is not paid to it.
+    expect(dojo.perk?.dice).toBe(0);
+    expect(dojo.perk?.cost).toEqual({ metal: 0, energy: 1, goods: 0 });
+    expect(dojo.perk?.effect).toEqual({ kind: "flipDie" });
+  });
+
+  it("opposite faces always add up to seven", () => {
+    expect(DIE_FACES.map(oppositeFace)).toEqual([6, 5, 4, 3, 2, 1]);
+  });
+
+  it("turns a die over and leaves it on the table, unspent", () => {
+    const next = applyMove(withDojo([5, 1, 3, 4]), {
+      type: "activate",
+      cardId: dojo.id,
+      dieIds: [],
+      targetDieId: "d0",
+    });
+
+    const die = next.players[0].dice.find((d) => d.id === "d0")!;
+    expect(die.face).toBe(2);
+    // The whole point is to use it afterwards, so it must not be spent.
+    expect(die.spent).toBe(false);
+    expect(next.players[0].resources.energy).toBe(1);
+    expect(logged(next, /turned a 5 over to a 2/)).toBe(true);
+  });
+
+  it("offers one flip per face, not one per die", () => {
+    // Two 5s turn over to the same thing, so they are the same move.
+    expect(flips(withDojo([5, 5, 1, 3]))).toEqual([5, 1, 3]);
+    expect(flips(withDojo([2, 4, 6, 1]))).toEqual([2, 4, 6, 1]);
+  });
+
+  it("will not turn over a die that has been spent", () => {
+    const state = withDojo([5, 1, 3, 4]);
+    const used = patchPlayer(state, 0, {
+      dice: state.players[0].dice.map((die) => (die.id === "d0" ? { ...die, spent: true } : die)),
+    });
+
+    expect(flips(used)).toEqual([1, 3, 4]);
+    expect(() =>
+      applyMove(used, { type: "activate", cardId: dojo.id, dieIds: [], targetDieId: "d0" }),
+    ).toThrow(/was already spent/);
+  });
+
+  it("is not offered without the energy, and works once a round", () => {
+    expect(flips(withDojo([5, 1, 3, 4], 0))).toEqual([]);
+
+    const once = applyMove(withDojo([5, 1, 3, 4]), {
+      type: "activate",
+      cardId: dojo.id,
+      dieIds: [],
+      targetDieId: "d0",
+    });
+    expect(flips(once)).toEqual([]);
+    expect(once.players[0].compound[0].worked).toBe(true);
+  });
+
+  it("needs to be told which die, and no other perk accepts one", () => {
+    expect(() =>
+      applyMove(withDojo([5, 1, 3, 4]), { type: "activate", cardId: dojo.id, dieIds: [] }),
+    ).toThrow(/needs a die to turn over/);
+
+    // A perk that pays out on its own must not be handed a target.
+    const battery = cardNamed(createBlueprintDeck(), "Battery Factory");
+    const state = patchPlayer(withDojo([5, 1, 3, 4], 4), 0, {
+      compound: [{ card: battery, dice: [], worked: false }],
+    });
+    expect(() =>
+      applyMove(state, {
+        type: "activate",
+        cardId: battery.id,
+        dieIds: [],
+        targetDieId: "d0",
+      }),
+    ).toThrow(/does not turn a die over/);
+  });
+
+  it("turns a die into one that works something else", () => {
+    // A 5 works nothing on the Biolab, which wants a 1. Turned over it is a 2,
+    // which still does not — but a 6 turns into the 1 the Biolab needs.
+    const biolab = cardNamed(createBlueprintDeck(), "Biolab");
+    const state = patchPlayer(withDojo([6, 3, 4, 5], 3), 0, {
+      compound: [
+        { card: dojo, dice: [], worked: false },
+        { card: biolab, dice: [], worked: false },
+      ],
+    });
+
+    const flipped = applyMove(state, {
+      type: "activate",
+      cardId: dojo.id,
+      dieIds: [],
+      targetDieId: "d0",
+    });
+    expect(flipped.players[0].dice.find((d) => d.id === "d0")!.face).toBe(1);
+
+    const worked = applyMove(flipped, {
+      type: "activate",
+      cardId: biolab.id,
+      dieIds: ["d0"],
+    });
+    expect(worked.players[0].resources.goods).toBe(1);
   });
 });
 

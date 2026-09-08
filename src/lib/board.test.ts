@@ -76,6 +76,18 @@ describe("indexMoves", () => {
     expect(payments.has("d0")).toBe(false);
   });
 
+  it("points a perk that turns a die over at the die it names", () => {
+    // The Dojo spends no dice, but the one it acts on is what gets dropped on
+    // it — so it is a drag target, not a click-only card.
+    const move: Move = { type: "activate", cardId: "dojo", dieIds: [], targetDieId: "d1" };
+
+    const board = indexMoves([move], dice([3, 5, 2]));
+
+    expect(board.dice.get("d1")?.activations.get("dojo")).toEqual([move]);
+    expect(board.freeActivations.has("dojo")).toBe(false);
+    expect(board.dice.get("d0")).toBeUndefined();
+  });
+
   it("groups takes and builds by the card they act on", () => {
     const moves: Move[] = [
       { type: "draft", kind: "contractor", cardId: "hired", paymentCardId: "a" },

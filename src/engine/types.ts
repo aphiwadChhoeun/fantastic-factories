@@ -12,6 +12,14 @@ export type DieFace = 1 | 2 | 3 | 4 | 5 | 6;
 /** Every face, for enumerating the choices a `setDie` move offers. */
 export const DIE_FACES: readonly DieFace[] = [1, 2, 3, 4, 5, 6];
 
+/**
+ * The face on the other side of the die. Opposite faces on a d6 always add up
+ * to seven, so a 5 turns over to a 2.
+ */
+export function oppositeFace(face: DieFace): DieFace {
+  return (7 - face) as DieFace;
+}
+
 /** Each player takes one colour; every die they roll carries it. */
 export const DIE_COLORS = ["red", "blue", "green", "purple", "yellow", "white"] as const;
 
@@ -93,7 +101,16 @@ export type Effect =
    * Which card, and which part, ride on the move rather than the card, so this
    * is the one effect that cannot resolve on its own.
    */
-  | { readonly kind: "discardForResources"; readonly max: number };
+  | { readonly kind: "discardForResources"; readonly max: number }
+  /**
+   * Turn an unspent die over to the face on the other side — the Dojo. The die
+   * is not spent and does not go on the card: it stays on the table showing
+   * its new face, to be used for whatever it now fits.
+   *
+   * Which die rides on the move, so this is the other effect that cannot
+   * resolve on its own.
+   */
+  | { readonly kind: "flipDie" };
 
 /**
  * The three sections of the Headquarters tile. Dice go on them during the Work
@@ -457,6 +474,11 @@ export type Move =
        * chosen. Only the Black Market pays this way.
        */
       readonly gain?: Resources;
+      /**
+       * The die a perk acts on rather than spends — the Dojo turns it over.
+       * Never one of `dieIds`: it is not paid, and it does not go on the card.
+       */
+      readonly targetDieId?: string;
     }
   | { readonly type: "endPhase" };
 

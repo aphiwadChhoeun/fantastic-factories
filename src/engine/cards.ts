@@ -8,7 +8,7 @@
  * A blueprint's `buildCost` is on top of the real price of building: another
  * blueprint of the same tool, discarded from hand.
  *
- * TODO: the first seven blueprints below are real cards; the rest are still
+ * TODO: the first eight blueprints below are real cards; the rest are still
  * invented, and carry neither a printed type nor prestige because their real
  * values are unknown. The contractors are real, but not yet the whole deck.
  */
@@ -151,6 +151,24 @@ const BLUEPRINTS: readonly { template: BlueprintTemplate; copies: number }[] = [
         cost: FREE,
         costByFace: "metal",
         effect: { kind: "gain", resources: { goods: 2 } },
+      },
+    },
+  },
+  {
+    copies: 2,
+    template: {
+      name: "Dojo",
+      type: "training",
+      tool: "gear",
+      buildCost: { metal: 1, energy: 2, goods: 0 },
+      // Takes no die of its own. It turns one over and hands it straight back,
+      // so the energy buys a face rather than an outcome.
+      perk: {
+        dice: 0,
+        pattern: "any",
+        accepts: { kind: "any" },
+        cost: { metal: 0, energy: 1, goods: 0 },
+        effect: { kind: "flipDie" },
       },
     },
   },

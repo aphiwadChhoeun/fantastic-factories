@@ -23,6 +23,7 @@ import {
   EXTRA_DIE_COLOR,
   NO_PERKS,
   NO_PLACEMENTS,
+  oppositeFace,
   PHASE_LABELS,
   type ActivationRequirement,
   type BlueprintCard,
@@ -343,6 +344,19 @@ export function legalMoves(state: GameState): Move[] {
             continue;
           }
 
+          // The Dojo names the die it turns over rather than one it spends,
+          // so it is one move per face on the table — two dice showing the
+          // same number turn over to the same thing.
+          if (effect?.kind === "flipDie") {
+            const seen = new Set<DieFace>();
+            for (const die of unspentDice(player)) {
+              if (seen.has(die.face)) continue;
+              seen.add(die.face);
+              moves.push({ type: "activate", cardId, dieIds, targetDieId: die.id });
+            }
+            continue;
+          }
+
           moves.push({ type: "activate", cardId, dieIds });
         }
       }
@@ -566,6 +580,20 @@ function discardForResources(
   );
 }
 
+/**
+ * Turns a die over where it lies. It is not spent and it does not go on the
+ * card — the whole point is to use it afterwards at the face it now shows.
+ */
+function flipDie(state: GameState, playerIndex: number, target: Die): GameState {
+  const player = state.players[playerIndex];
+  const face = oppositeFace(target.face);
+  const flipped = updatePlayer(state, playerIndex, (p) => ({
+    ...p,
+    dice: p.dice.map((die) => (die.id === target.id ? { ...die, face } : die)),
+  }));
+  return log(flipped, `${player.name} turned a ${target.face} over to a ${face}`);
+}
+
 function grantPerks(state: GameState, playerIndex: number, grant: Partial<WorkPerks>): GameState {
   return updatePlayer(state, playerIndex, (player) => ({
     ...player,
@@ -585,24 +613,35 @@ function grantPerks(state: GameState, playerIndex: number, grant: Partial<WorkPe
 type EffectChoice = {
   readonly discard?: BlueprintCard;
   readonly gain?: Resources;
+  /** The die a perk acts on without spending — the Dojo turns it over. */
+  readonly target?: Die;
 };
 
 /**
- * Reads an activation's card-and-payout choice off the move, and checks it.
- * Perks that ask for neither get an empty choice, and a move that offers one
- * anyway is a mistake worth hearing about.
+ * Reads an activation's choices off the move, and checks them. Perks that ask
+ * for nothing get an empty choice, and a move that offers something anyway is
+ * a mistake worth hearing about.
  */
-function discardChoice(
+function activationChoice(
   player: Player,
   cardName: string,
   effect: Effect,
   move: Extract<Move, { type: "activate" }>,
 ): EffectChoice {
+  if (effect.kind === "flipDie") {
+    if (move.paymentCardId) throw new Error(`${cardName} does not take a blueprint`);
+    if (!move.targetDieId) throw new Error(`${cardName} needs a die to turn over`);
+    // Unspent, because a die already on a card or a section is done with.
+    return { target: requireUnspentDie(player, move.targetDieId) };
+  }
+
   if (effect.kind !== "discardForResources") {
     if (move.paymentCardId) throw new Error(`${cardName} does not take a blueprint`);
+    if (move.targetDieId) throw new Error(`${cardName} does not turn a die over`);
     return {};
   }
 
+  if (move.targetDieId) throw new Error(`${cardName} does not turn a die over`);
   if (!move.paymentCardId) throw new Error(`${cardName} needs a blueprint to discard`);
   const discard = player.hand.find((card) => card.id === move.paymentCardId);
   if (!discard) throw new Error(`${player.name} does not hold ${move.paymentCardId}`);
@@ -662,6 +701,11 @@ function applyEffect(
       if (!discard || !gain) throw new Error("No blueprint chosen to discard");
       return discardForResources(state, playerIndex, discard, gain);
     }
+    case "flipDie": {
+      const { target } = choice;
+      if (!target) throw new Error("No die chosen to turn over");
+      return flipDie(state, playerIndex, target);
+    }
   }
 }
 
@@ -712,6 +756,9 @@ function describeEffectForLog(effect: Effect): string {
     // Logs the card and the haul itself, once both are known.
     case "discardForResources":
       return "selling a blueprint";
+    // Logs which die, and what it turned over to.
+    case "flipDie":
+      return "turning a die over";
   }
 }
 
@@ -1195,8 +1242,8 @@ export function applyMove(state: GameState, move: Move): GameState {
         throw new Error(`${building.card.name} costs ${describeResourcesForLog(cost)} to use`);
       }
 
-      // A perk that eats a card takes it from hand on top of everything else.
-      const choice = discardChoice(player, building.card.name, perk.effect, move);
+      // A perk that eats a card, or turns a die over, says which on the move.
+      const choice = activationChoice(player, building.card.name, perk.effect, move);
 
       const used = updatePlayer(state, index, (p) => ({
         ...dice.reduce((spent, die) => spendDie(spent, die.id), p),

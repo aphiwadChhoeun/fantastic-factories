@@ -2,9 +2,11 @@
 
 import {
   hqSection,
+  oppositeFace,
   type ActivationRequirement,
   type BlueprintPerk,
   type Card,
+  type DieFace,
   type Effect,
   type GameState,
   type HqReward,
@@ -57,6 +59,8 @@ export function describeEffect(effect: Effect): string {
     }
     case "discardForResources":
       return `Discard a blueprint from hand — gain its build cost back, up to ${effect.max}`;
+    case "flipDie":
+      return "Turn an unspent die over to its opposite face — 5 becomes 2";
   }
 }
 
@@ -163,6 +167,12 @@ export function describeMove(state: GameState, move: Move): string {
             move.gain ? ` for ${describeResources(move.gain)}` : ""
           }`
         : "";
+      // The Dojo: which die it turns over, and what it becomes.
+      if (move.targetDieId) {
+        const face = dieFace(state, move.targetDieId);
+        const turned = face === "?" ? "?" : oppositeFace(Number(face) as DieFace);
+        return `Work ${name} — turn a ${face} over to a ${turned}`;
+      }
       return `Work ${name}${dice}${traded}`;
     }
     // The automaton's two moves. They are never offered to a human, but the

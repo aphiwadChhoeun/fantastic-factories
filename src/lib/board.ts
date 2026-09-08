@@ -80,7 +80,10 @@ export function indexMoves(moves: readonly Move[], rolled: readonly Die[] = []):
         (targetsFor(dice, move.dieId).sections as Map<HqSectionId, Move>).set(move.section, move);
         break;
       case "activate": {
-        if (move.dieIds.length === 0) {
+        // A perk that turns a die over names it without spending it, so that
+        // die — not the empty `dieIds` — is what gets dropped on the card.
+        const involved = move.targetDieId ? [move.targetDieId] : move.dieIds;
+        if (involved.length === 0) {
           freeActivations.set(move.cardId, move);
           break;
         }
@@ -88,9 +91,9 @@ export function indexMoves(moves: readonly Move[], rolled: readonly Die[] = []):
         // interchangeable in it. The engine enumerates one move per face rather
         // than one per pair, so index it under every die that could stand in —
         // otherwise the third of three matching dice looks inert on the card.
-        const wanted = new Set(move.dieIds.map((id) => faces.get(id)));
+        const wanted = new Set(involved.map((id) => faces.get(id)));
         const standIns = rolled.filter((die) => !die.spent && wanted.has(die.face));
-        const targets = standIns.length > 0 ? standIns.map((die) => die.id) : move.dieIds;
+        const targets = standIns.length > 0 ? standIns.map((die) => die.id) : involved;
         for (const dieId of targets) {
           push(targetsFor(dice, dieId).activations as Map<string, Move[]>, move.cardId, move);
         }
