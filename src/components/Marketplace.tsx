@@ -106,11 +106,8 @@ type Props = {
 
 /** The market: a tokened contractor row above a blueprint row. */
 export function Marketplace({ contractors, blueprints, interaction }: Props) {
-  const choosing = interaction?.choosingPaymentFor;
-
   return (
     <section className={styles.section}>
-      {choosing && <p className={styles.prompt}>Click a highlighted blueprint in hand to pay.</p>}
       <ContractorRow market={contractors} interaction={interaction} />
       <BlueprintRow pool={blueprints} interaction={interaction} />
     </section>

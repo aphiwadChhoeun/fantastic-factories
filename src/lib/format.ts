@@ -3,6 +3,7 @@
 import {
   hqSection,
   type ActivationRequirement,
+  type BlueprintPerk,
   type Card,
   type Effect,
   type GameState,
@@ -55,6 +56,24 @@ export function describeEffect(effect: Effect): string {
         : `Roll ${dice} this round`;
     }
   }
+}
+
+/** What a built blueprint's perk asks for: dice first, then any resource cost. */
+export function describePerkCost(perk: BlueprintPerk): string {
+  const dice =
+    perk.dice === 1
+      ? describeRequirement(perk.accepts)
+      : `${perk.dice} ${perk.matching ? "matching" : ""} dice`.replace("  ", " ");
+  const accepts =
+    perk.dice > 1 && perk.accepts.kind !== "any"
+      ? ` (${describeRequirement(perk.accepts)})`
+      : "";
+  const cost = costsSomething(perk.cost) ? ` + ${describeResources(perk.cost)}` : "";
+  return `${dice}${accepts}${cost}`;
+}
+
+function costsSomething(resources: Resources): boolean {
+  return resources.metal > 0 || resources.energy > 0 || resources.goods > 0;
 }
 
 /** What one die on a Headquarters section pays, before any matching bonus. */
@@ -122,9 +141,14 @@ export function describeMove(state: GameState, move: Move): string {
       return `${section.name}: place a ${face}${bonus}`;
     }
     case "build":
-      return `Build ${findCardName(state, move.cardId)} with a ${dieFace(state, move.dieId)}`;
-    case "activate":
-      return `Activate ${findCardName(state, move.cardId)} with a ${dieFace(state, move.dieId)}`;
+      return `Build ${findCardName(state, move.cardId)} — discard ${findCardName(
+        state,
+        move.paymentCardId,
+      )}`;
+    case "activate": {
+      const faces = move.dieIds.map((id) => dieFace(state, id)).join(", ");
+      return `Work ${findCardName(state, move.cardId)} with ${faces}`;
+    }
     case "endPhase":
       return state.phase === "cleanup" ? "Start next round" : "End turn";
   }

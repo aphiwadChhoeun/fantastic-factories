@@ -23,6 +23,7 @@ import {
   PHASE_LABELS,
   type ActivationRequirement,
   type BlueprintCard,
+  type Building,
   type Card,
   type Die,
   type DieFace,
@@ -71,7 +72,7 @@ function satisfies(requirement: ActivationRequirement, face: DieFace): boolean {
 /** Costs nothing beyond its slot's token — most contractors. */
 const NO_COST: Resources = { metal: 0, energy: 0, goods: 0 };
 
-function canAfford(resources: Resources, cost: Resources): boolean {
+export function canAfford(resources: Resources, cost: Resources): boolean {
   return (
     resources.metal >= cost.metal &&
     resources.energy >= cost.energy &&
@@ -99,6 +100,50 @@ function ownDice(player: Player): Die[] {
 /** Blueprints in hand that could pay a slot carrying `token`. */
 function paymentsFor(player: Player, token: BlueprintCard["type"]): BlueprintCard[] {
   return player.hand.filter((card) => card.type === token);
+}
+
+/** Blueprints in hand that could pay to build `card` — same symbol, not itself. */
+function sameSymbol(player: Player, card: BlueprintCard): BlueprintCard[] {
+  return player.hand.filter((other) => other.id !== card.id && other.type === card.type);
+}
+
+/** Every distinct set of dice that could work a building's perk right now. */
+function perkDice(player: Player, building: Building): Die[][] {
+  const { perk } = building.card;
+  // A perk takes all its dice at once, so a used one is simply full.
+  if (building.dice.length > 0) return [];
+  if (!canAfford(player.resources, perk.cost)) return [];
+
+  const usable = unspentDice(player).filter((die) => satisfies(perk.accepts, die.face));
+  const sets = combinations(usable, perk.dice).filter(
+    (set) => !perk.matching || set.every((die) => die.face === set[0].face),
+  );
+
+  // Two dice showing the same face are interchangeable, so sets that differ
+  // only by which of them was picked are the same move to a player.
+  const seen = new Set<string>();
+  return sets.filter((set) => {
+    const signature = set
+      .map((die) => die.face)
+      .sort()
+      .join(",");
+    if (seen.has(signature)) return false;
+    seen.add(signature);
+    return true;
+  });
+}
+
+/** Every `size`-sized subset, in order. Die counts are tiny, so this is cheap. */
+function combinations<T>(items: readonly T[], size: number): T[][] {
+  if (size <= 0 || size > items.length) return [];
+  if (size === items.length) return [[...items]];
+  if (size === 1) return items.map((item) => [item]);
+
+  const [first, ...rest] = items;
+  return [
+    ...combinations(rest, size - 1).map((set) => [first, ...set]),
+    ...combinations(rest, size),
+  ];
 }
 
 export function legalMoves(state: GameState): Move[] {
@@ -155,29 +200,37 @@ export function legalMoves(state: GameState): Move[] {
       }
 
       const moves: Move[] = [];
+
+      // Building takes no die: it costs another blueprint of the same symbol,
+      // discarded from hand, plus the card's resource cost.
+      for (const card of player.hand) {
+        if (!canAfford(player.resources, card.buildCost)) continue;
+        if (alreadyBuilt(player, card)) continue;
+        for (const payment of sameSymbol(player, card)) {
+          moves.push({ type: "build", cardId: card.id, paymentCardId: payment.id });
+        }
+      }
+
+      for (const building of player.compound) {
+        for (const dice of perkDice(player, building)) {
+          moves.push({
+            type: "activate",
+            cardId: building.card.id,
+            dieIds: dice.map((die) => die.id),
+          });
+        }
+      }
+
+      // Last, because the Headquarters is the fallback: it is always there, so
+      // a die that can do something better should be seen doing it first.
       for (const die of unspentDice(player)) {
-        for (const card of player.hand) {
-          if (
-            die.face >= card.buildRequirement &&
-            canAfford(player.resources, card.buildCost) &&
-            !alreadyBuilt(player, card)
-          ) {
-            moves.push({ type: "build", cardId: card.id, dieId: die.id });
-          }
-        }
-        for (const building of player.compound) {
-          if (!building.activated && satisfies(building.card.activation, die.face)) {
-            moves.push({ type: "activate", cardId: building.card.id, dieId: die.id });
-          }
-        }
-        // Last, because the Headquarters is the fallback: it is always there,
-        // so a die that can do something better should be seen doing it first.
         for (const section of HQ_SECTIONS) {
           if (player.headquarters[section.id].length >= section.slots) continue;
           if (!satisfies(section.accepts, die.face)) continue;
           moves.push({ type: "placeDie", section: section.id, dieId: die.id });
         }
       }
+
       moves.push({ type: "endPhase" });
       return moves;
     }
@@ -319,7 +372,7 @@ function buildFromDeck(state: GameState, playerIndex: number): GameState {
 
   const built = updatePlayer(searched, playerIndex, (p) => ({
     ...p,
-    compound: [...p.compound, { card, activated: false }],
+    compound: [...p.compound, { card, dice: [] }],
   }));
   return log(built, `${player.name} built ${card.name} for free${aside}`);
 }
@@ -540,7 +593,7 @@ function endRound(state: GameState): GameState {
     rolled: false,
     perks: NO_PERKS,
     headquarters: NO_PLACEMENTS,
-    compound: player.compound.map((building) => ({ ...building, activated: false })),
+    compound: player.compound.map((building) => ({ ...building, dice: [] })),
   }));
 
   const blueprints = refillBlueprintRow(state.blueprints, state.rng);
@@ -811,12 +864,18 @@ export function applyMove(state: GameState, move: Move): GameState {
 
     case "build": {
       if (state.phase !== "work") throw new Error("Building happens in the Work Phase");
-      const die = requireUnspentDie(player, move.dieId);
       const card = player.hand.find((c) => c.id === move.cardId);
       if (!card) throw new Error(`${player.name} does not hold ${move.cardId}`);
-      if (card.kind !== "blueprint") throw new Error(`${card.name} is not a blueprint`);
-      if (die.face < card.buildRequirement) {
-        throw new Error(`${card.name} needs a die of ${card.buildRequirement} or more`);
+
+      const payment = player.hand.find((c) => c.id === move.paymentCardId);
+      if (!payment) throw new Error(`${player.name} does not hold ${move.paymentCardId}`);
+      if (payment.id === card.id) {
+        throw new Error(`${card.name} cannot pay for itself`);
+      }
+      if (payment.type !== card.type) {
+        throw new Error(
+          `${card.name} costs a ${card.type} blueprint, but ${payment.name} is ${payment.type}`,
+        );
       }
       if (!canAfford(player.resources, card.buildCost)) {
         throw new Error(`${player.name} cannot afford ${card.name}`);
@@ -825,33 +884,78 @@ export function applyMove(state: GameState, move: Move): GameState {
         throw new Error(`${player.name} has already built ${card.name}`);
       }
 
-      const built = updatePlayer(state, index, (p) => ({
-        ...spendDie(p, die.id),
-        hand: p.hand.filter((c) => c.id !== card.id),
-        compound: [...p.compound, { card, activated: false }],
-        resources: spendResources(p.resources, card.buildCost),
-      }));
-      return log(built, `${player.name} built ${card.name}`);
+      const built = updatePlayer(
+        {
+          ...state,
+          // The card spent as payment goes to the blueprint discard.
+          blueprints: {
+            ...state.blueprints,
+            discard: [...state.blueprints.discard, payment],
+          },
+        },
+        index,
+        (p) => ({
+          ...p,
+          hand: p.hand.filter((c) => c.id !== card.id && c.id !== payment.id),
+          compound: [...p.compound, { card, dice: [] }],
+          resources: spendResources(p.resources, card.buildCost),
+        }),
+      );
+      const price = costsNothing(card.buildCost)
+        ? payment.name
+        : `${payment.name} and ${describeResourcesForLog(card.buildCost)}`;
+      return log(built, `${player.name} built ${card.name} for ${price}`);
     }
 
     case "activate": {
       if (state.phase !== "work") throw new Error("Activation happens in the Work Phase");
-      const die = requireUnspentDie(player, move.dieId);
       const building = player.compound.find((b) => b.card.id === move.cardId);
       if (!building) throw new Error(`${player.name} has no building ${move.cardId}`);
-      if (building.activated) throw new Error(`${building.card.name} already activated this round`);
-      if (!satisfies(building.card.activation, die.face)) {
-        throw new Error(`A ${die.face} does not activate ${building.card.name}`);
+
+      const { perk } = building.card;
+      if (building.dice.length > 0) {
+        throw new Error(`${building.card.name} was already used this round`);
+      }
+      if (move.dieIds.length !== perk.dice) {
+        throw new Error(
+          `${building.card.name} takes ${perk.dice} dice, not ${move.dieIds.length}`,
+        );
+      }
+      if (new Set(move.dieIds).size !== move.dieIds.length) {
+        throw new Error(`${building.card.name} cannot take the same die twice`);
       }
 
-      const marked = updatePlayer(state, index, (p) => ({
-        ...spendDie(p, die.id),
+      const dice = move.dieIds.map((id) => requireUnspentDie(player, id));
+      for (const die of dice) {
+        if (!satisfies(perk.accepts, die.face)) {
+          throw new Error(`A ${die.face} does not work ${building.card.name}`);
+        }
+      }
+      if (perk.matching && dice.some((die) => die.face !== dice[0].face)) {
+        throw new Error(`${building.card.name} needs matching dice`);
+      }
+      if (!canAfford(player.resources, perk.cost)) {
+        throw new Error(
+          `${building.card.name} costs ${describeResourcesForLog(perk.cost)} to use`,
+        );
+      }
+
+      const faces = dice.map((die) => die.face);
+      const used = updatePlayer(state, index, (p) => ({
+        ...dice.reduce((spent, die) => spendDie(spent, die.id), p),
         compound: p.compound.map((b) =>
-          b.card.id === building.card.id ? { ...b, activated: true } : b,
+          b.card.id === building.card.id ? { ...b, dice: faces } : b,
         ),
+        resources: spendResources(p.resources, perk.cost),
       }));
-      const resolved = applyEffect(marked, index, building.card.effect);
-      return log(resolved, `${player.name} activated ${building.card.name}`);
+      const paid = costsNothing(perk.cost)
+        ? ""
+        : ` for ${describeResourcesForLog(perk.cost)}`;
+      const announced = log(
+        used,
+        `${player.name} worked ${building.card.name} with ${faces.join(", ")}${paid}`,
+      );
+      return applyEffect(announced, index, perk.effect);
     }
 
     case "endPhase": {

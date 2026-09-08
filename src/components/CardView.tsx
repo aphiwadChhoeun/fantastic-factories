@@ -1,14 +1,22 @@
 import type { DragEvent } from "react";
-import type { Card } from "@/engine";
+import type { Card, DieFace, Resources } from "@/engine";
 import { BLUEPRINT_TYPE_GLYPHS, BLUEPRINT_TYPE_SWATCHES } from "@/lib/colors";
-import { describeEffect, describeRequirement, describeResources } from "@/lib/format";
+import { describeEffect, describePerkCost, describeResources } from "@/lib/format";
 import styles from "./game.module.css";
+
+function costsResources(cost: Resources): boolean {
+  return cost.metal > 0 || cost.energy > 0 || cost.goods > 0;
+}
 
 type Props = {
   card: Card;
   /** A blueprint standing in a compound, rather than one held in hand. */
   built?: boolean;
-  /** A building that has already been activated this round. */
+  /** Why this card cannot be used right now, when that is not obvious. */
+  note?: string;
+  /** Faces standing on a built blueprint's perk. Full means used this round. */
+  dice?: readonly DieFace[];
+  /** A building whose perk has been used this round. */
   spent?: boolean;
   /** Clicking the card plays a move — taking it, or paying with it. */
   onSelect?: () => void;
@@ -26,6 +34,8 @@ type Props = {
 export function CardView({
   card,
   built = false,
+  note,
+  dice = [],
   spent = false,
   onSelect,
   selectLabel,
@@ -67,16 +77,34 @@ export function CardView({
         <span className={styles.cardMeta}>Also costs: {describeResources(card.extraCost)}</span>
       )}
       {card.kind === "contractor" ? null : built ? (
-        <span className={styles.cardMeta}>Activate: {describeRequirement(card.activation)}</span>
+        <span className={styles.cardMeta}>Work: {describePerkCost(card.perk)}</span>
       ) : (
         <span className={styles.cardMeta}>
-          Build: {describeResources(card.buildCost)}, die {card.buildRequirement}+
+          Build: discard a {card.type}
+          {costsResources(card.buildCost) ? `, ${describeResources(card.buildCost)}` : ""}
         </span>
       )}
-      <span className={styles.cardMeta}>{describeEffect(card.effect)}</span>
+      <span className={styles.cardMeta}>
+        {describeEffect(card.kind === "blueprint" ? card.perk.effect : card.effect)}
+      </span>
+      {card.kind === "blueprint" && built && (
+        <div className={styles.dice}>
+          {Array.from({ length: card.perk.dice }, (_, index) => {
+            const face = dice[index];
+            return face === undefined ? (
+              <span key={index} className={`${styles.die} ${styles.hqSlot}`} />
+            ) : (
+              <span key={index} className={`${styles.die} ${styles.dieSpent}`}>
+                {face}
+              </span>
+            );
+          })}
+        </div>
+      )}
       {card.kind === "contractor" && (
         <span className={styles.cardTag}>resolves on take, then discarded</span>
       )}
+      {note && <span className={styles.cardTag}>{note}</span>}
     </>
   );
 

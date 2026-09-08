@@ -1,32 +1,59 @@
 /**
  * Placeholder cards so the loop has something to chew on.
  *
- * Two separate decks. Blueprints are built into your compound and activate
- * once per round; contractors resolve the moment you take one from the market
- * and are discarded immediately.
+ * Two separate decks. Blueprints are built into your compound, where their
+ * perk can be used once per round; contractors resolve the moment you take one
+ * from the market and are discarded immediately.
  *
- * Costs are in metal, energy is a secondary input, and goods are what you are
- * racing to accumulate.
+ * A blueprint's `buildCost` is on top of the real price of building: another
+ * blueprint of the same symbol, discarded from hand.
  *
- * TODO: the blueprint list is still invented. The contractors below are real
- * cards, but not yet the whole deck.
+ * TODO: only the Aluminum Factory is a real blueprint so far — the rest are
+ * still invented. The contractors are real, but not yet the whole deck.
  */
 
-import type { BlueprintCard, ContractorCard } from "./types";
+import type {
+  ActivationRequirement,
+  BlueprintCard,
+  BlueprintPerk,
+  ContractorCard,
+  Effect,
+  Resources,
+} from "./types";
 
 type BlueprintTemplate = Omit<BlueprintCard, "id" | "kind">;
 type ContractorTemplate = Omit<ContractorCard, "id" | "kind">;
 
+const FREE: Resources = { metal: 0, energy: 0, goods: 0 };
+
+/** The common shape: one die of any face, nothing else to pay. */
+function oneDie(effect: Effect, accepts: ActivationRequirement = { kind: "any" }): BlueprintPerk {
+  return { dice: 1, matching: false, accepts, cost: FREE, effect };
+}
+
 const BLUEPRINTS: readonly { template: BlueprintTemplate; copies: number }[] = [
+  {
+    copies: 3,
+    template: {
+      name: "Aluminum Factory",
+      type: "shovel",
+      buildCost: { metal: 2, energy: 2, goods: 0 },
+      perk: {
+        dice: 2,
+        matching: true,
+        accepts: { kind: "any" },
+        cost: { metal: 0, energy: 5, goods: 0 },
+        effect: { kind: "gain", resources: { goods: 2, metal: 1 } },
+      },
+    },
+  },
   {
     copies: 6,
     template: {
       name: "Assembly Line",
       type: "gear",
       buildCost: { metal: 2, energy: 0, goods: 0 },
-      buildRequirement: 3,
-      activation: { kind: "atLeast", face: 4 },
-      effect: { kind: "gain", resources: { goods: 2 } },
+      perk: oneDie({ kind: "gain", resources: { goods: 2 } }, { kind: "atLeast", face: 4 }),
     },
   },
   {
@@ -35,9 +62,7 @@ const BLUEPRINTS: readonly { template: BlueprintTemplate; copies: number }[] = [
       name: "Generator",
       type: "wrench",
       buildCost: { metal: 1, energy: 0, goods: 0 },
-      buildRequirement: 2,
-      activation: { kind: "any" },
-      effect: { kind: "gain", resources: { energy: 2 } },
+      perk: oneDie({ kind: "gain", resources: { energy: 2 } }),
     },
   },
   {
@@ -46,9 +71,7 @@ const BLUEPRINTS: readonly { template: BlueprintTemplate; copies: number }[] = [
       name: "Mine",
       type: "shovel",
       buildCost: { metal: 1, energy: 1, goods: 0 },
-      buildRequirement: 2,
-      activation: { kind: "atMost", face: 4 },
-      effect: { kind: "gain", resources: { metal: 2 } },
+      perk: oneDie({ kind: "gain", resources: { metal: 2 } }, { kind: "atMost", face: 4 }),
     },
   },
   {
@@ -57,9 +80,7 @@ const BLUEPRINTS: readonly { template: BlueprintTemplate; copies: number }[] = [
       name: "Warehouse",
       type: "shovel",
       buildCost: { metal: 3, energy: 1, goods: 0 },
-      buildRequirement: 4,
-      activation: { kind: "atMost", face: 3 },
-      effect: { kind: "gain", resources: { goods: 3 } },
+      perk: oneDie({ kind: "gain", resources: { goods: 3 } }, { kind: "atMost", face: 3 }),
     },
   },
   {
@@ -68,9 +89,7 @@ const BLUEPRINTS: readonly { template: BlueprintTemplate; copies: number }[] = [
       name: "Research Lab",
       type: "gear",
       buildCost: { metal: 2, energy: 1, goods: 0 },
-      buildRequirement: 3,
-      activation: { kind: "exact", face: 6 },
-      effect: { kind: "draw", count: 2 },
+      perk: oneDie({ kind: "draw", count: 2 }, { kind: "exact", face: 6 }),
     },
   },
   {
@@ -79,9 +98,7 @@ const BLUEPRINTS: readonly { template: BlueprintTemplate; copies: number }[] = [
       name: "Foundry",
       type: "hammer",
       buildCost: { metal: 3, energy: 0, goods: 0 },
-      buildRequirement: 5,
-      activation: { kind: "atLeast", face: 2 },
-      effect: { kind: "gain", resources: { metal: 1, goods: 1 } },
+      perk: oneDie({ kind: "gain", resources: { metal: 1, goods: 1 } }, { kind: "atLeast", face: 2 }),
     },
   },
   {
@@ -90,9 +107,7 @@ const BLUEPRINTS: readonly { template: BlueprintTemplate; copies: number }[] = [
       name: "Depot",
       type: "wrench",
       buildCost: { metal: 1, energy: 2, goods: 0 },
-      buildRequirement: 2,
-      activation: { kind: "exact", face: 1 },
-      effect: { kind: "draw", count: 1 },
+      perk: oneDie({ kind: "draw", count: 1 }, { kind: "exact", face: 1 }),
     },
   },
 ];

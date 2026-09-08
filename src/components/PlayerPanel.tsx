@@ -1,7 +1,8 @@
 import type { DragEvent } from "react";
-import type { Move, Player } from "@/engine";
+import { canAfford, type Building, type Move, type Player } from "@/engine";
 import type { DieTargets } from "@/lib/board";
 import { colorSwatch, DIE_SWATCHES } from "@/lib/colors";
+import { describeResources } from "@/lib/format";
 import { CardView } from "./CardView";
 import { HeadquartersView } from "./HeadquartersView";
 import styles from "./game.module.css";
@@ -18,10 +19,29 @@ export type PanelInteraction = {
   readonly onDragChange: (dieId: string | null) => void;
   /** Where the die being dragged may land. Null when nothing is in hand. */
   readonly targets: DieTargets | null;
-  /** Hand cards that could pay for the contractor being taken, if any. */
+  /** Hand cards that could be built right now. */
+  readonly buildable: ReadonlySet<string>;
+  /** Hand cards that could pay for whatever is mid-choice, if anything. */
   readonly payments: ReadonlyMap<string, Move> | null;
+  /** The card mid-choice — a contractor being taken, or a build being paid for. */
+  readonly pending: string | null;
+  /** Clicking a hand card: starts a build, pays for one, or cancels. */
+  readonly onSelectCard: (cardId: string) => void;
   readonly onPlay: (move: Move) => void;
 };
+
+/**
+ * Why a building cannot be worked, when the card face does not already say.
+ * A perk that wants dice you have not rolled explains itself — the dice are
+ * right there — but one you cannot pay for looks broken without this.
+ */
+function perkNote(player: Player, building: Building): string | undefined {
+  if (building.dice.length > 0) return "worked this round";
+
+  const { cost } = building.card.perk;
+  if (!canAfford(player.resources, cost)) return `needs ${describeResources(cost)}`;
+  return undefined;
+}
 
 type Props = {
   player: Player;
@@ -115,7 +135,9 @@ export function PlayerPanel({ player, active, hideHand = false, interaction }: P
                   key={building.card.id}
                   card={building.card}
                   built
-                  spent={building.activated}
+                  note={perkNote(player, building)}
+                  dice={building.dice}
+                  spent={building.dice.length > 0}
                   dropTarget={Boolean(move)}
                   onDropDie={move ? () => interaction?.onPlay(move) : undefined}
                 />
@@ -127,6 +149,10 @@ export function PlayerPanel({ player, active, hideHand = false, interaction }: P
 
       <div>
         <div className={styles.sectionTitle}>Hand</div>
+        {/* The payment comes from hand whether a card is being taken or built. */}
+        {interaction?.pending && (
+          <p className={styles.prompt}>Click a highlighted blueprint to discard as payment.</p>
+        )}
         {hideHand ? (
           <p className={styles.empty}>{player.hand.length} card(s), hidden.</p>
         ) : player.hand.length === 0 ? (
@@ -134,17 +160,22 @@ export function PlayerPanel({ player, active, hideHand = false, interaction }: P
         ) : (
           <div className={styles.cardRow}>
             {player.hand.map((card) => {
-              const build = targets?.builds.get(card.id);
-              const payment = interaction?.payments?.get(card.id);
+              const paying = Boolean(interaction?.payments?.has(card.id));
+              const pending = interaction?.pending === card.id;
+              // Mid-choice the hand is for paying, so only the cards that
+              // could pay stay live — plus the one being paid for, to cancel.
+              const buildable =
+                (interaction?.buildable.has(card.id) ?? false) && !interaction?.pending;
+              const clickable = paying || pending || buildable;
+
               return (
                 <CardView
                   key={card.id}
                   card={card}
-                  highlight={Boolean(payment)}
-                  onSelect={payment ? () => interaction?.onPlay(payment) : undefined}
-                  selectLabel={`Pay with ${card.name}`}
-                  dropTarget={Boolean(build)}
-                  onDropDie={build ? () => interaction?.onPlay(build) : undefined}
+                  highlight={paying || buildable}
+                  selected={pending}
+                  onSelect={clickable ? () => interaction?.onSelectCard(card.id) : undefined}
+                  selectLabel={paying ? `Discard ${card.name} to pay` : `Build ${card.name}`}
                 />
               );
             })}

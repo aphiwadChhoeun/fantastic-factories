@@ -127,10 +127,11 @@ export const NO_PLACEMENTS: HqPlacements = { research: [], generate: [], mine: [
 export type CardKind = "blueprint" | "contractor";
 
 /**
- * Every blueprint carries one of four tool types, colour-coded on the card.
+ * Every blueprint carries one of four tool symbols, colour-coded on the card.
  *
- * TODO: currently descriptive only — nothing in the rules reads a blueprint's
- * type yet. Effects that count tools in a compound would go through here.
+ * The symbol is what building costs: to build a blueprint you discard a
+ * different blueprint of the same symbol from hand. It is also what a
+ * contractor slot's token asks for.
  */
 export const BLUEPRINT_TYPES = ["hammer", "wrench", "gear", "shovel"] as const;
 
@@ -141,17 +142,30 @@ type CardBase = {
   readonly name: string;
 };
 
-/** Built into your compound, where it can be activated once per round. */
+/**
+ * What a blueprint does once it is standing in your compound: dice go on it,
+ * and it pays out. Usable once per round.
+ */
+export type BlueprintPerk = {
+  /** How many dice it takes. They all go on at once. */
+  readonly dice: number;
+  /** Every die placed must show the same face. */
+  readonly matching: boolean;
+  /** Which faces it will take at all. */
+  readonly accepts: ActivationRequirement;
+  /** Resources paid to use it, on top of the dice. Usually nothing. */
+  readonly cost: Resources;
+  readonly effect: Effect;
+};
+
+/** Built into your compound, where its perk can be used once per round. */
 export type BlueprintCard = CardBase & {
   readonly kind: "blueprint";
-  /** Its tool type — hammer, wrench, gear or shovel. */
+  /** Its tool symbol — hammer, wrench, gear or shovel. */
   readonly type: BlueprintType;
-  /** Resources spent to construct it. */
+  /** Resources spent to build it, on top of discarding a matching symbol. */
   readonly buildCost: Resources;
-  /** Minimum die face that can be assigned to construct it. */
-  readonly buildRequirement: DieFace;
-  readonly activation: ActivationRequirement;
-  readonly effect: Effect;
+  readonly perk: BlueprintPerk;
 };
 
 /**
@@ -178,8 +192,12 @@ export type Card = BlueprintCard | ContractorCard;
  */
 export type Building = {
   readonly card: BlueprintCard;
-  /** Reset during cleanup — a building activates at most once per round. */
-  readonly activated: boolean;
+  /**
+   * The faces standing on its perk this round. A perk takes all its dice at
+   * once, so this is either empty or full — and full means the perk has been
+   * used. Cleared at cleanup.
+   */
+  readonly dice: readonly DieFace[];
 };
 
 /** A card type's row, draw deck, and discard pile. */
@@ -305,8 +323,18 @@ export type Move =
   | { readonly type: "setDie"; readonly face: DieFace }
   /** Puts a die on one of the Headquarters sections and takes its payout. */
   | { readonly type: "placeDie"; readonly section: HqSectionId; readonly dieId: string }
-  | { readonly type: "build"; readonly cardId: string; readonly dieId: string }
-  | { readonly type: "activate"; readonly cardId: string; readonly dieId: string }
+  /**
+   * Builds a blueprint from hand into the compound. No die: you pay by
+   * discarding another blueprint of the same symbol, plus its resource cost.
+   */
+  | {
+      readonly type: "build";
+      readonly cardId: string;
+      /** The blueprint discarded to pay. Same symbol, different card. */
+      readonly paymentCardId: string;
+    }
+  /** Uses a building's perk, putting all the dice it asks for on at once. */
+  | { readonly type: "activate"; readonly cardId: string; readonly dieIds: readonly string[] }
   | { readonly type: "endPhase" };
 
 export type GameState = {

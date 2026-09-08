@@ -91,8 +91,8 @@ are counted per section: a 5 on Research does nothing for a 5 on Mine.
 Two card types, each with its own deck and its own market row:
 
 - **Blueprints** are built into your **compound** — the area in front of you —
-  where each one can be activated once per round. Every blueprint carries one
-  of four colour-coded tool types: hammer, wrench, gear, shovel.
+  where each one's **perk** can be worked once per round. Every blueprint
+  carries one of four colour-coded symbols: hammer, wrench, gear, shovel.
 - **Contractors** never enter your hand. Taking one resolves its effect
   immediately and discards the card.
 
@@ -105,8 +105,29 @@ available to you.
 Because contractors resolve on take, your hand only ever holds blueprints —
 that is enforced by the type of `Player.hand`, not by a runtime check.
 
+### Building
+
+**Building costs a card, not a die.** To build a blueprint you discard a
+different blueprint of the **same symbol** from hand, and pay the resource cost
+printed on it. So the Aluminum Factory — a shovel costing 2 metal and 2
+energy — needs another shovel out of your hand on top of the resources. No die
+is assigned; dice are for the Headquarters and for working what you have built.
+
 **No compound holds two of the same blueprint.** Copies of a card differ only
 by id, so the rule compares names.
+
+### Perks
+
+A built blueprint has a **perk**: dice go on it and it pays out, once per
+round. Most take a single die of some face — a Mine works on a 4 or less and
+pays 2 metal. Some take more, and some charge resources on top:
+
+> **Aluminum Factory** — shovel, build for 2 metal + 2 energy
+> Perk: two matching dice and 5 energy → gain 2 goods and 1 metal
+
+A perk takes all its dice at once. Two matching dice means exactly that: you
+need both in hand before you can work it, and no die is ever left stranded on
+a half-filled card.
 
 The contractor deck so far — 17 cards, eight kinds:
 
@@ -152,10 +173,14 @@ pay whatever it charges on top. Clicking a contractor you could pay for in more
 than one way asks which blueprint to spend: the candidates in your hand light
 up, and clicking the contractor again backs out.
 
+Building works the same way, from your hand: click a blueprint you can build
+and the cards that could pay for it — same symbol — light up to be discarded.
+
 In the Work Phase you drag a die onto what it should do: a Headquarters
-section, a blueprint in hand to build it, or a building in your compound to
-activate it. Only the places that die can legally go light up while you drag,
-and on a Headquarters section the slot it would fill lights up with them.
+section, or a building in your compound to work its perk. Only the places that
+die can legally go light up while you drag, and on a Headquarters section the
+slot it would fill lights up with them. Dropping a die on a perk that wants two
+plays both at once.
 
 The move list on the right stays as the complete, literal view of
 `legalMoves` — it is the debugging surface, the keyboard path, and the only way
@@ -175,13 +200,14 @@ compound and work your Headquarters, end the round. Known stubs:
   spelled out on the card
 - a Specialist die must be set straight after the roll, before anything is
   spent. Nothing yet changes a die mid-phase, so waiting would gain nothing
-- with only 7 distinct blueprints, and no compound holding a duplicate, the
+- with only 8 distinct blueprints, and no compound holding a duplicate, the
   10-card `END_COMPOUND_SIZE` is currently unreachable — games end on goods
 - the Headquarters is the same for every player. The published game hands out
   one of several starting tiles
 - `Effect` — the real game needs many more variants than the seven here
 - a `draw` effect always pulls blueprints; no card lets you choose a deck yet
-- blueprint tool types are read by the contractor tokens, nothing else yet
+- a perk that wants several dice must ask for matching ones or accept any
+  combination; there is no "one 3 and one 5" yet
 - contractor slot tokens are fixed to their slot for the whole game; they could
   instead be dealt or rotated each round
 - cards still reach hand from the blueprint deck through `draw` effects; only
