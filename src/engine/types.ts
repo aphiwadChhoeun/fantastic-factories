@@ -143,14 +143,20 @@ type CardBase = {
 };
 
 /**
+ * What a perk demands of the dice put on it, beyond their count.
+ *
+ * `consecutive` means a run with no gaps and no repeats — 2, 3, 4.
+ */
+export type DicePattern = "any" | "matching" | "consecutive";
+
+/**
  * What a blueprint does once it is standing in your compound: dice go on it,
  * and it pays out. Usable once per round.
  */
 export type BlueprintPerk = {
-  /** How many dice it takes. They all go on at once. */
+  /** How many dice it takes. They all go on at once. Some take none. */
   readonly dice: number;
-  /** Every die placed must show the same face. */
-  readonly matching: boolean;
+  readonly pattern: DicePattern;
   /** Which faces it will take at all. */
   readonly accepts: ActivationRequirement;
   /** Resources paid to use it, on top of the dice. Usually nothing. */
@@ -165,7 +171,22 @@ export type BlueprintCard = CardBase & {
   readonly type: BlueprintType;
   /** Resources spent to build it, on top of discarding a matching symbol. */
   readonly buildCost: Resources;
-  readonly perk: BlueprintPerk;
+  /**
+   * Score it is worth at the end, per copy standing. Absent means none — most
+   * of the placeholder blueprints are worth nothing yet.
+   */
+  readonly prestige?: number;
+  /**
+   * Extra score for holding at least one, however many you hold. The Beacon
+   * is worth one each plus one for the set, so four of them score five.
+   */
+  readonly prestigeBonus?: number;
+  /**
+   * Exempt from the one-of-each rule: the Beacon is meant to be stacked.
+   */
+  readonly duplicable?: boolean;
+  /** Some blueprints are pure score, and do nothing once standing. */
+  readonly perk?: BlueprintPerk;
 };
 
 /**
@@ -194,10 +215,15 @@ export type Building = {
   readonly card: BlueprintCard;
   /**
    * The faces standing on its perk this round. A perk takes all its dice at
-   * once, so this is either empty or full — and full means the perk has been
-   * used. Cleared at cleanup.
+   * once, so this is either empty or full. Cleared at cleanup.
    */
   readonly dice: readonly DieFace[];
+  /**
+   * Whether the perk has been used this round. Usually that is the same as
+   * having dice on it — but a perk can cost energy and no dice at all, and
+   * that one has nothing to show for itself but this.
+   */
+  readonly worked: boolean;
 };
 
 /** A card type's row, draw deck, and discard pile. */

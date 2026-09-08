@@ -25,6 +25,7 @@ import {
   type BlueprintCard,
   type Building,
   type Card,
+  type DicePattern,
   type Die,
   type DieFace,
   type Effect,
@@ -81,11 +82,54 @@ export function canAfford(resources: Resources, cost: Resources): boolean {
 }
 
 /**
- * No compound holds two of the same blueprint. Copies differ only by id, so
- * the name is what counts.
+ * No compound holds two of the same blueprint — unless the card says it may be
+ * stacked. Copies differ only by id, so the name is what counts.
  */
 function alreadyBuilt(player: Player, card: BlueprintCard): boolean {
+  if (card.duplicable) return false;
   return player.compound.some((building) => building.card.name === card.name);
+}
+
+/** Faces in a run with no gaps and no repeats: 2, 3, 4. */
+function isConsecutive(faces: readonly DieFace[]): boolean {
+  const sorted = [...faces].sort((a, b) => a - b);
+  return sorted.every((face, i) => i === 0 || face === sorted[i - 1] + 1);
+}
+
+function fitsPattern(pattern: DicePattern, faces: readonly DieFace[]): boolean {
+  switch (pattern) {
+    case "any":
+      return true;
+    case "matching":
+      return faces.every((face) => face === faces[0]);
+    case "consecutive":
+      return isConsecutive(faces);
+  }
+}
+
+/**
+ * What a player is worth: their goods, plus the prestige standing in their
+ * compound. Blueprints still in hand are worth nothing — only what is built.
+ */
+export function scoreOf(player: Player): number {
+  return player.resources.goods + prestigeOf(player.compound);
+}
+
+/**
+ * The prestige in a compound. Each card scores its own, and a card with a set
+ * bonus adds it once however many are up.
+ */
+export function prestigeOf(compound: readonly Building[]): number {
+  const bonuses = new Map<string, number>();
+  let total = 0;
+
+  for (const { card } of compound) {
+    total += card.prestige ?? 0;
+    if (card.prestigeBonus) bonuses.set(card.name, card.prestigeBonus);
+  }
+  for (const bonus of bonuses.values()) total += bonus;
+
+  return total;
 }
 
 function unspentDice(player: Player): Die[] {
@@ -107,16 +151,24 @@ function sameSymbol(player: Player, card: BlueprintCard): BlueprintCard[] {
   return player.hand.filter((other) => other.id !== card.id && other.type === card.type);
 }
 
-/** Every distinct set of dice that could work a building's perk right now. */
+/**
+ * Every distinct set of dice that could work a building's perk right now. A
+ * perk that takes no dice yields one empty set — it is still a move.
+ */
 function perkDice(player: Player, building: Building): Die[][] {
   const { perk } = building.card;
-  // A perk takes all its dice at once, so a used one is simply full.
-  if (building.dice.length > 0) return [];
+  if (!perk) return [];
+  // A perk takes all its dice at once, so a used one is simply full. One that
+  // takes none is marked used by `worked` instead.
+  if (building.worked) return [];
   if (!canAfford(player.resources, perk.cost)) return [];
 
   const usable = unspentDice(player).filter((die) => satisfies(perk.accepts, die.face));
-  const sets = combinations(usable, perk.dice).filter(
-    (set) => !perk.matching || set.every((die) => die.face === set[0].face),
+  const sets = combinations(usable, perk.dice).filter((set) =>
+    fitsPattern(
+      perk.pattern,
+      set.map((die) => die.face),
+    ),
   );
 
   // Two dice showing the same face are interchangeable, so sets that differ
@@ -135,7 +187,9 @@ function perkDice(player: Player, building: Building): Die[][] {
 
 /** Every `size`-sized subset, in order. Die counts are tiny, so this is cheap. */
 function combinations<T>(items: readonly T[], size: number): T[][] {
-  if (size <= 0 || size > items.length) return [];
+  // Asking for none of them has exactly one answer, and it is not "no answer".
+  if (size === 0) return [[]];
+  if (size < 0 || size > items.length) return [];
   if (size === items.length) return [[...items]];
   if (size === 1) return items.map((item) => [item]);
 
@@ -372,7 +426,7 @@ function buildFromDeck(state: GameState, playerIndex: number): GameState {
 
   const built = updatePlayer(searched, playerIndex, (p) => ({
     ...p,
-    compound: [...p.compound, { card, dice: [] }],
+    compound: [...p.compound, { card, dice: [], worked: false }],
   }));
   return log(built, `${player.name} built ${card.name} for free${aside}`);
 }
@@ -593,7 +647,7 @@ function endRound(state: GameState): GameState {
     rolled: false,
     perks: NO_PERKS,
     headquarters: NO_PLACEMENTS,
-    compound: player.compound.map((building) => ({ ...building, dice: [] })),
+    compound: player.compound.map((building) => ({ ...building, dice: [], worked: false })),
   }));
 
   const blueprints = refillBlueprintRow(state.blueprints, state.rng);
@@ -626,26 +680,15 @@ function endRound(state: GameState): GameState {
 }
 
 /**
- * TODO: replace with real scoring. Most goods wins, compound size breaks the
- * tie, and a genuine tie returns null.
+ * The highest score wins, and an equal score is a draw — there is no tiebreak.
  */
 function decideWinner(state: GameState): number | null {
   const ranked = state.players
-    .map((player, index) => ({ index, player }))
-    .sort(
-      (a, b) =>
-        b.player.resources.goods - a.player.resources.goods ||
-        b.player.compound.length - a.player.compound.length,
-    );
+    .map((player, index) => ({ index, score: scoreOf(player) }))
+    .sort((a, b) => b.score - a.score);
 
   const [best, runnerUp] = ranked;
-  if (
-    runnerUp &&
-    best.player.resources.goods === runnerUp.player.resources.goods &&
-    best.player.compound.length === runnerUp.player.compound.length
-  ) {
-    return null;
-  }
+  if (runnerUp && best.score === runnerUp.score) return null;
   return best.index;
 }
 
@@ -897,7 +940,7 @@ export function applyMove(state: GameState, move: Move): GameState {
         (p) => ({
           ...p,
           hand: p.hand.filter((c) => c.id !== card.id && c.id !== payment.id),
-          compound: [...p.compound, { card, dice: [] }],
+          compound: [...p.compound, { card, dice: [], worked: false }],
           resources: spendResources(p.resources, card.buildCost),
         }),
       );
@@ -913,7 +956,8 @@ export function applyMove(state: GameState, move: Move): GameState {
       if (!building) throw new Error(`${player.name} has no building ${move.cardId}`);
 
       const { perk } = building.card;
-      if (building.dice.length > 0) {
+      if (!perk) throw new Error(`${building.card.name} has no perk to work`);
+      if (building.worked) {
         throw new Error(`${building.card.name} was already used this round`);
       }
       if (move.dieIds.length !== perk.dice) {
@@ -931,8 +975,9 @@ export function applyMove(state: GameState, move: Move): GameState {
           throw new Error(`A ${die.face} does not work ${building.card.name}`);
         }
       }
-      if (perk.matching && dice.some((die) => die.face !== dice[0].face)) {
-        throw new Error(`${building.card.name} needs matching dice`);
+      const faces = dice.map((die) => die.face);
+      if (!fitsPattern(perk.pattern, faces)) {
+        throw new Error(`${building.card.name} needs ${perk.pattern} dice`);
       }
       if (!canAfford(player.resources, perk.cost)) {
         throw new Error(
@@ -940,20 +985,20 @@ export function applyMove(state: GameState, move: Move): GameState {
         );
       }
 
-      const faces = dice.map((die) => die.face);
       const used = updatePlayer(state, index, (p) => ({
         ...dice.reduce((spent, die) => spendDie(spent, die.id), p),
         compound: p.compound.map((b) =>
-          b.card.id === building.card.id ? { ...b, dice: faces } : b,
+          b.card.id === building.card.id ? { ...b, dice: faces, worked: true } : b,
         ),
         resources: spendResources(p.resources, perk.cost),
       }));
       const paid = costsNothing(perk.cost)
         ? ""
         : ` for ${describeResourcesForLog(perk.cost)}`;
+      const withDice = faces.length > 0 ? ` with ${faces.join(", ")}` : "";
       const announced = log(
         used,
-        `${player.name} worked ${building.card.name} with ${faces.join(", ")}${paid}`,
+        `${player.name} worked ${building.card.name}${withDice}${paid}`,
       );
       return applyEffect(announced, index, perk.effect);
     }

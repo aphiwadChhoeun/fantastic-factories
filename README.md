@@ -118,16 +118,40 @@ by id, so the rule compares names.
 
 ### Perks
 
-A built blueprint has a **perk**: dice go on it and it pays out, once per
-round. Most take a single die of some face — a Mine works on a 4 or less and
-pays 2 metal. Some take more, and some charge resources on top:
+A built blueprint usually has a **perk**: dice go on it and it pays out, once
+per round. Most take a single die of some face — a Mine works on a 4 or less
+and pays 2 metal. Some take several, in a pattern; some charge resources on
+top; and some take no dice at all.
 
-> **Aluminum Factory** — shovel, build for 2 metal + 2 energy
-> Perk: two matching dice and 5 energy → gain 2 goods and 1 metal
+A perk takes all its dice at once, so you need the whole set before you can
+work it and no die is ever left stranded on a half-filled card.
 
-A perk takes all its dice at once. Two matching dice means exactly that: you
-need both in hand before you can work it, and no die is ever left stranded on
-a half-filled card.
+### Scoring
+
+**Your score is your goods plus the prestige standing in your compound.**
+Blueprints in hand are worth nothing — prestige only counts once built. Metal
+and energy are not score either; they are what you spend to get there.
+
+Most of the placeholder blueprints are worth no prestige; the real ones are
+worth 1 each. The highest score wins, and an equal score is a draw.
+
+### The real blueprints so far
+
+| Blueprint        | Copies | Symbol | Build cost         | Perk                                     | Prestige      |
+| ---------------- | -----: | ------ | ------------------ | ---------------------------------------- | ------------- |
+| Aluminum Factory |      3 | shovel | 2 metal + 2 energy | 2 matching dice + 5 energy → 2 goods, 1 metal | 1        |
+| Assembly Line    |      2 | gear   | 2 metal + 1 energy | 3 consecutive dice → 2 goods             | 1             |
+| Battery Factory  |      2 | wrench | 2 metal + 1 energy | 4 energy, no dice → 1 good               | 1             |
+| Beacon           |      4 | shovel | 2 metal + 4 energy | none — it is pure score                  | 1 each, +1 set |
+
+Every build cost is on top of discarding a blueprint of the same symbol.
+
+**Consecutive** means a run with no gaps and no repeats: 2, 3, 4. Order does
+not matter, so a roll of 4, 2, 3 works the Assembly Line.
+
+**The Beacon is the one blueprint you may stand more than one of**, and it is
+the only card that scores as a set: one prestige each plus one for having any,
+so four Beacons are worth five.
 
 The contractor deck so far — 17 cards, eight kinds:
 
@@ -180,7 +204,11 @@ In the Work Phase you drag a die onto what it should do: a Headquarters
 section, or a building in your compound to work its perk. Only the places that
 die can legally go light up while you drag, and on a Headquarters section the
 slot it would fill lights up with them. Dropping a die on a perk that wants two
-plays both at once.
+plays both at once. A perk that takes no dice — the Battery Factory — has
+nothing to drag at it, so it is clicked instead.
+
+A building says what is stopping it when that is not obvious: `needs 5 energy`,
+`worked this round`.
 
 The move list on the right stays as the complete, literal view of
 `legalMoves` — it is the debugging surface, the keyboard path, and the only way
@@ -200,8 +228,9 @@ compound and work your Headquarters, end the round. Known stubs:
   spelled out on the card
 - a Specialist die must be set straight after the roll, before anything is
   spent. Nothing yet changes a die mid-phase, so waiting would gain nothing
-- with only 8 distinct blueprints, and no compound holding a duplicate, the
-  10-card `END_COMPOUND_SIZE` is currently unreachable — games end on goods
+- an equal score is a draw. No tiebreak is defined
+- 11 distinct blueprints and a Beacon that stacks four deep put the 10-card
+  `END_COMPOUND_SIZE` in reach again, but only just
 - the Headquarters is the same for every player. The published game hands out
   one of several starting tiles
 - `Effect` — the real game needs many more variants than the seven here
@@ -215,7 +244,8 @@ compound and work your Headquarters, end the round. Known stubs:
 - no contractor *dice* — white is currently just another player colour
 - dragging is HTML5 drag-and-drop, so it does not work by keyboard or on
   touch. The move list is the fallback on both
-- `decideWinner` — most goods, buildings break ties
+- the game still *ends* on 12 goods or 10 buildings, which are not the same
+  thresholds as the score — a player can win on prestige without either
 - `MAX_ROUNDS` — a safety valve so a half-written rule cannot hang a test run
 
 `applyEffect` and `legalMoves` switch exhaustively with no `default`, so adding a

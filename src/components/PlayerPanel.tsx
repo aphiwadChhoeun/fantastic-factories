@@ -1,5 +1,5 @@
 import type { DragEvent } from "react";
-import { canAfford, type Building, type Move, type Player } from "@/engine";
+import { canAfford, scoreOf, type Building, type Move, type Player } from "@/engine";
 import type { DieTargets } from "@/lib/board";
 import { colorSwatch, DIE_SWATCHES } from "@/lib/colors";
 import { describeResources } from "@/lib/format";
@@ -21,6 +21,8 @@ export type PanelInteraction = {
   readonly targets: DieTargets | null;
   /** Hand cards that could be built right now. */
   readonly buildable: ReadonlySet<string>;
+  /** Buildings whose perk takes no dice, and so is clicked rather than dragged. */
+  readonly freeActivations: ReadonlyMap<string, Move>;
   /** Hand cards that could pay for whatever is mid-choice, if anything. */
   readonly payments: ReadonlyMap<string, Move> | null;
   /** The card mid-choice — a contractor being taken, or a build being paid for. */
@@ -36,10 +38,12 @@ export type PanelInteraction = {
  * right there — but one you cannot pay for looks broken without this.
  */
 function perkNote(player: Player, building: Building): string | undefined {
-  if (building.dice.length > 0) return "worked this round";
-
-  const { cost } = building.card.perk;
-  if (!canAfford(player.resources, cost)) return `needs ${describeResources(cost)}`;
+  const { perk, prestigeBonus } = building.card;
+  if (!perk) return prestigeBonus ? "scores, and stacks" : "scores only";
+  if (building.worked) return "worked this round";
+  if (!canAfford(player.resources, perk.cost)) {
+    return `needs ${describeResources(perk.cost)}`;
+  }
   return undefined;
 }
 
@@ -75,7 +79,8 @@ export function PlayerPanel({ player, active, hideHand = false, interaction }: P
         </span>
         <span className={styles.cardMeta}>
           {player.resources.metal} metal · {player.resources.energy} energy ·{" "}
-          {player.resources.goods} goods · {player.compound.length} in compound
+          {player.resources.goods} goods · {player.compound.length} in compound ·{" "}
+          <strong title="Goods plus prestige built">{scoreOf(player)} score</strong>
         </span>
       </header>
 
@@ -130,6 +135,9 @@ export function PlayerPanel({ player, active, hideHand = false, interaction }: P
           <div className={styles.cardRow}>
             {player.compound.map((building) => {
               const move = targets?.activations.get(building.card.id);
+              // A perk that takes no dice has nothing to drag at it, so it is
+              // worked by clicking the card instead.
+              const free = interaction?.freeActivations.get(building.card.id);
               return (
                 <CardView
                   key={building.card.id}
@@ -137,7 +145,10 @@ export function PlayerPanel({ player, active, hideHand = false, interaction }: P
                   built
                   note={perkNote(player, building)}
                   dice={building.dice}
-                  spent={building.dice.length > 0}
+                  spent={building.worked}
+                  highlight={Boolean(free)}
+                  onSelect={free ? () => interaction?.onPlay(free) : undefined}
+                  selectLabel={`Work ${building.card.name}`}
                   dropTarget={Boolean(move)}
                   onDropDie={move ? () => interaction?.onPlay(move) : undefined}
                 />

@@ -100,6 +100,7 @@ export function Game() {
       onDragChange: setDragged,
       targets: dragging ? (board.dice.get(dragging) ?? null) : null,
       buildable: new Set(board.builds.keys()),
+      freeActivations: board.freeActivations,
       payments,
       pending: choosingPaymentFor,
       onSelectCard: selectCard,

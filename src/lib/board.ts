@@ -32,6 +32,11 @@ export type BoardMoves = {
    * discarded to pay. Building takes no die, so it is not a drag target.
    */
   readonly builds: ReadonlyMap<string, readonly Move[]>;
+  /**
+   * Compound card id -> a perk that costs resources and no dice at all. There
+   * is nothing to drag onto it, so it is clicked instead.
+   */
+  readonly freeActivations: ReadonlyMap<string, Move>;
   /** Die id -> where that die can go. */
   readonly dice: ReadonlyMap<string, DieTargets>;
 };
@@ -56,6 +61,7 @@ function push(index: Map<string, Move[]>, key: string, move: Move): void {
 export function indexMoves(moves: readonly Move[], rolled: readonly Die[] = []): BoardMoves {
   const takes = new Map<string, Move[]>();
   const builds = new Map<string, Move[]>();
+  const freeActivations = new Map<string, Move>();
   const dice = new Map<string, DieTargets>();
   const faces = new Map(rolled.map((die) => [die.id, die.face]));
 
@@ -71,6 +77,10 @@ export function indexMoves(moves: readonly Move[], rolled: readonly Die[] = []):
         (targetsFor(dice, move.dieId).sections as Map<HqSectionId, Move>).set(move.section, move);
         break;
       case "activate": {
+        if (move.dieIds.length === 0) {
+          freeActivations.set(move.cardId, move);
+          break;
+        }
         // A perk only ever reads faces, so two dice showing the same number are
         // interchangeable in it. The engine enumerates one move per face rather
         // than one per pair, so index it under every die that could stand in —
@@ -89,7 +99,7 @@ export function indexMoves(moves: readonly Move[], rolled: readonly Die[] = []):
     }
   }
 
-  return { takes, builds, dice };
+  return { takes, builds, freeActivations, dice };
 }
 
 /**

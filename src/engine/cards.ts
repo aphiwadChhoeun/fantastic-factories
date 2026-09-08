@@ -8,8 +8,9 @@
  * A blueprint's `buildCost` is on top of the real price of building: another
  * blueprint of the same symbol, discarded from hand.
  *
- * TODO: only the Aluminum Factory is a real blueprint so far — the rest are
- * still invented. The contractors are real, but not yet the whole deck.
+ * TODO: the first four blueprints below are real cards; the rest are still
+ * invented, and are worth no prestige because their real values are unknown.
+ * The contractors are real, but not yet the whole deck.
  */
 
 import type {
@@ -28,7 +29,7 @@ const FREE: Resources = { metal: 0, energy: 0, goods: 0 };
 
 /** The common shape: one die of any face, nothing else to pay. */
 function oneDie(effect: Effect, accepts: ActivationRequirement = { kind: "any" }): BlueprintPerk {
-  return { dice: 1, matching: false, accepts, cost: FREE, effect };
+  return { dice: 1, pattern: "any", accepts, cost: FREE, effect };
 }
 
 const BLUEPRINTS: readonly { template: BlueprintTemplate; copies: number }[] = [
@@ -38,9 +39,10 @@ const BLUEPRINTS: readonly { template: BlueprintTemplate; copies: number }[] = [
       name: "Aluminum Factory",
       type: "shovel",
       buildCost: { metal: 2, energy: 2, goods: 0 },
+      prestige: 1,
       perk: {
         dice: 2,
-        matching: true,
+        pattern: "matching",
         accepts: { kind: "any" },
         cost: { metal: 0, energy: 5, goods: 0 },
         effect: { kind: "gain", resources: { goods: 2, metal: 1 } },
@@ -48,12 +50,49 @@ const BLUEPRINTS: readonly { template: BlueprintTemplate; copies: number }[] = [
     },
   },
   {
-    copies: 6,
+    copies: 2,
     template: {
       name: "Assembly Line",
       type: "gear",
-      buildCost: { metal: 2, energy: 0, goods: 0 },
-      perk: oneDie({ kind: "gain", resources: { goods: 2 } }, { kind: "atLeast", face: 4 }),
+      buildCost: { metal: 2, energy: 1, goods: 0 },
+      prestige: 1,
+      perk: {
+        dice: 3,
+        pattern: "consecutive",
+        accepts: { kind: "any" },
+        cost: FREE,
+        effect: { kind: "gain", resources: { goods: 2 } },
+      },
+    },
+  },
+  {
+    copies: 2,
+    template: {
+      name: "Battery Factory",
+      type: "wrench",
+      buildCost: { metal: 2, energy: 1, goods: 0 },
+      prestige: 1,
+      // No dice at all: the energy is the whole price.
+      perk: {
+        dice: 0,
+        pattern: "any",
+        accepts: { kind: "any" },
+        cost: { metal: 0, energy: 4, goods: 0 },
+        effect: { kind: "gain", resources: { goods: 1 } },
+      },
+    },
+  },
+  {
+    copies: 4,
+    template: {
+      name: "Beacon",
+      type: "shovel",
+      buildCost: { metal: 2, energy: 4, goods: 0 },
+      // Pure score, and the one blueprint you may stand more than one of:
+      // one prestige each, plus one for having any at all.
+      prestige: 1,
+      prestigeBonus: 1,
+      duplicable: true,
     },
   },
   {

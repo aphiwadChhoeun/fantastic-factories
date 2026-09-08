@@ -8,11 +8,14 @@ import {
   createInitialState,
   currentPlayer,
   DIE_COLORS,
+  END_GOODS,
   HQ_SECTIONS,
   legalMoves,
   MARKET_ROW_SIZE,
   MAX_ROUNDS,
   NO_PLACEMENTS,
+  prestigeOf,
+  scoreOf,
   STARTING_HAND,
   STARTING_RESOURCES,
   STARTING_WORKFORCE,
@@ -443,7 +446,7 @@ describe("the Engineer", () => {
       engineer,
       {
         resources: { metal: 0, energy: 4, goods: 0 },
-        compound: [{ card: built, dice: [] }],
+        compound: [{ card: built, dice: [], worked: false }],
       },
       [duplicate, mine],
     );
@@ -466,7 +469,7 @@ describe("the Engineer", () => {
         resources: { metal: 0, energy: 4, goods: 0 },
         // The payment is a Generator too, so even a reshuffle finds nothing.
         hand: [payment],
-        compound: [{ card: built, dice: [] }],
+        compound: [{ card: built, dice: [], worked: false }],
       },
       [duplicate],
     );
@@ -490,7 +493,7 @@ describe("the Aluminum Factory", () => {
     const state = createInitialState({ seed: 3 });
     const { color } = state.players[0];
     return patchPlayer({ ...state, phase: "work" }, 0, {
-      compound: [{ card: factory, dice: [] }],
+      compound: [{ card: factory, dice: [], worked: false }],
       dice: faces.map((face, i) => ({ id: `d${i}`, face, color, extra: false, spent: false })),
       rolled: true,
       resources,
@@ -509,11 +512,12 @@ describe("the Aluminum Factory", () => {
   it("takes two matching dice and 5 energy, and pays 2 goods and 1 metal", () => {
     expect(factory.perk).toEqual({
       dice: 2,
-      matching: true,
+      pattern: "matching",
       accepts: { kind: "any" },
       cost: { metal: 0, energy: 5, goods: 0 },
       effect: { kind: "gain", resources: { goods: 2, metal: 1 } },
     });
+    expect(factory.prestige).toBe(1);
   });
 
   it("spends both dice and the energy, and fills both slots", () => {
@@ -609,6 +613,252 @@ describe("the Aluminum Factory", () => {
 
     const cleaned = applyMove({ ...used, phase: "cleanup" }, { type: "endPhase" });
     expect(cleaned.players[0].compound[0].dice).toEqual([]);
+  });
+});
+
+describe("the Assembly Line", () => {
+  const line = cardNamed(createBlueprintDeck(), "Assembly Line");
+
+  function withLine(faces: readonly DieFace[]): GameState {
+    const state = createInitialState({ seed: 3 });
+    const { color } = state.players[0];
+    return patchPlayer({ ...state, phase: "work" }, 0, {
+      compound: [{ card: line, dice: [], worked: false }],
+      dice: faces.map((face, i) => ({ id: `d${i}`, face, color, extra: false, spent: false })),
+      rolled: true,
+    });
+  }
+
+  function runs(state: GameState) {
+    return legalMoves(state)
+      .filter((move) => move.type === "activate")
+      .map((move) =>
+        move.type === "activate"
+          ? move.dieIds.map((id) => state.players[0].dice.find((d) => d.id === id)!.face)
+          : [],
+      );
+  }
+
+  it("is a gear costing 2 metal and 1 energy, worth a prestige", () => {
+    expect(line.type).toBe("gear");
+    expect(line.buildCost).toEqual({ metal: 2, energy: 1, goods: 0 });
+    expect(line.prestige).toBe(1);
+    expect(line.perk?.dice).toBe(3);
+    expect(line.perk?.pattern).toBe("consecutive");
+    expect(line.perk?.effect).toEqual({ kind: "gain", resources: { goods: 2 } });
+  });
+
+  it("takes a run of three and pays 2 goods", () => {
+    const state = withLine([2, 3, 4, 6]);
+    expect(runs(state)).toEqual([[2, 3, 4]]);
+
+    const next = applyMove(state, {
+      type: "activate",
+      cardId: line.id,
+      dieIds: ["d0", "d1", "d2"],
+    });
+
+    expect(next.players[0].resources.goods).toBe(STARTING_RESOURCES.goods + 2);
+    expect(next.players[0].compound[0].dice).toEqual([2, 3, 4]);
+  });
+
+  it("finds a run in any order, and offers each distinct run once", () => {
+    // 4, 2, 3 is the same run as 2, 3, 4 — order of the dice is not the point.
+    expect(runs(withLine([4, 2, 3, 6]))).toEqual([[4, 2, 3]]);
+    // 1..4 holds two runs: 1-2-3 and 2-3-4.
+    expect(runs(withLine([1, 2, 3, 4]))).toHaveLength(2);
+  });
+
+  it("refuses a gap and a repeat", () => {
+    expect(runs(withLine([2, 3, 5, 5]))).toEqual([]);
+    expect(runs(withLine([3, 3, 4, 6]))).toEqual([]);
+
+    expect(() =>
+      applyMove(withLine([2, 3, 5, 6]), {
+        type: "activate",
+        cardId: line.id,
+        dieIds: ["d0", "d1", "d2"],
+      }),
+    ).toThrow(/needs consecutive dice/);
+  });
+});
+
+describe("the Battery Factory", () => {
+  const battery = cardNamed(createBlueprintDeck(), "Battery Factory");
+
+  function withBattery(energy: number): GameState {
+    const state = createInitialState({ seed: 3 });
+    return patchPlayer({ ...state, phase: "work" }, 0, {
+      compound: [{ card: battery, dice: [], worked: false }],
+      rolled: true,
+      resources: { metal: 0, energy, goods: 0 },
+    });
+  }
+
+  it("is a wrench costing 2 metal and 1 energy, worth a prestige", () => {
+    expect(battery.type).toBe("wrench");
+    expect(battery.buildCost).toEqual({ metal: 2, energy: 1, goods: 0 });
+    expect(battery.prestige).toBe(1);
+  });
+
+  it("takes no dice at all — 4 energy buys a good", () => {
+    expect(battery.perk?.dice).toBe(0);
+
+    const state = withBattery(4);
+    const moves = legalMoves(state).filter((move) => move.type === "activate");
+    expect(moves).toEqual([{ type: "activate", cardId: battery.id, dieIds: [] }]);
+
+    const next = applyMove(state, { type: "activate", cardId: battery.id, dieIds: [] });
+
+    expect(next.players[0].resources).toEqual({ metal: 0, energy: 0, goods: 1 });
+    // Nothing to show on the card, so the flag is all that marks it used.
+    expect(next.players[0].compound[0].worked).toBe(true);
+    expect(next.players[0].compound[0].dice).toEqual([]);
+    expect(legalMoves(next).filter((move) => move.type === "activate")).toEqual([]);
+  });
+
+  it("is offered only when the energy is there, and only once a round", () => {
+    expect(legalMoves(withBattery(3)).filter((m) => m.type === "activate")).toEqual([]);
+    expect(() =>
+      applyMove(withBattery(3), { type: "activate", cardId: battery.id, dieIds: [] }),
+    ).toThrow(/costs 4 energy to use/);
+  });
+});
+
+describe("the Beacon", () => {
+  const beacons = createBlueprintDeck().filter((card) => card.name === "Beacon");
+
+  function standing(count: number) {
+    return beacons.slice(0, count).map((card) => ({ card, dice: [], worked: false }));
+  }
+
+  it("is a shovel costing 2 metal and 4 energy, and does nothing once up", () => {
+    expect(beacons).toHaveLength(4);
+    expect(beacons[0].type).toBe("shovel");
+    expect(beacons[0].buildCost).toEqual({ metal: 2, energy: 4, goods: 0 });
+    expect(beacons[0].perk).toBeUndefined();
+  });
+
+  it("scores one each plus one for the set", () => {
+    expect(prestigeOf(standing(0))).toBe(0);
+    expect(prestigeOf(standing(1))).toBe(2);
+    expect(prestigeOf(standing(2))).toBe(3);
+    expect(prestigeOf(standing(3))).toBe(4);
+    expect(prestigeOf(standing(4))).toBe(5);
+  });
+
+  it("may be built more than once, unlike every other blueprint", () => {
+    const state = createInitialState({ seed: 3 });
+    const shovel = copiesOf("Mine")[0];
+    const staged: GameState = patchPlayer({ ...state, phase: "work" }, 0, {
+      compound: standing(1),
+      hand: [beacons[1], shovel],
+      resources: { metal: 5, energy: 5, goods: 0 },
+      rolled: true,
+    });
+
+    const builds = legalMoves(staged).filter((move) => move.type === "build");
+    expect(builds.map((move) => move.cardId)).toContain(beacons[1].id);
+
+    const next = applyMove(staged, {
+      type: "build",
+      cardId: beacons[1].id,
+      paymentCardId: shovel.id,
+    });
+    expect(next.players[0].compound).toHaveLength(2);
+    expect(prestigeOf(next.players[0].compound)).toBe(3);
+  });
+
+  it("has no perk to work", () => {
+    const state = createInitialState({ seed: 3 });
+    const staged: GameState = patchPlayer({ ...state, phase: "work" }, 0, {
+      compound: standing(1),
+      rolled: true,
+    });
+
+    expect(legalMoves(staged).filter((move) => move.type === "activate")).toEqual([]);
+    expect(() =>
+      applyMove(staged, { type: "activate", cardId: beacons[0].id, dieIds: [] }),
+    ).toThrow(/no perk to work/);
+  });
+});
+
+describe("prestige", () => {
+  it("counts one card's prestige once, and ignores cards worth none", () => {
+    const generator = copiesOf("Generator")[0];
+    const factory = cardNamed(createBlueprintDeck(), "Aluminum Factory");
+
+    expect(prestigeOf([{ card: generator, dice: [], worked: false }])).toBe(0);
+    expect(
+      prestigeOf([
+        { card: generator, dice: [], worked: false },
+        { card: factory, dice: [], worked: false },
+      ]),
+    ).toBe(1);
+  });
+
+  it("adds to goods to make the score", () => {
+    const factory = cardNamed(createBlueprintDeck(), "Aluminum Factory");
+    const state = createInitialState({ seed: 3 });
+    const [player] = patchPlayer(state, 0, {
+      compound: [{ card: factory, dice: [], worked: false }],
+      resources: { metal: 9, energy: 9, goods: 4 },
+    }).players;
+
+    // 4 goods plus the factory's prestige. Metal and energy are not score.
+    expect(scoreOf(player)).toBe(5);
+  });
+
+  it("counts prestige in the compound, never in hand", () => {
+    const beacons = createBlueprintDeck().filter((card) => card.name === "Beacon");
+    const state = createInitialState({ seed: 3 });
+    const [inHand] = patchPlayer(state, 0, {
+      hand: beacons,
+      compound: [],
+      resources: { metal: 0, energy: 0, goods: 3 },
+    }).players;
+
+    expect(scoreOf(inHand)).toBe(3);
+
+    const [built] = patchPlayer(state, 0, {
+      hand: [],
+      compound: beacons.map((card) => ({ card, dice: [], worked: false })),
+      resources: { metal: 0, energy: 0, goods: 3 },
+    }).players;
+
+    // Four Beacons score five, on top of the three goods.
+    expect(scoreOf(built)).toBe(8);
+  });
+
+  it("wins the game on the total, not on either half", () => {
+    const factory = cardNamed(createBlueprintDeck(), "Aluminum Factory");
+    const state = createInitialState({ seed: 3 });
+    const scored = patchPlayer(
+      patchPlayer({ ...state, phase: "cleanup" }, 0, {
+        compound: [{ card: factory, dice: [], worked: false }],
+        // One prestige and enough goods to end it: 13 all told.
+        resources: { metal: 0, energy: 0, goods: END_GOODS },
+      }),
+      1,
+      // More goods, but nothing built, so 12.
+      { resources: { metal: 0, energy: 0, goods: END_GOODS } },
+    );
+
+    const finished = applyMove(scored, { type: "endPhase" });
+    expect(finished.winner).toBe(0);
+  });
+
+  it("calls an equal score a draw", () => {
+    const state = createInitialState({ seed: 3 });
+    const drawn = patchPlayer(
+      patchPlayer({ ...state, phase: "cleanup" }, 0, {
+        resources: { metal: 0, energy: 0, goods: END_GOODS },
+      }),
+      1,
+      { resources: { metal: 0, energy: 0, goods: END_GOODS } },
+    );
+
+    expect(applyMove(drawn, { type: "endPhase" }).winner).toBeNull();
   });
 });
 
@@ -1028,7 +1278,7 @@ describe("applyMove", () => {
     const [mine, otherMine] = copiesOf("Mine");
     const staged: GameState = patchPlayer({ ...state, phase: "work" }, 0, {
       hand: [spare, alsoSpare, mine, otherMine],
-      compound: [{ card: built, dice: [] }],
+      compound: [{ card: built, dice: [], worked: false }],
       resources: { metal: 5, energy: 5, goods: 0 },
       rolled: true,
     });

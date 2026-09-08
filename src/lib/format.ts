@@ -60,16 +60,18 @@ export function describeEffect(effect: Effect): string {
 
 /** What a built blueprint's perk asks for: dice first, then any resource cost. */
 export function describePerkCost(perk: BlueprintPerk): string {
+  const pattern = perk.pattern === "any" ? "" : `${perk.pattern} `;
   const dice =
-    perk.dice === 1
-      ? describeRequirement(perk.accepts)
-      : `${perk.dice} ${perk.matching ? "matching" : ""} dice`.replace("  ", " ");
+    perk.dice === 0
+      ? ""
+      : perk.dice === 1
+        ? describeRequirement(perk.accepts)
+        : `${perk.dice} ${pattern}dice`;
   const accepts =
-    perk.dice > 1 && perk.accepts.kind !== "any"
-      ? ` (${describeRequirement(perk.accepts)})`
-      : "";
-  const cost = costsSomething(perk.cost) ? ` + ${describeResources(perk.cost)}` : "";
-  return `${dice}${accepts}${cost}`;
+    perk.dice > 1 && perk.accepts.kind !== "any" ? ` (${describeRequirement(perk.accepts)})` : "";
+  const cost = costsSomething(perk.cost) ? describeResources(perk.cost) : "";
+
+  return [`${dice}${accepts}`, cost].filter(Boolean).join(" + ") || "nothing";
 }
 
 function costsSomething(resources: Resources): boolean {
@@ -146,8 +148,9 @@ export function describeMove(state: GameState, move: Move): string {
         move.paymentCardId,
       )}`;
     case "activate": {
-      const faces = move.dieIds.map((id) => dieFace(state, id)).join(", ");
-      return `Work ${findCardName(state, move.cardId)} with ${faces}`;
+      const name = findCardName(state, move.cardId);
+      if (move.dieIds.length === 0) return `Work ${name}`;
+      return `Work ${name} with ${move.dieIds.map((id) => dieFace(state, id)).join(", ")}`;
     }
     case "endPhase":
       return state.phase === "cleanup" ? "Start next round" : "End turn";

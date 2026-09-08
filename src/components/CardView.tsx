@@ -76,18 +76,27 @@ export function CardView({
       {card.kind === "contractor" && card.extraCost && (
         <span className={styles.cardMeta}>Also costs: {describeResources(card.extraCost)}</span>
       )}
-      {card.kind === "contractor" ? null : built ? (
-        <span className={styles.cardMeta}>Work: {describePerkCost(card.perk)}</span>
-      ) : (
+      {/* Built, the build cost is history; in hand, both matter. */}
+      {card.kind === "blueprint" && !built && (
         <span className={styles.cardMeta}>
           Build: discard a {card.type}
           {costsResources(card.buildCost) ? `, ${describeResources(card.buildCost)}` : ""}
         </span>
       )}
-      <span className={styles.cardMeta}>
-        {describeEffect(card.kind === "blueprint" ? card.perk.effect : card.effect)}
-      </span>
-      {card.kind === "blueprint" && built && (
+      {card.kind === "blueprint" && card.perk && (
+        <span className={styles.cardMeta}>Work: {describePerkCost(card.perk)}</span>
+      )}
+      {card.kind === "contractor" ? (
+        <span className={styles.cardMeta}>{describeEffect(card.effect)}</span>
+      ) : (
+        card.perk && <span className={styles.cardMeta}>{describeEffect(card.perk.effect)}</span>
+      )}
+      {card.kind === "blueprint" && card.prestige ? (
+        <span className={styles.cardMeta}>
+          {card.prestige} prestige{card.prestigeBonus ? `, +${card.prestigeBonus} for the set` : ""}
+        </span>
+      ) : null}
+      {card.kind === "blueprint" && built && card.perk && card.perk.dice > 0 && (
         <div className={styles.dice}>
           {Array.from({ length: card.perk.dice }, (_, index) => {
             const face = dice[index];
