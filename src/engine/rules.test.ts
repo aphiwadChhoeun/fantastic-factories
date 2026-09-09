@@ -3,12 +3,14 @@ import { createRandomAi } from "@/ai";
 import {
   applyMove,
   AUTOMA_COMPOUND_SIZE,
+  activationOptions,
   AUTOMA_DIE_COLORS,
   dealAutomaCompound,
   groupByCategory,
   standing,
   BLUEPRINT_CATEGORIES,
   BLUEPRINT_TOOLS,
+  buildCostFor,
   canAfford,
   createBlueprintDeck,
   createContractorDeck,
@@ -959,7 +961,7 @@ describe("the Black Market", () => {
     expect(next.players[0].hand).toEqual([]);
     expect(next.blueprints.discard).toContain(line);
     expect(logged(next, /worked Black Market with 5 for Assembly Line/)).toBe(true);
-    expect(logged(next, /took 2 metal, 1 energy/)).toBe(true);
+    expect(logged(next, /chose: gained 2 metal, 1 energy/)).toBe(true);
   });
 
   it("offers one move per blueprint in hand, and none with an empty hand", () => {
@@ -968,35 +970,44 @@ describe("the Black Market", () => {
   });
 
   it("caps the payout at four, and offers every way to take it", () => {
-    const gains = offers(withMarket([beacon])).map((move) =>
-      move.type === "activate" ? move.gain : undefined,
-    );
+    const state = withMarket([beacon]);
+    const perk = market.perk!;
+    const options = activationOptions(perk, beacon);
 
     // A Beacon cost 2 metal and 4 energy; four of those six come back.
-    expect(gains).toEqual([
-      { metal: 0, energy: 4, goods: 0 },
-      { metal: 1, energy: 3, goods: 0 },
-      { metal: 2, energy: 2, goods: 0 },
+    expect(options).toEqual([
+      { kind: "gain", resources: { metal: 0, energy: 4, goods: 0 } },
+      { kind: "gain", resources: { metal: 1, energy: 3, goods: 0 } },
+      { kind: "gain", resources: { metal: 2, energy: 2, goods: 0 } },
     ]);
-  });
+    // One move per way, each pointing at its option by index.
+    expect(
+      offers(state).map((move) => (move.type === "activate" ? move.option : undefined)),
+    ).toEqual([0, 1, 2]);
 
-  it("refuses a haul the discarded card does not pay", () => {
-    const state = withMarket([beacon]);
-    const activate = (gain: Resources): Move => ({
+    const next = applyMove(state, {
       type: "activate",
       cardId: market.id,
       dieIds: ["d0"],
       paymentCardId: beacon.id,
-      gain,
+      option: 2,
+    });
+    expect(next.players[0].resources).toEqual({ metal: 2, energy: 2, goods: 0 });
+  });
+
+  it("refuses a haul the discarded card does not pay", () => {
+    const state = withMarket([beacon]);
+    const activate = (option: number): Move => ({
+      type: "activate",
+      cardId: market.id,
+      dieIds: ["d0"],
+      paymentCardId: beacon.id,
+      option,
     });
 
-    // Over the cap, and under it but more metal than the Beacon ever cost.
-    expect(() => applyMove(state, activate({ metal: 2, energy: 4, goods: 0 }))).toThrow(
-      /does not pay/,
-    );
-    expect(() => applyMove(state, activate({ metal: 3, energy: 1, goods: 0 }))).toThrow(
-      /does not pay/,
-    );
+    // There are three ways to take four; there is no fourth.
+    expect(() => applyMove(state, activate(3))).toThrow(/no such payout/);
+    expect(() => applyMove(state, activate(-1))).toThrow(/no such payout/);
     expect(() =>
       applyMove(state, { type: "activate", cardId: market.id, dieIds: ["d0"] }),
     ).toThrow(/needs a blueprint to discard/);
@@ -1703,7 +1714,7 @@ describe("the Golem", () => {
   it("needs a face, and no other perk takes one", () => {
     expect(() =>
       applyMove(withGolem(6), { type: "activate", cardId: golem.id, dieIds: [] }),
-    ).toThrow(/needs a face to sell/);
+    ).toThrow(/needs a face for the die/);
 
     const battery = cardNamed(createBlueprintDeck(), "Battery Factory");
     const state = patchPlayer(withGolem(6), 0, {
@@ -1810,9 +1821,6 @@ describe("the Gymnasium", () => {
 
 describe("the Harvester", () => {
   const harvester = cardNamed(createBlueprintDeck(), "Harvester");
-  const METAL = { metal: 4, energy: 0, goods: 0 };
-  const ENERGY = { metal: 0, energy: 7, goods: 0 };
-
   function withHarvester(dice: readonly DieFace[]): GameState {
     const state = createInitialState({ seed: 3 });
     const { color } = state.players[0];
@@ -1831,42 +1839,44 @@ describe("the Harvester", () => {
     expect(harvester.prestige).toBe(1);
     expect(harvester.perk?.dice).toBe(2);
     expect(harvester.perk?.pattern).toBe("matching");
-    expect(harvester.perk?.effect).toEqual({ kind: "gainOneOf", options: [METAL, ENERGY] });
+    expect(harvester.perk?.effect).toEqual({
+      kind: "oneOf",
+      options: [
+        { kind: "gain", resources: { metal: 4 } },
+        { kind: "gain", resources: { energy: 7 } },
+      ],
+    });
   });
 
   it("offers both payouts for a pair, and pays only the one taken", () => {
     const state = withHarvester([3, 3, 5, 1]);
-    const gains = legalMoves(state)
+    const options = legalMoves(state)
       .filter((move) => move.type === "activate")
-      .map((move) => (move.type === "activate" ? move.gain : undefined));
+      .map((move) => (move.type === "activate" ? move.option : undefined));
 
-    expect(gains).toEqual([METAL, ENERGY]);
+    expect(options).toEqual([0, 1]);
 
     const next = applyMove(state, {
       type: "activate",
       cardId: harvester.id,
       dieIds: ["d0", "d1"],
-      gain: ENERGY,
+      option: 1,
     });
     expect(next.players[0].resources).toEqual({ metal: 0, energy: 7, goods: 0 });
-    expect(logged(next, /took 7 energy/)).toBe(true);
+    expect(logged(next, /chose: gained 7 energy/)).toBe(true);
   });
 
-  it("refuses a payout it does not print, and one that mixes the two", () => {
+  it("refuses a payout it does not print", () => {
     const state = withHarvester([3, 3, 5, 1]);
-    const activate = (gain: Resources): Move => ({
+    const activate = (option: number): Move => ({
       type: "activate",
       cardId: harvester.id,
       dieIds: ["d0", "d1"],
-      gain,
+      option,
     });
 
-    expect(() => applyMove(state, activate({ metal: 4, energy: 7, goods: 0 }))).toThrow(
-      /does not pay/,
-    );
-    expect(() => applyMove(state, activate({ metal: 0, energy: 0, goods: 4 }))).toThrow(
-      /does not pay/,
-    );
+    expect(() => applyMove(state, activate(2))).toThrow(/no such payout/);
+    expect(() => applyMove(state, activate(-1))).toThrow(/no such payout/);
     // Two payouts and no word on which is not a move.
     expect(() =>
       applyMove(state, { type: "activate", cardId: harvester.id, dieIds: ["d0", "d1"] }),
@@ -2058,6 +2068,216 @@ describe("the Laboratory", () => {
 
     expect(next.players[1].resources.goods).toBe(2);
     expect(next.players[1].hand).toEqual([]);
+  });
+});
+
+describe("the Manufactory", () => {
+  const manufactory = cardNamed(createBlueprintDeck(), "Manufactory");
+
+  function withManufactory(dice: readonly DieFace[]): GameState {
+    const state = createInitialState({ seed: 3 });
+    const { color } = state.players[0];
+    return patchPlayer({ ...state, phase: "work" }, 0, {
+      compound: [{ card: manufactory, dice: [], worked: false }],
+      dice: dice.map((face, i) => ({ id: `d${i}`, face, color, extra: false, spent: false })),
+      rolled: true,
+      hand: [],
+      resources: { metal: 0, energy: 0, goods: 0 },
+    });
+  }
+
+  const work = (state: GameState, option: number) =>
+    applyMove(state, {
+      type: "activate",
+      cardId: manufactory.id,
+      dieIds: ["d0", "d1"],
+      option,
+    });
+
+  it("is a Production wrench costing 2 metal and 3 energy, worth a prestige", () => {
+    expect(manufactory.type).toBe("production");
+    expect(manufactory.tool).toBe("wrench");
+    expect(manufactory.buildCost).toEqual({ metal: 2, energy: 3, goods: 0 });
+    expect(manufactory.prestige).toBe(1);
+    expect(manufactory.perk?.dice).toBe(2);
+    expect(manufactory.perk?.pattern).toBe("matching");
+  });
+
+  it("always pays the good, and then whichever of the three is taken", () => {
+    const state = withManufactory([4, 4, 1, 2]);
+    expect(
+      legalMoves(state)
+        .filter((move) => move.type === "activate")
+        .map((move) => (move.type === "activate" ? move.option : undefined)),
+    ).toEqual([0, 1, 2]);
+
+    expect(work(state, 0).players[0].resources).toEqual({ metal: 2, energy: 0, goods: 1 });
+    expect(work(state, 1).players[0].resources).toEqual({ metal: 0, energy: 3, goods: 1 });
+
+    // The third is not resources at all.
+    const drawn = work(state, 2);
+    expect(drawn.players[0].resources).toEqual({ metal: 0, energy: 0, goods: 1 });
+    expect(drawn.players[0].hand).toHaveLength(2);
+  });
+
+  it("draws off the deck, never the market row", () => {
+    const state = withManufactory([4, 4, 1, 2]);
+    const row = state.blueprints.row.map((card) => card.id);
+    const top = state.blueprints.deck.slice(0, 2).map((card) => card.id);
+
+    const next = work(state, 2);
+
+    expect(next.players[0].hand.map((card) => card.id)).toEqual(top);
+    expect(next.blueprints.row.map((card) => card.id)).toEqual(row);
+  });
+
+  it("will not be worked without saying which of the three", () => {
+    expect(() =>
+      applyMove(withManufactory([4, 4, 1, 2]), {
+        type: "activate",
+        cardId: manufactory.id,
+        dieIds: ["d0", "d1"],
+      }),
+    ).toThrow(/pays more than one way/);
+  });
+});
+
+describe("the Mega Factory", () => {
+  const mega = cardNamed(createBlueprintDeck(), "Mega Factory");
+
+  function withMega(dice: readonly DieFace[]): GameState {
+    const state = createInitialState({ seed: 3 });
+    const { color } = state.players[0];
+    return patchPlayer({ ...state, phase: "work" }, 0, {
+      compound: [{ card: mega, dice: [], worked: false }],
+      dice: dice.map((face, i) => ({ id: `d${i}`, face, color, extra: false, spent: false })),
+      rolled: true,
+      resources: { metal: 0, energy: 0, goods: 0 },
+    });
+  }
+
+  it("is a Production gear costing 3 metal and 2 energy, worth a prestige", () => {
+    expect(mega.type).toBe("production");
+    expect(mega.tool).toBe("gear");
+    expect(mega.buildCost).toEqual({ metal: 3, energy: 2, goods: 0 });
+    expect(mega.prestige).toBe(1);
+    expect(mega.perk?.dice).toBe(3);
+    expect(mega.perk?.pattern).toBe("matching");
+  });
+
+  it("pays two goods and hands over a die at the face named", () => {
+    const state = withMega([2, 2, 2, 5]);
+
+    const next = applyMove(state, {
+      type: "activate",
+      cardId: mega.id,
+      dieIds: ["d0", "d1", "d2"],
+      face: 6,
+    });
+
+    expect(next.players[0].resources).toEqual({ metal: 0, energy: 0, goods: 2 });
+    const bought = next.players[0].dice.at(-1)!;
+    expect(bought.face).toBe(6);
+    expect(bought.color).toBe(EXTRA_DIE_COLOR);
+    expect(bought.extra).toBe(true);
+    expect(bought.spent).toBe(false);
+  });
+
+  it("gives the die away free — unlike the Golem, any face will do", () => {
+    const faces = legalMoves(withMega([2, 2, 2, 5]))
+      .filter((move) => move.type === "activate")
+      .map((move) => (move.type === "activate" ? move.face : undefined));
+
+    // No energy at all, and still every face on offer.
+    expect(faces).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(mega.perk?.costByFace).toBeUndefined();
+  });
+
+  it("wants three matching, not two", () => {
+    expect(
+      legalMoves(withMega([2, 2, 5, 5])).filter((move) => move.type === "activate"),
+    ).toEqual([]);
+  });
+});
+
+describe("the Megalith", () => {
+  const megaliths = copiesOf("Megalith");
+  const beacons = copiesOf("Beacon");
+
+  function holdingMegalith(compound: readonly Building[]): GameState {
+    const state = createInitialState({ seed: 3 });
+    return patchPlayer({ ...state, phase: "work" }, 0, {
+      compound: [...compound],
+      rolled: true,
+      hand: [megaliths[1], cardNamed(createBlueprintDeck(), "Battery Factory")],
+      resources: { metal: 9, energy: 9, goods: 0 },
+    });
+  }
+
+  it("is a Monument wrench costing 5 metal and 2 energy, worth three prestige", () => {
+    expect(megaliths[0].type).toBe("monument");
+    expect(megaliths[0].tool).toBe("wrench");
+    expect(megaliths[0].buildCost).toEqual({ metal: 5, energy: 2, goods: 0 });
+    expect(megaliths[0].prestige).toBe(3);
+    // "Future Megaliths" only means anything if you may stand more than one.
+    expect(megaliths[0].duplicable).toBe(true);
+    expect(megaliths[0].perk).toBeUndefined();
+    expect(megaliths[0].passive).toEqual({ kind: "cheaperCopies", per: "monument" });
+  });
+
+  it("costs full price until one is standing, however many Monuments there are", () => {
+    const state = holdingMegalith(beacons.slice(0, 3).map(standing));
+
+    // Three Beacons up and the first Megalith is still 5 metal: the discount
+    // is what a standing Megalith grants, not what Monuments grant.
+    expect(buildCostFor(state.players[0], megaliths[1])).toEqual({
+      metal: 5,
+      energy: 2,
+      goods: 0,
+    });
+  });
+
+  it("takes a metal off the next for every Monument standing", () => {
+    // One Megalith and two Beacons: three Monuments, so three metal off.
+    const state = holdingMegalith([megaliths[0], beacons[0], beacons[1]].map(standing));
+
+    expect(buildCostFor(state.players[0], megaliths[1])).toEqual({
+      metal: 2,
+      energy: 2,
+      goods: 0,
+    });
+
+    const next = applyMove(state, {
+      type: "build",
+      cardId: megaliths[1].id,
+      paymentCardId: state.players[0].hand[1].id,
+    });
+    expect(next.players[0].resources).toEqual({ metal: 7, energy: 7, goods: 0 });
+    expect(logged(next, /built Megalith for Battery Factory and 2 metal, 2 energy/)).toBe(true);
+  });
+
+  it("never goes below nothing", () => {
+    // Six Monuments would be six off a five-metal card.
+    const compound = [megaliths[0], ...beacons].map(standing);
+    const state = holdingMegalith([...compound, standing(megaliths[2])]);
+
+    expect(buildCostFor(state.players[0], megaliths[1]).metal).toBe(0);
+  });
+
+  it("discounts only its own kind", () => {
+    const state = holdingMegalith([megaliths[0], beacons[0]].map(standing));
+    const battery = cardNamed(createBlueprintDeck(), "Battery Factory");
+
+    // The Beacon is a Monument too, and gets no discount from any of it.
+    expect(buildCostFor(state.players[0], beacons[2])).toEqual(beacons[2].buildCost);
+    expect(buildCostFor(state.players[0], battery)).toEqual(battery.buildCost);
+  });
+
+  it("may be stacked, like the Beacon", () => {
+    const state = holdingMegalith([standing(megaliths[0])]);
+    const builds = legalMoves(state).filter((move) => move.type === "build");
+
+    expect(builds.map((move) => move.cardId)).toContain(megaliths[1].id);
   });
 });
 

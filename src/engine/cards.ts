@@ -271,10 +271,10 @@ const BLUEPRINTS: readonly { template: BlueprintTemplate; copies: number }[] = [
         accepts: { kind: "any" },
         cost: FREE,
         effect: {
-          kind: "gainOneOf",
+          kind: "oneOf",
           options: [
-            { metal: 4, energy: 0, goods: 0 },
-            { metal: 0, energy: 7, goods: 0 },
+            { kind: "gain", resources: { metal: 4 } },
+            { kind: "gain", resources: { energy: 7 } },
           ],
         },
       },
@@ -310,6 +310,73 @@ const BLUEPRINTS: readonly { template: BlueprintTemplate; copies: number }[] = [
       prestige: 1,
       // No perk at all: it watches for goods and draws once a round.
       passive: { kind: "drawOnGoods" },
+    },
+  },
+  {
+    copies: 2,
+    template: {
+      name: "Manufactory",
+      type: "production",
+      tool: "wrench",
+      buildCost: { metal: 2, energy: 3, goods: 0 },
+      prestige: 1,
+      perk: {
+        dice: 2,
+        pattern: "matching",
+        accepts: { kind: "any" },
+        cost: FREE,
+        // The good is certain; the rest is a choice, and one of the three is
+        // not resources at all.
+        effect: {
+          kind: "all",
+          effects: [
+            { kind: "gain", resources: { goods: 1 } },
+            {
+              kind: "oneOf",
+              options: [
+                { kind: "gain", resources: { metal: 2 } },
+                { kind: "gain", resources: { energy: 3 } },
+                { kind: "draw", count: 2 },
+              ],
+            },
+          ],
+        },
+      },
+    },
+  },
+  {
+    copies: 2,
+    template: {
+      name: "Mega Factory",
+      type: "production",
+      tool: "gear",
+      buildCost: { metal: 3, energy: 2, goods: 0 },
+      prestige: 1,
+      perk: {
+        dice: 3,
+        pattern: "matching",
+        accepts: { kind: "any" },
+        cost: FREE,
+        // A die at any face, and unlike the Golem's it costs nothing.
+        effect: {
+          kind: "all",
+          effects: [{ kind: "gain", resources: { goods: 2 } }, { kind: "gainDie" }],
+        },
+      },
+    },
+  },
+  {
+    copies: 3,
+    template: {
+      name: "Megalith",
+      type: "monument",
+      tool: "wrench",
+      buildCost: { metal: 5, energy: 2, goods: 0 },
+      prestige: 3,
+      // Meant to be stacked, like the Beacon — "future Megaliths" says as much
+      // — and each one standing makes the next cheaper.
+      duplicable: true,
+      passive: { kind: "cheaperCopies", per: "monument" },
     },
   },
 ];

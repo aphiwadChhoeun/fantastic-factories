@@ -107,11 +107,13 @@ export type Effect =
    * The eating is the perk's `discardsCard`; this is only the payout.
    */
   | { readonly kind: "gainCardCost"; readonly max: number }
+  /** Everything in turn — the Mega Factory pays goods *and* hands over a die. */
+  | { readonly kind: "all"; readonly effects: readonly Effect[] }
   /**
-   * One of several payouts, whichever the player takes — the Harvester pays
-   * four metal or seven energy, never both.
+   * One of several, whichever the player takes — the Harvester pays four metal
+   * or seven energy, never both. Which one is on the move, as an index.
    */
-  | { readonly kind: "gainOneOf"; readonly options: readonly Resources[] }
+  | { readonly kind: "oneOf"; readonly options: readonly Effect[] }
   /**
    * Turn an unspent die over to the face on the other side — the Dojo. The die
    * is not spent and does not go on the card: it stays on the table showing
@@ -293,7 +295,13 @@ export type BlueprintPerk = {
  */
 export type Passive =
   /** Draw a blueprint the first time goods are gained this round. */
-  { readonly kind: "drawOnGoods" };
+  | { readonly kind: "drawOnGoods" }
+  /**
+   * Later copies of this card cost a metal less for every card of `per` type
+   * already standing — the Megalith, which gets cheaper the more Monuments
+   * are up. Continuous rather than once a round, so it spends no `worked`.
+   */
+  | { readonly kind: "cheaperCopies"; readonly per: BlueprintCategory };
 
 /** Built into your compound, where its perk can be used once per round. */
 export type BlueprintCard = CardBase & {
@@ -530,20 +538,21 @@ export type Move =
        */
       readonly paymentCardId?: string;
       /**
-       * Which resources to take, when the payout is capped and so has to be
-       * chosen. Only the Black Market pays this way.
-       */
-      readonly gain?: Resources;
-      /**
        * The die a perk acts on rather than spends — the Dojo turns it over.
        * Never one of `dieIds`: it is not paid, and it does not go on the card.
        */
       readonly targetDieId?: string;
       /**
-       * The face bought, for a perk that hands over a die — the Golem. It is
-       * what the die will show and what it costs, both.
+       * The face bought, for a perk that hands over a die — the Golem, where
+       * it is what the die shows and what it costs both, and the Mega Factory,
+       * where it is free.
        */
       readonly face?: DieFace;
+      /**
+       * Which of the alternatives a perk offers, by index — the Harvester's
+       * two, the Manufactory's three, the Black Market's ways to take a cap.
+       */
+      readonly option?: number;
     }
   | { readonly type: "endPhase" };
 

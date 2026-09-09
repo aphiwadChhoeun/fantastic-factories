@@ -160,8 +160,15 @@ matters to one and not the other: the Black Market pays back what it would have
 cost to build, while the Incinerator burns anything for the same flat six
 energy. A Beacon is worth four at the Black Market and six in the fire.
 
-**The Harvester pays one way or the other.** Two matching dice buy four metal
-*or* seven energy, never both, and which one is the player's to say.
+**Some perks pay one way or the other.** The Harvester's two matching dice buy
+four metal *or* seven energy, never both. The Manufactory splits the difference:
+a good is certain, and beside it you take two metal, three energy, or two cards
+off the deck. Either way the choice is the player's, and it rides on the move as
+an index into what the card offers.
+
+Effects compose, which is what lets a card do two things or offer three: `all`
+runs each in turn and `oneOf` runs whichever was picked, and either can hold the
+other.
 
 **Some perks pay out in dice rather than in goods.** Three of them change a die
 you already have: the Dojo turns it over to the face on the other side —
@@ -177,7 +184,8 @@ your own dice.
 **The Golem sells you a die outright.** Name a face and pay that much energy —
 a 5 costs five — and it arrives white and unspent, yours for the round like a
 contractor's loan, and gone at cleanup. It is the only perk whose price you
-choose rather than read.
+choose rather than read. The Mega Factory hands one over on the same terms and
+charges nothing for it, having already asked for three matching dice.
 
 **The Foundry's payout is the die too.** Place any die, pay energy equal to its
 face, and take that much metal — a 5 costs five energy and pays five metal. It
@@ -221,22 +229,35 @@ fired this round` so you can tell which.
 The automaton never works a perk, and a card in hand would be the first it ever
 held, so a Laboratory in its compound stays quiet like the rest of it.
 
+**The Megalith discounts the next one.** It is not worked either: while one
+stands, every later Megalith costs a metal less for each Monument in your
+compound — the Megalith itself included — down to nothing but the wrench.
+
+Read as written, `future Megalith's build cost is reduced`, the discount is
+what a *standing* Megalith grants. So the first one is full price however many
+Beacons are beside it, and only the second onwards is cheap. The other reading
+— that the card is simply cheaper the more Monuments you hold, first one
+included — is a one-line change if it is the right one.
+
+It is the second blueprint you may stand more than one of, and at 3 prestige
+each it is the heaviest scorer in the deck.
+
 ### Scoring
 
 **Your score is your goods plus the prestige standing in your compound.**
 Blueprints in hand are worth nothing — prestige only counts once built. Metal
 and energy are not score either; they are what you spend to get there.
 
-Most blueprints are worth 1 prestige; the Concrete Plant and the three Training
-cards are worth none, and the Beacon scores as a set. The highest score wins,
-and an equal score is a draw.
+Most blueprints are worth 1 prestige; the Megalith is worth 3, the Concrete
+Plant and the Training cards are worth none, and the Beacon scores as a set.
+The highest score wins, and an equal score is a draw.
 
 Every Training card is worth nothing but what it does to your dice, which is
 the closest thing the deck has to a trade-off between scoring and playing well.
 
 ### The real blueprints so far
 
-Thirty-seven cards, sixteen of them distinct — every one a real card.
+Forty-four cards, nineteen of them distinct — every one a real card.
 
 | Blueprint        | Copies | Type       | Tool   | Build cost         | Perk                                     | Prestige      |
 | ---------------- | -----: | ---------- | ------ | ------------------ | ---------------------------------------- | ------------- |
@@ -256,6 +277,9 @@ Thirty-seven cards, sixteen of them distinct — every one a real card.
 | Harvester        |      2 | Utility    | hammer | 1 metal + 2 energy | 2 matching dice → 4 metal *or* 7 energy    | 1             |
 | Incinerator      |      2 | Utility    | shovel | 2 metal + 1 energy | a blueprint from hand + 1 metal → 6 energy | 1             |
 | Laboratory       |      2 | Special    | wrench | 1 metal + 4 energy | none — it watches (see below)              | 1             |
+| Manufactory      |      2 | Production | wrench | 2 metal + 3 energy | 2 matching dice → 1 good, and 2 metal *or* 3 energy *or* 2 blueprints | 1 |
+| Mega Factory     |      2 | Production | gear   | 3 metal + 2 energy | 3 matching dice → 2 goods, and a free die at any face | 1     |
+| Megalith         |      3 | Monument   | wrench | 5 metal + 2 energy | none — it discounts the next (see below)   | 3             |
 
 Every build cost is on top of discarding a blueprint of the same tool.
 
@@ -267,9 +291,9 @@ pays out whole; one that cost more pays four, and the player says which four —
 a Beacon, at 2 metal and 4 energy, can be sold for any of 4 energy, 1 metal and
 3 energy, or 2 metal and 2 energy.
 
-**The Beacon is the one blueprint you may stand more than one of**, and it is
-the only card that scores as a set: one prestige each plus one for having any,
-so four Beacons are worth five.
+**The Beacon and the Megalith are the blueprints you may stand more than one
+of.** The Beacon is the only card that scores as a set: one prestige each plus
+one for having any, so four Beacons are worth five.
 
 The contractor deck so far — 17 cards, eight kinds:
 
@@ -402,10 +426,12 @@ Start in `src/engine/rules.ts`. The implemented slice is: take a card from one
 of the two rows, roll dice, spend dice to build blueprints, activate your
 compound and work your Headquarters, end the round. Known stubs:
 
-- **37 cards, and the shape is evening out.** Hammers are still the thinnest
+- the Megalith's discount is read as coming from a *standing* Megalith, so the
+  first one is full price. That "future" is doing all the work — see Passives
+- **44 cards, and the shape is evening out.** Hammers are still the thinnest
   tool at 6, and Special the thinnest type at 2 — so the automaton's purple die
   now has something to count, but only just
-- **37 cards is still a smallish deck.** Setup deals eleven of them — four to
+- **44 cards is still a smallish deck.** Setup deals eleven of them — four to
   hand, four to the row, three to the automaton — so the draw pile turns over
   fast and the discard reshuffles often. Nothing breaks; games just repeat
   themselves
@@ -415,17 +441,17 @@ compound and work your Headquarters, end the round. Known stubs:
   the Specialist's extra die is white like the Hired Hands dice — neither is
   spelled out on the card
 - an equal score is a draw. No tiebreak is defined
-- 16 distinct blueprints and a Beacon that stacks four deep put the 10-card
+- 19 distinct blueprints, plus Beacons and Megaliths that stack, put the 10-card
   `END_COMPOUND_SIZE` only just in reach for a human — the automaton, dealt
   three and taking one a turn, gets there in seven rounds
 - the Headquarters is the same for every player. The published game hands out
   one of several starting tiles
-- `Effect` — the real game needs many more variants than the twelve here
+- `Effect` — the real game needs many more variants than the thirteen here
 - a `draw` effect always pulls blueprints; no card lets you choose a deck yet
 - the Black Market's cap is read as four resources in total, and the card it
   eats is discarded rather than kept. Taking less than the cap is not offered
-- the automaton's dice are lopsided against the deck it draws from: 13
-  Production copies to 8 Training, 8 Utility, 6 Monument (which never pays)
+- the automaton's dice are lopsided against the deck it draws from: 17
+  Production copies to 9 Monument (which never pays), 8 Training, 8 Utility
   and 2 Special. Its blue die does most of the work and its purple one least
 - no rule reads a blueprint's type outside the automaton's Work Phase
 - a Specialist die is set before anything is spent, but the Dojo and the

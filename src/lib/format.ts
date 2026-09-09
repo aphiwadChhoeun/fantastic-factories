@@ -1,6 +1,7 @@
 /** Presentation-only helpers. The engine stays free of display concerns. */
 
 import {
+  activationOptions,
   hqSection,
   oppositeFace,
   type ActivationRequirement,
@@ -60,8 +61,15 @@ export function describeEffect(effect: Effect): string {
     }
     case "gainCardCost":
       return `Gain the discarded blueprint's build cost back, up to ${effect.max}`;
-    case "gainOneOf":
-      return `Gain ${effect.options.map((option) => describeResources(option)).join(" or ")}`;
+    // Only the first part of a run keeps its capital, and a choice says it is
+    // one — otherwise "gain a good and gain 2 metal or 3 energy" reads as
+    // though the good were in question too.
+    case "all":
+      return effect.effects
+        .map((part, index) => (index === 0 ? describeEffect(part) : lowered(part)))
+        .join(", and ");
+    case "oneOf":
+      return `either ${effect.options.map(lowered).join(", or ")}`;
     case "flipDie":
       return "Turn an unspent die over to its opposite face — 5 becomes 2";
     case "stepDie": {
@@ -71,9 +79,17 @@ export function describeEffect(effect: Effect): string {
     }
     case "gainByFace":
       return `Gain ${effect.resource} equal to the die placed`;
+    // What it costs, if anything, is on the Work line — the Golem charges for
+    // the face and the Mega Factory throws it in.
     case "gainDie":
-      return "Buy an extra white die at any face — it costs what it shows";
+      return "Take an extra white die at any face";
   }
+}
+
+/** Mid-sentence, so the leading capital comes off. */
+function lowered(effect: Effect): string {
+  const described = describeEffect(effect);
+  return described.charAt(0).toLowerCase() + described.slice(1);
 }
 
 /** What a card does by itself, with nothing placed on it and nothing paid. */
@@ -81,6 +97,8 @@ export function describePassive(passive: Passive): string {
   switch (passive.kind) {
     case "drawOnGoods":
       return "Draw a blueprint the first time you gain goods each round";
+    case "cheaperCopies":
+      return `Later copies cost 1 metal less per ${passive.per} card standing`;
   }
 }
 
@@ -166,6 +184,23 @@ function changedFaceLabel(
   return "?";
 }
 
+/**
+ * Which of a perk's alternatives an activation takes, named. The engine works
+ * the list out; this only has to read the one the move points at.
+ */
+function describeChoice(state: GameState, move: Extract<Move, { type: "activate" }>): string {
+  if (move.option === undefined) return "";
+  const player = state.players[state.currentPlayerIndex];
+  const perk = player.compound.find((b) => b.card.id === move.cardId)?.card.perk;
+  if (!perk) return "";
+
+  const eaten = move.paymentCardId
+    ? (player.hand.find((card) => card.id === move.paymentCardId) ?? null)
+    : null;
+  const chosen = activationOptions(perk, eaten)[move.option];
+  return chosen ? lowered(chosen) : "";
+}
+
 export function describeMove(state: GameState, move: Move): string {
   switch (move.type) {
     case "draft":
@@ -203,25 +238,27 @@ export function describeMove(state: GameState, move: Move): string {
       )}`;
     case "activate": {
       const name = findCardName(state, move.cardId);
-      const dice =
-        move.dieIds.length === 0
-          ? ""
-          : ` with ${move.dieIds.map((id) => dieFace(state, id)).join(", ")}`;
-      // What it eats, and which of its payouts is being taken.
-      const eaten = move.paymentCardId
-        ? ` — burn ${findCardName(state, move.paymentCardId)}`
-        : "";
-      const taken = move.gain ? ` for ${describeResources(move.gain)}` : "";
-      const traded = eaten + taken;
       // A perk that changes a die: which one, and what it becomes. The card
       // itself says how, so the label reads off its effect.
       if (move.targetDieId) {
         const face = dieFace(state, move.targetDieId);
         return `Work ${name} — turn a ${face} into a ${changedFaceLabel(state, move, face)}`;
       }
-      // The Golem: the face bought is also what it costs.
-      if (move.face) return `Work ${name} — buy a die showing ${move.face}`;
-      return `Work ${name}${dice}${traded}`;
+
+      const dice =
+        move.dieIds.length === 0
+          ? ""
+          : ` with ${move.dieIds.map((id) => dieFace(state, id)).join(", ")}`;
+      // Whatever the move settled: what it eats, the face it buys, and which
+      // of the perk's alternatives is being taken.
+      const parts = [
+        move.paymentCardId ? `burn ${findCardName(state, move.paymentCardId)}` : "",
+        move.face ? `take a die showing ${move.face}` : "",
+        describeChoice(state, move),
+      ].filter(Boolean);
+      const settled = parts.length > 0 ? ` — ${parts.join(", ")}` : "";
+
+      return `Work ${name}${dice}${settled}`;
     }
     case "discard":
       return move.kind === "resource"
