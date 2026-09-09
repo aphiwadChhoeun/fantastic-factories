@@ -42,6 +42,15 @@ export type BoardMoves = {
   readonly freeActivations: ReadonlyMap<string, Move>;
   /** Die id -> where that die can go. */
   readonly dice: ReadonlyMap<string, DieTargets>;
+  /**
+   * Forced by the end-of-phase limits, and empty the rest of the time. The
+   * resource ones have nothing on the board to point at, so they are buttons;
+   * a card discard is a click on the card, like a build.
+   */
+  readonly discards: {
+    readonly resources: readonly Move[];
+    readonly cards: ReadonlyMap<string, readonly Move[]>;
+  };
 };
 
 const NO_TARGETS: DieTargets = { sections: new Map(), activations: new Map() };
@@ -66,6 +75,8 @@ export function indexMoves(moves: readonly Move[], rolled: readonly Die[] = []):
   const builds = new Map<string, Move[]>();
   const freeActivations = new Map<string, Move>();
   const dice = new Map<string, DieTargets>();
+  const discardResources: Move[] = [];
+  const discardCards = new Map<string, Move[]>();
   const faces = new Map(rolled.map((die) => [die.id, die.face]));
 
   for (const move of moves) {
@@ -75,6 +86,10 @@ export function indexMoves(moves: readonly Move[], rolled: readonly Die[] = []):
         break;
       case "build":
         push(builds, move.cardId, move);
+        break;
+      case "discard":
+        if (move.kind === "card") push(discardCards, move.cardId, move);
+        else discardResources.push(move);
         break;
       case "placeDie":
         (targetsFor(dice, move.dieId).sections as Map<HqSectionId, Move>).set(move.section, move);
@@ -105,7 +120,13 @@ export function indexMoves(moves: readonly Move[], rolled: readonly Die[] = []):
     }
   }
 
-  return { takes, builds, freeActivations, dice };
+  return {
+    takes,
+    builds,
+    freeActivations,
+    dice,
+    discards: { resources: discardResources, cards: discardCards },
+  };
 }
 
 /** The blueprint a move spends out of hand, if it spends one. */

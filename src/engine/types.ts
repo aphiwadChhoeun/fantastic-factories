@@ -54,6 +54,12 @@ export type Resources = {
   readonly goods: number;
 };
 
+/**
+ * The two resources that are *stock* rather than score, and so are what the
+ * end-of-phase limit counts. Goods are neither spent nor capped.
+ */
+export type Stock = "metal" | "energy";
+
 /** What die face a building or a contractor demands. */
 export type ActivationRequirement =
   | { readonly kind: "any" }
@@ -460,6 +466,13 @@ export type Move =
       /** The blueprint discarded to pay. Same tool, different card. */
       readonly paymentCardId: string;
     }
+  /**
+   * Thrown away to come down to the end-of-phase limits: one resource, or one
+   * blueprint out of hand. Legal only while over a limit, and one at a time,
+   * so the count can be watched falling.
+   */
+  | { readonly type: "discard"; readonly kind: "resource"; readonly resource: Stock }
+  | { readonly type: "discard"; readonly kind: "card"; readonly cardId: string }
   /**
    * The automaton's whole Market Phase, read off its green die: take a card
    * from the row, or reveal one and sweep a row away.

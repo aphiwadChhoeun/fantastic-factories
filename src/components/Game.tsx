@@ -44,9 +44,15 @@ export function Game() {
 
   /** Every move that still fits a choice: taking a card, building, working. */
   function optionsFor(choice: Pending): readonly Move[] {
+    // A card in hand can be over the limit and buildable at the same time, so
+    // the sources are gathered rather than the first one winning.
     const all = choice.dieId
       ? (board.dice.get(choice.dieId)?.activations.get(choice.cardId) ?? [])
-      : (board.takes.get(choice.cardId) ?? board.builds.get(choice.cardId) ?? []);
+      : [
+          ...(board.takes.get(choice.cardId) ?? []),
+          ...(board.builds.get(choice.cardId) ?? []),
+          ...(board.discards.cards.get(choice.cardId) ?? []),
+        ];
     return choice.paymentCardId
       ? all.filter((move) => paymentOf(move) === choice.paymentCardId)
       : all;
@@ -65,8 +71,11 @@ export function Game() {
   // question. Anything still open after that is spelled out as buttons —
   // which resources the Black Market pays, or which run works an Assembly Line.
   const payments = choice && payers.size > 1 ? paymentsFor(options) : null;
-  const choices =
-    choice && !payments ? options.map((move) => ({ move, label: describeMove(state, move) })) : [];
+  // A move that spends no card cannot be picked by highlighting one, so it is
+  // always spelled out. That is what keeps "discard this card" reachable on a
+  // card you could also build, where the rest of the options want a payment.
+  const open = choice ? (payments ? options.filter((move) => !paymentOf(move)) : options) : [];
+  const choices = open.map((move) => ({ move, label: describeMove(state, move) }));
 
   const status = state.gameOver
     ? state.winner === null
@@ -126,6 +135,11 @@ export function Game() {
       targets: dragging ? (board.dice.get(dragging) ?? null) : null,
       buildable: new Set(board.builds.keys()),
       freeActivations: board.freeActivations,
+      discardable: new Set(board.discards.cards.keys()),
+      discards: board.discards.resources.map((move) => ({
+        move,
+        label: describeMove(state, move),
+      })),
       payments,
       choices,
       pending: choice?.cardId ?? null,

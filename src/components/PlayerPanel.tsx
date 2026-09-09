@@ -3,7 +3,10 @@ import {
   AUTOMA_PRODUCTION,
   canAfford,
   countByCategory,
+  HAND_LIMIT,
+  overLimits,
   perkCost,
+  RESOURCE_LIMIT,
   scoreOf,
   type Building,
   type Move,
@@ -32,6 +35,10 @@ export type PanelInteraction = {
   readonly buildable: ReadonlySet<string>;
   /** Buildings whose perk takes no dice, and so is clicked rather than dragged. */
   readonly freeActivations: ReadonlyMap<string, Move>;
+  /** Hand cards that could come off to meet the end-of-phase limit. */
+  readonly discardable: ReadonlySet<string>;
+  /** Resource discards forced by the limit. Nothing on the board to point at. */
+  readonly discards: readonly { readonly move: Move; readonly label: string }[];
   /** Hand cards that could pay for whatever is mid-choice, if anything. */
   readonly payments: ReadonlyMap<string, readonly Move[]> | null;
   /**
@@ -107,6 +114,30 @@ function ProductionSummary({ player }: { player: Player }) {
   );
 }
 
+/**
+ * Whatever a choice still leaves open, as buttons: which resources the Black
+ * Market pays, which run works an Assembly Line, or — on a card you could also
+ * build — that you simply want it gone.
+ */
+function Choices({ interaction }: { interaction?: PanelInteraction }) {
+  if (!interaction || interaction.choices.length === 0) return null;
+
+  return (
+    <div className={styles.choices}>
+      {interaction.choices.map(({ move, label }) => (
+        <button
+          key={moveKey(move)}
+          type="button"
+          className={styles.moveButton}
+          onClick={() => interaction.onPlay(move)}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 type Props = {
   player: Player;
   active: boolean;
@@ -118,6 +149,9 @@ export function PlayerPanel({ player, active, interaction }: Props) {
   // The automaton holds no cards and never places a die on its Headquarters,
   // so both sections would be permanently empty furniture.
   const automaton = player.isAi;
+  const over = overLimits(player);
+  // A choice about a card in hand is asked beside the hand, not the compound.
+  const choosingInHand = player.hand.some((card) => card.id === interaction?.pending);
 
   function startDrag(event: DragEvent, dieId: string) {
     event.dataTransfer.effectAllowed = "move";
@@ -145,6 +179,36 @@ export function PlayerPanel({ player, active, interaction }: Props) {
           <strong title="Goods plus prestige standing">{scoreOf(player)} score</strong>
         </span>
       </header>
+
+      {/*
+        * Over a limit, the Work Phase cannot end until it comes down. Said up
+        * top, because until it is dealt with the End turn button is gone and
+        * its absence is the only other clue.
+        */}
+      {interaction && (over.resources > 0 || over.cards > 0) && (
+        <div>
+          <p className={styles.prompt}>
+            {over.resources > 0 &&
+              `Over by ${over.resources} — keep at most ${RESOURCE_LIMIT} metal and energy. `}
+            {over.cards > 0 &&
+              `Over by ${over.cards} — keep at most ${HAND_LIMIT} cards, so click one to discard.`}
+          </p>
+          {interaction.discards.length > 0 && (
+            <div className={styles.choices}>
+              {interaction.discards.map(({ move, label }) => (
+                <button
+                  key={moveKey(move)}
+                  type="button"
+                  className={styles.moveButton}
+                  onClick={() => interaction.onPlay(move)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <div>
         <div className={styles.sectionTitle}>Dice</div>
@@ -236,20 +300,8 @@ export function PlayerPanel({ player, active, interaction }: Props) {
             })}
           </div>
         )}
-        {interaction && interaction.choices.length > 0 && (
-          <div className={styles.choices}>
-            {interaction.choices.map(({ move, label }) => (
-              <button
-                key={moveKey(move)}
-                type="button"
-                className={styles.moveButton}
-                onClick={() => interaction.onPlay(move)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        )}
+        {/* Asked beside whichever card is being chosen for. */}
+        {!choosingInHand && <Choices interaction={interaction} />}
       </div>
 
       {/* The automaton has no hand — a card it takes goes straight up. */}
@@ -260,6 +312,7 @@ export function PlayerPanel({ player, active, interaction }: Props) {
         {interaction?.payments && (
           <p className={styles.prompt}>Click a highlighted blueprint to discard as payment.</p>
         )}
+        {choosingInHand && <Choices interaction={interaction} />}
         {player.hand.length === 0 ? (
           <p className={styles.empty}>No cards.</p>
         ) : (
@@ -269,18 +322,25 @@ export function PlayerPanel({ player, active, interaction }: Props) {
               const pending = interaction?.pending === card.id;
               // Mid-choice the hand is for paying, so only the cards that
               // could pay stay live — plus the one being paid for, to cancel.
-              const buildable =
-                (interaction?.buildable.has(card.id) ?? false) && !interaction?.pending;
-              const clickable = paying || pending || buildable;
+              const live = !interaction?.pending;
+              const buildable = (interaction?.buildable.has(card.id) ?? false) && live;
+              const droppable = (interaction?.discardable.has(card.id) ?? false) && live;
+              const clickable = paying || pending || buildable || droppable;
 
               return (
                 <CardView
                   key={card.id}
                   card={card}
-                  highlight={paying || buildable}
+                  highlight={paying || buildable || droppable}
                   selected={pending}
                   onSelect={clickable ? () => interaction?.onSelectCard(card.id) : undefined}
-                  selectLabel={paying ? `Discard ${card.name} to pay` : `Build ${card.name}`}
+                  selectLabel={
+                    paying
+                      ? `Discard ${card.name} to pay`
+                      : droppable && !buildable
+                        ? `Discard ${card.name}`
+                        : `Build ${card.name}`
+                  }
                 />
               );
             })}

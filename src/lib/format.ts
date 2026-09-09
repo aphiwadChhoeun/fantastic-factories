@@ -204,6 +204,10 @@ export function describeMove(state: GameState, move: Move): string {
       }
       return `Work ${name}${dice}${traded}`;
     }
+    case "discard":
+      return move.kind === "resource"
+        ? `Discard 1 ${move.resource}`
+        : `Discard ${findCardName(state, move.cardId)}`;
     // The automaton's two moves. They are never offered to a human, but the
     // move list shows whatever is legal, so they still need a name.
     case "automaMarket":

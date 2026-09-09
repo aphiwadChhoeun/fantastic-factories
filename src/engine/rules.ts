@@ -40,12 +40,24 @@ import {
   type Move,
   type Player,
   type Resources,
+  type Stock,
   type WorkPerks,
 } from "./types";
 
 /** A player who reaches either threshold ends the game. */
 export const END_GOODS = 12;
 export const END_COMPOUND_SIZE = 10;
+
+/**
+ * What may be carried out of a Work Phase. Anything over comes off before the
+ * phase can end — the player chooses what goes.
+ *
+ * The resource limit counts metal and energy together and ignores goods: goods
+ * are score, not stock, and are what `END_GOODS` watches instead. That the two
+ * numbers happen to match is a coincidence, not a shared rule.
+ */
+export const RESOURCE_LIMIT = 12;
+export const HAND_LIMIT = 10;
 
 /**
  * Safety valve. The slice implemented below cannot deadlock, but a partially
@@ -137,6 +149,28 @@ export function prestigeOf(compound: readonly Building[]): number {
   for (const bonus of bonuses.values()) total += bonus;
 
   return total;
+}
+
+/** Both stock resources, for enumerating what a forced discard may take. */
+const STOCK: readonly Stock[] = ["metal", "energy"];
+
+/** Metal and energy together — what the end-of-phase limit counts. */
+export function stockOf(resources: Resources): number {
+  return resources.metal + resources.energy;
+}
+
+/**
+ * How far over the end-of-phase limits a player is, in each. Zeroes mean the
+ * Work Phase may end.
+ *
+ * Exported because the board has to say what is being asked for before the
+ * player can be expected to give anything up.
+ */
+export function overLimits(player: Player): { resources: number; cards: number } {
+  return {
+    resources: Math.max(0, stockOf(player.resources) - RESOURCE_LIMIT),
+    cards: Math.max(0, player.hand.length - HAND_LIMIT),
+  };
 }
 
 function unspentDice(player: Player): Die[] {
@@ -373,7 +407,24 @@ export function legalMoves(state: GameState): Move[] {
         }
       }
 
-      moves.push({ type: "endPhase" });
+      // Nothing carries more than the limits out of a Work Phase. While a
+      // player is over, the way down is offered and `endPhase` is not —
+      // though everything else stays on, since spending is also a way down.
+      const over = overLimits(player);
+      if (over.resources > 0) {
+        for (const resource of STOCK) {
+          if (player.resources[resource] > 0) {
+            moves.push({ type: "discard", kind: "resource", resource });
+          }
+        }
+      }
+      if (over.cards > 0) {
+        for (const card of player.hand) {
+          moves.push({ type: "discard", kind: "card", cardId: card.id });
+        }
+      }
+      if (over.resources === 0 && over.cards === 0) moves.push({ type: "endPhase" });
+
       return moves;
     }
 
@@ -1426,6 +1477,48 @@ export function applyMove(state: GameState, move: Move): GameState {
       );
     }
 
+    case "discard": {
+      if (state.phase !== "work") throw new Error("Discarding down happens in the Work Phase");
+      const over = overLimits(player);
+
+      if (move.kind === "resource") {
+        if (over.resources === 0) {
+          throw new Error(`${player.name} is inside the ${RESOURCE_LIMIT} resource limit`);
+        }
+        if (player.resources[move.resource] === 0) {
+          throw new Error(`${player.name} has no ${move.resource} to discard`);
+        }
+        const dropped = updatePlayer(state, index, (p) => ({
+          ...p,
+          resources: {
+            metal: p.resources.metal - (move.resource === "metal" ? 1 : 0),
+            energy: p.resources.energy - (move.resource === "energy" ? 1 : 0),
+            goods: p.resources.goods,
+          },
+        }));
+        return log(dropped, `${player.name} discarded 1 ${move.resource}`);
+      }
+
+      if (over.cards === 0) {
+        throw new Error(`${player.name} is inside the ${HAND_LIMIT} card hand limit`);
+      }
+      const card = player.hand.find((c) => c.id === move.cardId);
+      if (!card) throw new Error(`${player.name} does not hold ${move.cardId}`);
+
+      const dropped = updatePlayer(
+        {
+          ...state,
+          blueprints: {
+            ...state.blueprints,
+            discard: [...state.blueprints.discard, card],
+          },
+        },
+        index,
+        (p) => ({ ...p, hand: p.hand.filter((c) => c.id !== card.id) }),
+      );
+      return log(dropped, `${player.name} discarded ${card.name}`);
+    }
+
     case "endPhase": {
       if (state.phase === "cleanup") return endRound(state);
       if (state.phase === "work" && !player.rolled) {
@@ -1433,6 +1526,17 @@ export function applyMove(state: GameState, move: Move): GameState {
       }
       if (state.phase === "work" && player.perks.extraChosen > 0) {
         throw new Error(`${player.name} must set their extra die before passing`);
+      }
+      if (state.phase === "work") {
+        const over = overLimits(player);
+        if (over.resources > 0) {
+          throw new Error(
+            `${player.name} must come down to ${RESOURCE_LIMIT} metal and energy`,
+          );
+        }
+        if (over.cards > 0) {
+          throw new Error(`${player.name} must come down to ${HAND_LIMIT} cards in hand`);
+        }
       }
       return endTurn(state);
     }

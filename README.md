@@ -166,6 +166,26 @@ face, for whatever it now fits. Once a round each, and only your own dice.
 face, and take that much metal — a 5 costs five energy and pays five metal. It
 is the one card that reads the die on both sides of the trade.
 
+### The end-of-phase limits
+
+**Nothing leaves a Work Phase over the limits.** Before the phase can end you
+must be down to **12 metal and energy together** and **10 cards in hand**.
+
+Goods are not counted. They are score, not stock, and hoarding them is the
+point — 12 of them is what ends the game.
+
+Anything over comes off one at a time, and you choose what goes: which
+resource, and which cards. Nothing is taken automatically, because a metal and
+an energy are not interchangeable to whoever has to spend them next.
+
+The limits only bite at the *end* of the phase, so you may run well over them
+mid-phase and spend your way back down. Spending counts: building a blueprint
+costs two cards out of hand and some resources, so it can put you back inside
+both limits at once. `End turn` is simply not offered until you are.
+
+None of this touches the automaton: it holds no cards and is dealt no metal or
+energy, so it can never be over either.
+
 ### Scoring
 
 **Your score is your goods plus the prestige standing in your compound.**
@@ -312,6 +332,11 @@ The Dojo and the Fitness Center are dragged at like anything else, even though
 they spend no die: drop the die you want changed onto one and it comes back
 showing its new face.
 
+Over a limit, the panel says so and `End turn` disappears until you are back
+inside. Resource discards are buttons — there is nothing on the board to point
+at — and a card is discarded by clicking it in hand. A card you could *also*
+build offers both.
+
 A drop that leaves something open asks rather than guessing. The Black Market
 wants a blueprint out of hand, so the candidates light up as they do for a
 build; once the card is settled, anything still open — which four resources to
@@ -381,6 +406,11 @@ compound and work your Headquarters, end the round. Known stubs:
   touch. The move list is the fallback on both
 - the game still *ends* on 12 goods or 10 buildings, which are not the same
   thresholds as the score — a player can win on prestige without either
+- the end-of-phase limits are 12 and 10, which read like `END_GOODS` and
+  `END_COMPOUND_SIZE` but are unrelated numbers on unrelated things. They are
+  separate constants so that changing one cannot quietly move the other
+- the limits are checked at the end of the Work Phase only. Whether the Market
+  Phase should also cap a hand that a contractor has just filled is unsaid
 - `MAX_ROUNDS` — a safety valve so a half-written rule cannot hang a test run
 
 `applyEffect` and `legalMoves` switch exhaustively with no `default`, so adding a

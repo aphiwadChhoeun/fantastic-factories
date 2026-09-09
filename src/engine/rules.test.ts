@@ -17,7 +17,11 @@ import {
   DIE_COLORS,
   DIE_FACES,
   END_GOODS,
+  HAND_LIMIT,
   HQ_SECTIONS,
+  overLimits,
+  RESOURCE_LIMIT,
+  stockOf,
   legalMoves,
   MARKET_ROW_SIZE,
   MAX_ROUNDS,
@@ -1631,6 +1635,151 @@ describe("the Fulfillment Center", () => {
         dieIds: ["d0"],
       }),
     ).toThrow(/A 5 does not work Fulfillment Center/);
+  });
+});
+
+describe("the end-of-phase limits", () => {
+  /** A rolled player in their Work Phase, holding whatever is passed in. */
+  function holding(patch: Partial<Player>): GameState {
+    const state = createInitialState({ seed: 3 });
+    return patchPlayer({ ...state, phase: "work" }, 0, { rolled: true, hand: [], ...patch });
+  }
+
+  function discards(state: GameState) {
+    return legalMoves(state).filter((move) => move.type === "discard");
+  }
+
+  function canEnd(state: GameState) {
+    return legalMoves(state).some((move) => move.type === "endPhase");
+  }
+
+  /** `count` distinct blueprints, so a hand can be made any size. */
+  function handOf(count: number): BlueprintCard[] {
+    const deck = createBlueprintDeck();
+    return deck.slice(0, count);
+  }
+
+  it("counts metal and energy together, and ignores goods", () => {
+    expect(RESOURCE_LIMIT).toBe(12);
+    expect(stockOf({ metal: 7, energy: 5, goods: 40 })).toBe(12);
+
+    // Forty goods and twelve stock is inside the limit.
+    const fine = holding({ resources: { metal: 7, energy: 5, goods: 40 } });
+    expect(discards(fine)).toEqual([]);
+    expect(canEnd(fine)).toBe(true);
+  });
+
+  it("will not end the Work Phase over the resource limit", () => {
+    const over = holding({ resources: { metal: 8, energy: 6, goods: 0 } });
+
+    expect(overLimits(over.players[0]).resources).toBe(2);
+    expect(canEnd(over)).toBe(false);
+    expect(() => applyMove(over, { type: "endPhase" })).toThrow(
+      /must come down to 12 metal and energy/,
+    );
+  });
+
+  it("offers each resource it could take, one at a time", () => {
+    const over = holding({ resources: { metal: 8, energy: 6, goods: 0 } });
+
+    expect(discards(over)).toEqual([
+      { type: "discard", kind: "resource", resource: "metal" },
+      { type: "discard", kind: "resource", resource: "energy" },
+    ]);
+
+    // Two off, and the phase can end — the player chose which two.
+    const once = applyMove(over, { type: "discard", kind: "resource", resource: "energy" });
+    expect(once.players[0].resources).toEqual({ metal: 8, energy: 5, goods: 0 });
+    expect(canEnd(once)).toBe(false);
+
+    const twice = applyMove(once, { type: "discard", kind: "resource", resource: "metal" });
+    expect(twice.players[0].resources).toEqual({ metal: 7, energy: 5, goods: 0 });
+    expect(canEnd(twice)).toBe(true);
+    expect(logged(twice, /discarded 1 energy/)).toBe(true);
+  });
+
+  it("offers only a resource it actually holds", () => {
+    // Thirteen metal and no energy: energy is not on the table to give up.
+    const over = holding({ resources: { metal: 13, energy: 0, goods: 0 } });
+
+    expect(discards(over)).toEqual([
+      { type: "discard", kind: "resource", resource: "metal" },
+    ]);
+    expect(() =>
+      applyMove(over, { type: "discard", kind: "resource", resource: "energy" }),
+    ).toThrow(/has no energy to discard/);
+  });
+
+  it("will not end the Work Phase over the hand limit", () => {
+    const over = holding({ hand: handOf(HAND_LIMIT + 1) });
+
+    expect(HAND_LIMIT).toBe(10);
+    expect(overLimits(over.players[0]).cards).toBe(1);
+    expect(canEnd(over)).toBe(false);
+    expect(() => applyMove(over, { type: "endPhase" })).toThrow(
+      /must come down to 10 cards in hand/,
+    );
+  });
+
+  it("offers every card in hand, and puts the one chosen in the discard", () => {
+    const hand = handOf(HAND_LIMIT + 1);
+    const over = holding({ hand });
+    expect(discards(over)).toHaveLength(hand.length);
+
+    const next = applyMove(over, { type: "discard", kind: "card", cardId: hand[3].id });
+
+    expect(next.players[0].hand).toHaveLength(HAND_LIMIT);
+    expect(next.players[0].hand.map((c) => c.id)).not.toContain(hand[3].id);
+    expect(next.blueprints.discard.map((c) => c.id)).toContain(hand[3].id);
+    expect(canEnd(next)).toBe(true);
+  });
+
+  it("refuses a discard from a player who is inside the limits", () => {
+    const fine = holding({ resources: { metal: 1, energy: 1, goods: 0 }, hand: handOf(2) });
+
+    expect(discards(fine)).toEqual([]);
+    expect(() =>
+      applyMove(fine, { type: "discard", kind: "resource", resource: "metal" }),
+    ).toThrow(/inside the 12 resource limit/);
+    expect(() =>
+      applyMove(fine, { type: "discard", kind: "card", cardId: fine.players[0].hand[0].id }),
+    ).toThrow(/inside the 10 card hand limit/);
+  });
+
+  it("leaves every other move on — spending is a way down too", () => {
+    const factory = cardNamed(createBlueprintDeck(), "Aluminum Factory");
+    const [, payment] = copiesOf("Aluminum Factory");
+    const state = createInitialState({ seed: 3 });
+    const { color } = state.players[0];
+    const over = holding({
+      hand: [factory, payment],
+      resources: { metal: 8, energy: 6, goods: 0 },
+      dice: [{ id: "d0", face: 5, color, extra: false, spent: false }],
+    });
+
+    const moves = legalMoves(over);
+    // Building costs 2 metal and 2 energy, which is four of the two it is
+    // over by — so the way down need not be waste.
+    expect(moves.some((move) => move.type === "build")).toBe(true);
+    expect(moves.some((move) => move.type === "placeDie")).toBe(true);
+  });
+
+  it("only bites at the end of the Work Phase, never the Market Phase", () => {
+    const state = createInitialState({ seed: 3 });
+    const rich = patchPlayer(state, 0, { resources: { metal: 20, energy: 20, goods: 0 } });
+
+    // The Market Phase ends by taking a card, and no limit stands in the way.
+    expect(legalMoves(rich).every((move) => move.type !== "discard")).toBe(true);
+    expect(draftAnyBlueprint(rich).phase).toBe("work");
+  });
+
+  it("never catches the automaton, which holds neither", () => {
+    const state = createInitialState({ seed: 3 });
+    const automaton = state.players[1];
+
+    expect(automaton.hand).toEqual([]);
+    expect(stockOf(automaton.resources)).toBe(0);
+    expect(overLimits(automaton)).toEqual({ resources: 0, cards: 0 });
   });
 });
 
