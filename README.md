@@ -277,8 +277,9 @@ Blueprints in hand are worth nothing — prestige only counts once built. Metal
 and energy are not score either; they are what you spend to get there.
 
 Most blueprints are worth 1 prestige; the Megalith is worth 3 and the Obelisk
-2, the Concrete Plant and three of the Training cards are worth none, and the
-Beacon scores as a set. The highest score wins, and an equal score is a draw.
+2, the Concrete Plant, the Refinery and three of the Training cards are worth
+none, and the Beacon scores as a set. The highest score wins, and an equal
+score is a draw.
 
 The Dojo, the Fitness Center and the Gymnasium are worth nothing but what they
 do to your dice, which is the closest thing the deck has to a trade-off between
@@ -286,7 +287,7 @@ scoring and playing well.
 
 ### The real blueprints so far
 
-Fifty-three cards, twenty-two of them distinct — every one a real card.
+Sixty cards, twenty-five of them distinct — every one a real card.
 
 | Blueprint        | Copies | Type       | Tool   | Build cost         | Perk                                     | Prestige      |
 | ---------------- | -----: | ---------- | ------ | ------------------ | ---------------------------------------- | ------------- |
@@ -312,6 +313,9 @@ Fifty-three cards, twenty-two of them distinct — every one a real card.
 | Motherlode       |      2 | Training   | shovel | 1 metal + 3 energy | any die → 1 metal, or 2 metal on a 4+      | 1             |
 | Nuclear Plant    |      2 | Production | gear   | 2 metal + 2 energy | a 6 → 1 good, 1 energy                     | 1             |
 | Obelisk          |      5 | Monument   | hammer | 3 metal + 1 energy | none — it is pure score                    | 2             |
+| Power Plant      |      2 | Utility    | gear   | 3 metal            | any die → that much energy                 | 1             |
+| Recycling Plant  |      3 | Production | gear   | 2 metal            | 2 blueprints from hand + 2 energy → 1 good, draw 1 | 1     |
+| Refinery         |      2 | Utility    | wrench | 1 metal + 3 energy | a blueprint from hand + 3 energy → 3 metal | —             |
 
 Every build cost is on top of discarding a blueprint of the same tool.
 
@@ -322,6 +326,13 @@ not matter, so a roll of 4, 2, 3 works the Assembly Line.
 pays out whole; one that cost more pays four, and the player says which four —
 a Beacon, at 2 metal and 4 energy, can be sold for any of 4 energy, 1 metal and
 3 energy, or 2 metal and 2 energy.
+
+**Four perks are priced in cards rather than resources.** The Black Market
+sells one out of hand, the Incinerator burns one, the Refinery melts one down,
+and the Recycling Plant is the one card that swallows *two*. What goes in makes
+no difference to any of them except the Black Market, which pays back what it
+was worth. On the board they are fed one click at a time: the hand narrows to
+the cards that could still pay, and what you have already promised stays lit.
 
 **The Beacon, the Megalith and the Obelisk are the blueprints you may stand
 more than one of** — all three Monuments, and all three pure score. The Beacon
@@ -466,19 +477,23 @@ compound and work your Headquarters, end the round. Known stubs:
   Beacon and the Megalith exactly. It is one word in `cards.ts` if that is
   wrong, and it matters: type is what the automaton's dice count and what the
   Megalith's discount counts
-- **53 cards, and the tools have evened out** — 16 shovels to 11 hammers, where
-  hammers were once 2 of 26. Special is now much the thinnest type at 2, so the
-  automaton's purple die has little to count
-- **53 cards is a workable deck at last.** Setup deals eleven — four to hand,
-  four to the row, three to the automaton — so the draw pile no longer turns
-  over in a couple of rounds
+- **60 cards, and the tools have evened out** — 19 gears to 11 hammers, where
+  hammers were once 2 of 26. Special is still much the thinnest type at 2, so
+  the automaton's purple die has little to count
+- **60 cards is a comfortable deck.** Setup deals eleven — four to hand, four
+  to the row, three to the automaton — so the draw pile no longer turns over in
+  a couple of rounds
+- **the Recycling Plant is the first perk to eat two cards**, which is why
+  `discardsCards` is a count and `Move.activate.paymentCardIds` a list. Nothing
+  yet needs a perk that eats *different* cards — the same tool, say — and the
+  move would have to say which is which if one did
 - `cards.ts` — every blueprint is now a real card, but neither deck is
   complete. The scaffold's invented placeholders are gone
 - the Investor discards the blueprint it reveals rather than keeping it, and
   the Specialist's extra die is white like the Hired Hands dice — neither is
   spelled out on the card
 - an equal score is a draw. No tiebreak is defined
-- 22 distinct blueprints, plus three Monuments that stack, put the 10-card
+- 25 distinct blueprints, plus three Monuments that stack, put the 10-card
   `END_COMPOUND_SIZE` only just in reach for a human — the automaton, dealt
   three and taking one a turn, gets there in seven rounds
 - the Headquarters is the same for every player. The published game hands out

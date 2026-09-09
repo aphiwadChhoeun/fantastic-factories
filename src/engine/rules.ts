@@ -256,13 +256,16 @@ function gainSplits(cost: Resources, max: number): Resources[] {
  * The alternatives a perk offers, in the order a move indexes them. Empty
  * when there is no choice to make, which is most perks.
  *
- * `eaten` is the blueprint the perk is about to take, which the Black Market's
+ * `eaten` is the blueprints the perk is about to take, which the Black Market's
  * payout is worked out from and everything else ignores.
  *
  * Exported because the board has to put a name to each one before the player
  * can pick between them.
  */
-export function activationOptions(perk: BlueprintPerk, eaten: BlueprintCard | null): Effect[] {
+export function activationOptions(
+  perk: BlueprintPerk,
+  eaten: readonly BlueprintCard[],
+): Effect[] {
   return optionsOf(perk.effect, eaten);
 }
 
@@ -271,14 +274,14 @@ export function activationOptions(perk: BlueprintPerk, eaten: BlueprintCard | nu
  * a payout that is not in question. One choice point per perk: two would share
  * an index and mean nothing, and no card has two.
  */
-function optionsOf(effect: Effect, eaten: BlueprintCard | null): Effect[] {
+function optionsOf(effect: Effect, eaten: readonly BlueprintCard[]): Effect[] {
   if (effect.kind === "oneOf") return [...effect.options];
   if (effect.kind === "all") return effect.effects.flatMap((part) => optionsOf(part, eaten));
-  if (effect.kind === "gainCardCost" && eaten) {
-    return gainSplits(eaten.buildCost, effect.max).map((resources) => ({
-      kind: "gain",
-      resources,
-    }));
+  if (effect.kind === "gainCardCost" && eaten.length > 0) {
+    // Everything eaten pays, so several cards are one pot rather than several
+    // payouts. Only the Black Market's single card uses this today.
+    const pot = eaten.reduce((total, card) => addResources(total, card.buildCost), NO_COST);
+    return gainSplits(pot, effect.max).map((resources) => ({ kind: "gain", resources }));
   }
   return [];
 }
@@ -442,16 +445,18 @@ export function legalMoves(state: GameState): Move[] {
           if (!perk) continue;
 
           // What is left to settle: the face of a die it hands over, which
-          // blueprint it eats, and which of its alternatives is taken. Most
+          // blueprints it eats, and which of its alternatives is taken. Most
           // perks settle none of these and are a single move.
           const faces = needsFace(perk.effect)
             ? DIE_FACES.filter((face) => canAfford(player.resources, perkCost(perk, [face])))
             : [undefined];
-          // A perk that eats a card with an empty hand has no move at all.
-          const eaten = perk.discardsCard ? player.hand : [null];
+          // Every way to feed it out of hand. A perk that eats more cards than
+          // are held has no move at all, and one that eats none has exactly
+          // one — the empty set.
+          const meals = combinations(player.hand, perk.discardsCards ?? 0);
 
-          for (const payment of eaten) {
-            const options = activationOptions(perk, payment);
+          for (const meal of meals) {
+            const options = activationOptions(perk, meal);
             const chosen = options.length > 1 ? options.map((_, index) => index) : [undefined];
             for (const face of faces) {
               for (const option of chosen) {
@@ -459,7 +464,7 @@ export function legalMoves(state: GameState): Move[] {
                   type: "activate",
                   cardId,
                   dieIds,
-                  ...(payment ? { paymentCardId: payment.id } : {}),
+                  ...(meal.length > 0 ? { paymentCardIds: meal.map((card) => card.id) } : {}),
                   ...(face === undefined ? {} : { face }),
                   ...(option === undefined ? {} : { option }),
                 });
@@ -792,11 +797,12 @@ function grantPerks(state: GameState, playerIndex: number, grant: Partial<WorkPe
 
 /**
  * The parts of an activation the card cannot decide for itself, settled by the
- * move that played it: which blueprint it eats, which of several payouts is
+ * move that played it: which blueprints it eats, which of several payouts is
  * taken, which die it acts on, which face it sells.
  */
 type EffectChoice = {
-  readonly discard?: BlueprintCard;
+  /** The blueprints eaten out of hand. Empty for the perks that eat none. */
+  readonly eaten?: readonly BlueprintCard[];
   /** Which of the perk's alternatives was taken, already resolved. */
   readonly chosen?: Effect;
   /** The die a perk acts on without spending — the Dojo turns it over. */
@@ -827,7 +833,7 @@ function activationChoice(
 
   // A perk that changes a die on the table settles nothing else.
   if (changesDie(effect)) {
-    refuse(move.paymentCardId !== undefined, "take a blueprint");
+    refuse(move.paymentCardIds !== undefined, "take a blueprint");
     refuse(move.face !== undefined, "hand over a die");
     refuse(move.option !== undefined, "pay more than one way");
     if (!move.targetDieId) throw new Error(`${cardName} needs a die to change`);
@@ -849,22 +855,29 @@ function activationChoice(
     refuse(move.face !== undefined, "hand over a die");
   }
 
-  // The blueprint it eats.
-  let discard: BlueprintCard | undefined;
-  if (perk.discardsCard) {
-    if (!move.paymentCardId) throw new Error(`${cardName} needs a blueprint to discard`);
-    discard = player.hand.find((card) => card.id === move.paymentCardId);
-    if (!discard) throw new Error(`${player.name} does not hold ${move.paymentCardId}`);
-  } else {
-    refuse(move.paymentCardId !== undefined, "take a blueprint");
+  // The blueprints it eats.
+  const wanted = perk.discardsCards ?? 0;
+  const ids = move.paymentCardIds ?? [];
+  if (wanted === 0) refuse(ids.length > 0, "take a blueprint");
+  if (ids.length !== wanted) {
+    const plural = wanted === 1 ? "" : "s";
+    throw new Error(`${cardName} eats ${wanted} blueprint${plural}, not ${ids.length}`);
   }
+  if (new Set(ids).size !== ids.length) {
+    throw new Error(`${cardName} cannot eat the same blueprint twice`);
+  }
+  const eaten = ids.map((id) => {
+    const held = player.hand.find((card) => card.id === id);
+    if (!held) throw new Error(`${player.name} does not hold ${id}`);
+    return held;
+  });
 
-  // And which of its alternatives is taken. A card that cost more than the
-  // Black Market's cap pays only part, and which part is the player's call.
-  const options = activationOptions(perk, discard ?? null);
+  // And which of its alternatives is taken. Cards that cost more than the
+  // Black Market's cap pay only part, and which part is the player's call.
+  const options = activationOptions(perk, eaten);
   if (options.length === 0) {
     refuse(move.option !== undefined, "pay more than one way");
-    return { discard, face };
+    return { eaten, face };
   }
   if (move.option === undefined && options.length > 1) {
     throw new Error(`${cardName} pays more than one way — say which`);
@@ -872,7 +885,7 @@ function activationChoice(
   const chosen = options[move.option ?? 0];
   if (!chosen) throw new Error(`${cardName} has no such payout`);
 
-  return { discard, face, chosen };
+  return { eaten, face, chosen };
 }
 
 /**
@@ -1512,22 +1525,21 @@ export function applyMove(state: GameState, move: Move): GameState {
         throw new Error(`${building.card.name} costs ${describeResourcesForLog(cost)} to use`);
       }
 
-      const eaten = chosen.discard;
+      const eaten = chosen.eaten ?? [];
+      const swallowed = new Set(eaten.map((card) => card.id));
       const used = updatePlayer(
-        eaten
-          ? {
-              ...state,
-              blueprints: {
-                ...state.blueprints,
-                discard: [...state.blueprints.discard, eaten],
-              },
-            }
-          : state,
+        {
+          ...state,
+          blueprints: {
+            ...state.blueprints,
+            discard: [...state.blueprints.discard, ...eaten],
+          },
+        },
         index,
         (p) => ({
           ...dice.reduce((spent, die) => spendDie(spent, die.id), p),
-          // The card the perk eats is part of the price, not of the payout.
-          hand: eaten ? p.hand.filter((c) => c.id !== eaten.id) : p.hand,
+          // The cards the perk eats are part of the price, not of the payout.
+          hand: p.hand.filter((c) => !swallowed.has(c.id)),
           compound: p.compound.map((b) =>
             b.card.id === building.card.id ? { ...b, dice: faces, worked: true } : b,
           ),
@@ -1535,8 +1547,10 @@ export function applyMove(state: GameState, move: Move): GameState {
         }),
       );
 
+      // Cards by comma, so the last "and" separates them from the resources:
+      // "for Mega Factory, Obelisk and 2 energy".
       const price = [
-        eaten?.name,
+        eaten.length > 0 ? eaten.map((card) => card.name).join(", ") : undefined,
         costsNothing(cost) ? undefined : describeResourcesForLog(cost),
       ].filter(Boolean);
       const paid = price.length > 0 ? ` for ${price.join(" and ")}` : "";

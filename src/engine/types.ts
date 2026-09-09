@@ -100,11 +100,11 @@ export type Effect =
    */
   | { readonly kind: "extraDice"; readonly count: number; readonly chosen: boolean }
   /**
-   * Take back what the blueprint the perk ate would have cost to build — the
-   * Black Market. Never more than `max` in total: a card that cost more than
-   * that pays out only part, and the player says which part.
+   * Take back what the blueprints the perk ate would have cost to build — the
+   * Black Market. Never more than `max` in total: cards that cost more than
+   * that pay out only part, and the player says which part.
    *
-   * The eating is the perk's `discardsCard`; this is only the payout.
+   * The eating is the perk's `discardsCards`; this is only the payout.
    */
   | { readonly kind: "gainCardCost"; readonly max: number }
   /** Everything in turn — the Mega Factory pays goods *and* hands over a die. */
@@ -284,13 +284,14 @@ export type BlueprintPerk = {
   /** Resources paid to use it, on top of the dice. Usually nothing. */
   readonly cost: Resources;
   /**
-   * The perk also eats a blueprint out of hand, on top of everything else —
-   * the Incinerator burns one, the Black Market sells one.
+   * The perk also eats this many blueprints out of hand, on top of everything
+   * else — the Incinerator burns one, the Black Market sells one, the
+   * Recycling Plant swallows two.
    *
-   * A cost, not an effect: what the card is worth afterwards is the effect's
-   * business, and for the Incinerator it is worth nothing at all.
+   * A cost, not an effect: what the cards are worth afterwards is the effect's
+   * business, and for the Incinerator they are worth nothing at all.
    */
-  readonly discardsCard?: boolean;
+  readonly discardsCards?: number;
   /**
    * A price read off a face rather than printed: this much of this resource,
    * equal to the face the perk turns on. The Concrete Plant takes two matching
@@ -552,10 +553,11 @@ export type Move =
       readonly cardId: string;
       readonly dieIds: readonly string[];
       /**
-       * A blueprint discarded from hand, for a perk that eats one — the Black
-       * Market. Every other perk leaves this out.
+       * The blueprints discarded from hand, for a perk that eats them — one
+       * for the Black Market, two for the Recycling Plant. Every other perk
+       * leaves this out. Never the same card twice.
        */
-      readonly paymentCardId?: string;
+      readonly paymentCardIds?: readonly string[];
       /**
        * The die a perk acts on rather than spends — the Dojo turns it over.
        * Never one of `dieIds`: it is not paid, and it does not go on the card.

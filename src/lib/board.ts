@@ -132,17 +132,20 @@ export function indexMoves(moves: readonly Move[], rolled: readonly Die[] = []):
   };
 }
 
-/** The blueprint a move spends out of hand, if it spends one. */
-export function paymentOf(move: Move): string | undefined {
+/**
+ * The blueprints a move spends out of hand. Usually none or one — the
+ * Recycling Plant is the card that eats two.
+ */
+export function paymentsOf(move: Move): readonly string[] {
   switch (move.type) {
     case "draft":
-      return move.kind === "contractor" ? move.paymentCardId : undefined;
+      return move.kind === "contractor" ? [move.paymentCardId] : [];
     case "build":
-      return move.paymentCardId;
+      return [move.paymentCardId];
     case "activate":
-      return move.paymentCardId;
+      return move.paymentCardIds ?? [];
     default:
-      return undefined;
+      return [];
   }
 }
 
@@ -152,13 +155,22 @@ export function paymentOf(move: Move): string | undefined {
  * cost a card from hand, so all three go through here.
  *
  * A list per card, because paying with it need not settle everything: the
- * Black Market still has to be told which resources to take for it.
+ * Black Market still has to be told which resources to take for it, and the
+ * Recycling Plant wants a second card.
+ *
+ * `settled` names the cards already picked, which drop out — they are behind
+ * the player rather than in front of them.
  */
-export function paymentsFor(options: readonly Move[]): ReadonlyMap<string, readonly Move[]> {
+export function paymentsFor(
+  options: readonly Move[],
+  settled: readonly string[] = [],
+): ReadonlyMap<string, readonly Move[]> {
+  const already = new Set(settled);
   const payments = new Map<string, Move[]>();
   for (const move of options) {
-    const cardId = paymentOf(move);
-    if (cardId) push(payments, cardId, move);
+    for (const cardId of paymentsOf(move)) {
+      if (!already.has(cardId)) push(payments, cardId, move);
+    }
   }
   return payments;
 }

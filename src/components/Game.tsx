@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { PHASE_LABELS, type Move } from "@/engine";
 import { DEV_TOOLS } from "@/dev/flag";
 import { useGame } from "@/hooks/useGame";
-import { indexMoves, paymentOf, paymentsFor } from "@/lib/board";
+import { indexMoves, paymentsFor, paymentsOf } from "@/lib/board";
 import { describeMove } from "@/lib/format";
 import { DevPanel } from "./DevPanel";
 import { GameLog } from "./GameLog";
@@ -30,8 +30,12 @@ type Pending = {
   readonly cardId: string;
   /** The die dropped on it, when the choice started with a drag. */
   readonly dieId?: string;
-  /** The blueprint being discarded to pay, once that much is settled. */
-  readonly paymentCardId?: string;
+  /**
+   * The blueprints picked out of hand to pay with so far, in click order. A
+   * list because a perk can eat more than one, and the player names them one
+   * at a time — the Recycling Plant wants two.
+   */
+  readonly paying?: readonly string[];
 };
 
 export function Game() {
@@ -56,9 +60,14 @@ export function Game() {
           ...(board.discards.cards.get(choice.cardId) ?? []),
           ...(board.freeActivations.get(choice.cardId) ?? []),
         ];
-    return choice.paymentCardId
-      ? all.filter((move) => paymentOf(move) === choice.paymentCardId)
-      : all;
+    // A move fits only if it spends everything picked so far, so each click in
+    // hand narrows the field rather than replacing the last answer.
+    const paying = choice.paying ?? [];
+    if (paying.length === 0) return all;
+    return all.filter((move) => {
+      const spends = paymentsOf(move);
+      return paying.every((cardId) => spends.includes(cardId));
+    });
   }
 
   const options = pending ? optionsFor(pending) : [];
@@ -67,17 +76,21 @@ export function Game() {
   const choice = options.length > 1 ? pending : null;
   const dragging = dragged && board.dice.has(dragged) ? dragged : null;
 
-  const payers = new Set(
-    options.map(paymentOf).filter((cardId): cardId is string => cardId !== undefined),
-  );
+  const settled = pending?.paying ?? [];
+  const payers = paymentsFor(options, settled);
   // With several blueprints in hand that could pay, the hand is the next
   // question. Anything still open after that is spelled out as buttons —
   // which resources the Black Market pays, or which run works an Assembly Line.
-  const payments = choice && payers.size > 1 ? paymentsFor(options) : null;
-  // A move that spends no card cannot be picked by highlighting one, so it is
-  // always spelled out. That is what keeps "discard this card" reachable on a
-  // card you could also build, where the rest of the options want a payment.
-  const open = choice ? (payments ? options.filter((move) => !paymentOf(move)) : options) : [];
+  const payments = choice && payers.size > 1 ? payers : null;
+  // A move that spends nothing more out of hand cannot be picked by
+  // highlighting a card, so it is always spelled out. That is what keeps
+  // "discard this card" reachable on a card you could also build, where the
+  // rest of the options want a payment.
+  const open = choice
+    ? payments
+      ? options.filter((move) => paymentsOf(move).length === settled.length)
+      : options
+    : [];
   const choices = open.map((move) => ({ move, label: describeMove(state, move) }));
 
   const status = state.gameOver
@@ -113,9 +126,10 @@ export function Game() {
       return;
     }
 
-    // Mid-choice, a click in hand names the payment rather than starting over.
+    // Mid-choice, a click in hand names a payment rather than starting over.
+    // Cards add up: a perk that eats two is fed one click at a time.
     if (choice && payments?.has(cardId)) {
-      resolve({ ...choice, paymentCardId: cardId });
+      resolve({ ...choice, paying: [...(choice.paying ?? []), cardId] });
       return;
     }
     resolve({ cardId });
@@ -144,6 +158,7 @@ export function Game() {
         label: describeMove(state, move),
       })),
       payments,
+      spending: new Set(choice ? settled : []),
       choices,
       pending: choice?.cardId ?? null,
       onSelectCard: selectCard,

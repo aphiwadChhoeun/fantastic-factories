@@ -972,7 +972,7 @@ describe("the Black Market", () => {
   it("caps the payout at four, and offers every way to take it", () => {
     const state = withMarket([beacon]);
     const perk = market.perk!;
-    const options = activationOptions(perk, beacon);
+    const options = activationOptions(perk, [beacon]);
 
     // A Beacon cost 2 metal and 4 energy; four of those six come back.
     expect(options).toEqual([
@@ -989,7 +989,7 @@ describe("the Black Market", () => {
       type: "activate",
       cardId: market.id,
       dieIds: ["d0"],
-      paymentCardId: beacon.id,
+      paymentCardIds: [beacon.id],
       option: 2,
     });
     expect(next.players[0].resources).toEqual({ metal: 2, energy: 2, goods: 0 });
@@ -1001,7 +1001,7 @@ describe("the Black Market", () => {
       type: "activate",
       cardId: market.id,
       dieIds: ["d0"],
-      paymentCardId: beacon.id,
+      paymentCardIds: [beacon.id],
       option,
     });
 
@@ -1010,7 +1010,7 @@ describe("the Black Market", () => {
     expect(() => applyMove(state, activate(-1))).toThrow(/no such payout/);
     expect(() =>
       applyMove(state, { type: "activate", cardId: market.id, dieIds: ["d0"] }),
-    ).toThrow(/needs a blueprint to discard/);
+    ).toThrow(/eats 1 blueprint, not 0/);
   });
 
   it("leaves every other perk alone — nothing else takes a card", () => {
@@ -1025,7 +1025,7 @@ describe("the Black Market", () => {
         type: "activate",
         cardId: battery.id,
         dieIds: [],
-        paymentCardId: line.id,
+        paymentCardIds: [line.id],
       }),
     ).toThrow(/does not take a blueprint/);
   });
@@ -1911,7 +1911,7 @@ describe("the Incinerator", () => {
     expect(incinerator.prestige).toBe(1);
     // No dice: a card and a metal are the whole price.
     expect(incinerator.perk?.dice).toBe(0);
-    expect(incinerator.perk?.discardsCard).toBe(true);
+    expect(incinerator.perk?.discardsCards).toBe(1);
     expect(incinerator.perk?.cost).toEqual({ metal: 1, energy: 0, goods: 0 });
   });
 
@@ -1922,7 +1922,7 @@ describe("the Incinerator", () => {
       type: "activate",
       cardId: incinerator.id,
       dieIds: [],
-      paymentCardId: beacon.id,
+      paymentCardIds: [beacon.id],
     });
 
     // A Beacon cost 2 metal and 4 energy, and the fire pays the same flat 6.
@@ -1949,7 +1949,7 @@ describe("the Incinerator", () => {
         cardId: incinerator.id,
         dieIds: [],
       }),
-    ).toThrow(/needs a blueprint to discard/);
+    ).toThrow(/eats 1 blueprint, not 0/);
   });
 });
 
@@ -2409,6 +2409,188 @@ describe("the Obelisk", () => {
       energy: 2,
       goods: 0,
     });
+  });
+});
+
+describe("the Power Plant", () => {
+  const plant = cardNamed(createBlueprintDeck(), "Power Plant");
+
+  function withPlant(face: DieFace): GameState {
+    const state = createInitialState({ seed: 3 });
+    const { color } = state.players[0];
+    return patchPlayer({ ...state, phase: "work" }, 0, {
+      compound: [{ card: plant, dice: [], worked: false }],
+      dice: [{ id: "d0", face, color, extra: false, spent: false }],
+      rolled: true,
+      hand: [],
+      resources: { metal: 0, energy: 0, goods: 0 },
+    });
+  }
+
+  it("is a Utility gear costing 3 metal, worth a prestige", () => {
+    expect(plant.type).toBe("utility");
+    expect(plant.tool).toBe("gear");
+    expect(plant.buildCost).toEqual({ metal: 3, energy: 0, goods: 0 });
+    expect(plant.prestige).toBe(1);
+    // Any die, and nothing on top of it.
+    expect(plant.perk?.dice).toBe(1);
+    expect(plant.perk?.accepts).toEqual({ kind: "any" });
+    expect(plant.perk?.cost).toEqual({ metal: 0, energy: 0, goods: 0 });
+    expect(plant.perk?.costByFace).toBeUndefined();
+  });
+
+  it("pays energy equal to the die placed, from a 1 to a 6", () => {
+    for (const face of [1, 3, 6] as const) {
+      const state = withPlant(face);
+      const [move] = legalMoves(state).filter((m) => m.type === "activate");
+      const next = applyMove(state, move);
+
+      expect(next.players[0].resources).toEqual({ metal: 0, energy: face, goods: 0 });
+    }
+  });
+
+  it("takes any die, so a poor roll is still worth something", () => {
+    // The Foundry charges for its face and so can price itself out; this one
+    // is free, so every face on the table is a move.
+    const state = withPlant(1);
+    expect(legalMoves(state).filter((m) => m.type === "activate")).toHaveLength(1);
+  });
+});
+
+describe("the Recycling Plant", () => {
+  const plant = cardNamed(createBlueprintDeck(), "Recycling Plant");
+  const beacon = copiesOf("Beacon")[0];
+  const golem = copiesOf("Golem")[0];
+  const obelisk = copiesOf("Obelisk")[0];
+
+  function withPlant(hand: readonly BlueprintCard[], energy = 2): GameState {
+    const state = createInitialState({ seed: 3 });
+    return patchPlayer({ ...state, phase: "work" }, 0, {
+      compound: [{ card: plant, dice: [], worked: false }],
+      rolled: true,
+      hand: [...hand],
+      resources: { metal: 0, energy, goods: 0 },
+    });
+  }
+
+  const activations = (state: GameState) =>
+    legalMoves(state).filter((move) => move.type === "activate");
+
+  it("is a Production gear costing 2 metal, worth a prestige", () => {
+    expect(plant.type).toBe("production");
+    expect(plant.tool).toBe("gear");
+    expect(plant.buildCost).toEqual({ metal: 2, energy: 0, goods: 0 });
+    expect(plant.prestige).toBe(1);
+    // No dice at all: two cards and two energy are the whole price.
+    expect(plant.perk?.dice).toBe(0);
+    expect(plant.perk?.discardsCards).toBe(2);
+    expect(plant.perk?.cost).toEqual({ metal: 0, energy: 2, goods: 0 });
+  });
+
+  it("eats two blueprints and 2 energy for a good and a card", () => {
+    const state = withPlant([beacon, golem]);
+    const [move] = activations(state);
+
+    const next = applyMove(state, move);
+
+    expect(next.players[0].resources).toEqual({ metal: 0, energy: 0, goods: 1 });
+    // Two out of hand and one back in, so the hand is one card down.
+    expect(next.players[0].hand).toHaveLength(1);
+    expect(next.players[0].hand.map((card) => card.id)).not.toContain(beacon.id);
+    expect(next.players[0].hand.map((card) => card.id)).not.toContain(golem.id);
+    expect(next.blueprints.discard).toContain(beacon);
+    expect(next.blueprints.discard).toContain(golem);
+    expect(logged(next, /worked Recycling Plant for Beacon, Golem and 2 energy/)).toBe(true);
+  });
+
+  it("offers one move per pair in hand, unordered", () => {
+    // Three cards make three pairs, not six: which one was clicked first is
+    // not a different move.
+    expect(activations(withPlant([beacon, golem, obelisk]))).toHaveLength(3);
+    expect(activations(withPlant([beacon, golem]))).toHaveLength(1);
+    // One card is not a pair, and neither is none.
+    expect(activations(withPlant([beacon]))).toEqual([]);
+    expect(activations(withPlant([]))).toEqual([]);
+    // Nor is a pair it cannot power.
+    expect(activations(withPlant([beacon, golem], 1))).toEqual([]);
+  });
+
+  it("refuses a single card, a third, or the same card twice", () => {
+    const state = withPlant([beacon, golem]);
+    const feed = (...paymentCardIds: string[]): Move => ({
+      type: "activate",
+      cardId: plant.id,
+      dieIds: [],
+      paymentCardIds,
+    });
+
+    expect(() => applyMove(state, feed(beacon.id))).toThrow(/eats 2 blueprints, not 1/);
+    expect(() => applyMove(state, feed(beacon.id, golem.id, obelisk.id))).toThrow(
+      /eats 2 blueprints, not 3/,
+    );
+    expect(() => applyMove(state, feed(beacon.id, beacon.id))).toThrow(
+      /cannot eat the same blueprint twice/,
+    );
+    // And a card that is not in hand at all.
+    expect(() => applyMove(state, feed(beacon.id, obelisk.id))).toThrow(/does not hold/);
+  });
+
+  it("draws the replacement off the deck, not out of the discard it just filled", () => {
+    // The two it ate are in the discard by the time the draw happens; the deck
+    // is not empty, so neither should come back.
+    const state = withPlant([beacon, golem]);
+    const next = applyMove(state, activations(state)[0]);
+    const drawn = next.players[0].hand[0];
+
+    expect(drawn.id).not.toBe(beacon.id);
+    expect(drawn.id).not.toBe(golem.id);
+  });
+});
+
+describe("the Refinery", () => {
+  const refinery = cardNamed(createBlueprintDeck(), "Refinery");
+  const beacon = copiesOf("Beacon")[0];
+
+  function withRefinery(hand: readonly BlueprintCard[], energy = 3): GameState {
+    const state = createInitialState({ seed: 3 });
+    return patchPlayer({ ...state, phase: "work" }, 0, {
+      compound: [{ card: refinery, dice: [], worked: false }],
+      rolled: true,
+      hand: [...hand],
+      resources: { metal: 0, energy, goods: 0 },
+    });
+  }
+
+  it("is a Utility wrench costing 1 metal and 3 energy, and scores nothing", () => {
+    expect(refinery.type).toBe("utility");
+    expect(refinery.tool).toBe("wrench");
+    expect(refinery.buildCost).toEqual({ metal: 1, energy: 3, goods: 0 });
+    // No prestige line on the card, unlike the two beside it.
+    expect(refinery.prestige).toBeUndefined();
+    expect(refinery.perk?.dice).toBe(0);
+    expect(refinery.perk?.discardsCards).toBe(1);
+    expect(refinery.perk?.cost).toEqual({ metal: 0, energy: 3, goods: 0 });
+  });
+
+  it("turns a card and 3 energy into 3 metal, whatever the card was", () => {
+    const state = withRefinery([beacon]);
+    const [move] = legalMoves(state).filter((m) => m.type === "activate");
+
+    const next = applyMove(state, move);
+
+    // A Beacon cost 2 metal and 4 energy; the rate is flat all the same.
+    expect(next.players[0].resources).toEqual({ metal: 3, energy: 0, goods: 0 });
+    expect(next.players[0].hand).toEqual([]);
+    expect(next.blueprints.discard).toContain(beacon);
+    expect(logged(next, /worked Refinery for Beacon and 3 energy/)).toBe(true);
+  });
+
+  it("is not offered without a card to burn or the energy to burn it", () => {
+    const activations = (state: GameState) =>
+      legalMoves(state).filter((move) => move.type === "activate");
+
+    expect(activations(withRefinery([]))).toEqual([]);
+    expect(activations(withRefinery([beacon], 2))).toEqual([]);
   });
 });
 

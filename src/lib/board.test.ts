@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Die, DieFace, Move } from "@/engine";
-import { indexMoves, paymentsFor } from "./board";
+import { indexMoves, paymentsFor, paymentsOf } from "./board";
 
 function dice(faces: readonly DieFace[]): Die[] {
   return faces.map((face, i) => ({
@@ -50,8 +50,8 @@ describe("indexMoves", () => {
     // The Black Market takes one die and any blueprint in hand, so a single
     // die stands for several moves. Losing all but one would hide the choice.
     const moves: Move[] = [
-      { type: "activate", cardId: "market", dieIds: ["d0"], paymentCardId: "a" },
-      { type: "activate", cardId: "market", dieIds: ["d0"], paymentCardId: "b" },
+      { type: "activate", cardId: "market", dieIds: ["d0"], paymentCardIds: ["a"] },
+      { type: "activate", cardId: "market", dieIds: ["d0"], paymentCardIds: ["b"] },
     ];
 
     const board = indexMoves(moves, dice([5]));
@@ -62,8 +62,8 @@ describe("indexMoves", () => {
   it("gathers the blueprints that could pay, whatever spends them", () => {
     const moves: Move[] = [
       { type: "build", cardId: "mine", paymentCardId: "a" },
-      { type: "activate", cardId: "market", dieIds: ["d0"], paymentCardId: "a" },
-      { type: "activate", cardId: "market", dieIds: ["d0"], paymentCardId: "b" },
+      { type: "activate", cardId: "market", dieIds: ["d0"], paymentCardIds: ["a"] },
+      { type: "activate", cardId: "market", dieIds: ["d0"], paymentCardIds: ["b"] },
       { type: "placeDie", section: "mine", dieId: "d0" },
     ];
 
@@ -74,6 +74,24 @@ describe("indexMoves", () => {
     expect(payments.get("a")).toHaveLength(2);
     expect(payments.get("b")).toHaveLength(1);
     expect(payments.has("d0")).toBe(false);
+  });
+
+  it("indexes a perk that eats two under both cards, then under the second", () => {
+    // The Recycling Plant swallows a pair, so a move is filed under each card
+    // it would spend — the player names them one at a time.
+    const moves: Move[] = [
+      { type: "activate", cardId: "recycler", dieIds: [], paymentCardIds: ["a", "b"] },
+      { type: "activate", cardId: "recycler", dieIds: [], paymentCardIds: ["a", "c"] },
+      { type: "activate", cardId: "recycler", dieIds: [], paymentCardIds: ["b", "c"] },
+    ];
+
+    expect([...paymentsFor(moves).keys()]).toEqual(["a", "b", "c"]);
+    // Once "a" is picked, it drops out and only its partners are still asked.
+    const after = paymentsFor(
+      moves.filter((move) => paymentsOf(move).includes("a")),
+      ["a"],
+    );
+    expect([...after.keys()]).toEqual(["b", "c"]);
   });
 
   it("points a perk that turns a die over at the die it names", () => {

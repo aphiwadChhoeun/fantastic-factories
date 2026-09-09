@@ -43,6 +43,11 @@ export type PanelInteraction = {
   /** Hand cards that could pay for whatever is mid-choice, if anything. */
   readonly payments: ReadonlyMap<string, readonly Move[]> | null;
   /**
+   * Hand cards already promised to the choice in progress. A perk that eats
+   * two is fed one click at a time, so the first has to look spent for it.
+   */
+  readonly spending: ReadonlySet<string>;
+  /**
    * Whatever a choice still leaves open once the cards are settled, spelled
    * out: which resources to take, or which run of dice to work.
    */
@@ -68,8 +73,9 @@ function perkNote(player: Player, building: Building): string | undefined {
   if (!perk) return prestigeBonus ? "scores, and stacks" : "scores only";
   if (building.worked) return "worked this round";
   // Some perks are priced in cards rather than resources.
-  if (perk.discardsCard && player.hand.length === 0) {
-    return "needs a blueprint in hand";
+  const eats = perk.discardsCards ?? 0;
+  if (player.hand.length < eats) {
+    return eats === 1 ? "needs a blueprint in hand" : `needs ${eats} blueprints in hand`;
   }
   if (!canAfford(player.resources, perk.cost)) {
     return `needs ${describeResources(perk.cost)}`;
@@ -311,7 +317,10 @@ export function PlayerPanel({ player, active, interaction }: Props) {
         <div className={styles.sectionTitle}>Hand</div>
         {/* The payment comes from hand whether a card is taken, built or sold. */}
         {interaction?.payments && (
-          <p className={styles.prompt}>Click a highlighted blueprint to discard as payment.</p>
+          <p className={styles.prompt}>
+            Click a highlighted blueprint to discard as payment.
+            {interaction.spending.size > 0 && " It wants another."}
+          </p>
         )}
         {choosingInHand && <Choices interaction={interaction} />}
         {player.hand.length === 0 ? (
@@ -320,6 +329,7 @@ export function PlayerPanel({ player, active, interaction }: Props) {
           <div className={styles.cardRow}>
             {player.hand.map((card) => {
               const paying = Boolean(interaction?.payments?.has(card.id));
+              const promised = Boolean(interaction?.spending.has(card.id));
               const pending = interaction?.pending === card.id;
               // Mid-choice the hand is for paying, so only the cards that
               // could pay stay live — plus the one being paid for, to cancel.
@@ -334,7 +344,7 @@ export function PlayerPanel({ player, active, interaction }: Props) {
                   card={card}
                   buildCost={buildCostFor(player, card)}
                   highlight={paying || buildable || droppable}
-                  selected={pending}
+                  selected={pending || promised}
                   onSelect={clickable ? () => interaction?.onSelectCard(card.id) : undefined}
                   selectLabel={
                     paying

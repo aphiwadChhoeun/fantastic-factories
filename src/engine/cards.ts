@@ -121,7 +121,7 @@ const BLUEPRINTS: readonly { template: BlueprintTemplate; copies: number }[] = [
         pattern: "any",
         accepts: { kind: "any" },
         cost: FREE,
-        discardsCard: true,
+        discardsCards: 1,
         effect: { kind: "gainCardCost", max: 4 },
       },
     },
@@ -295,7 +295,7 @@ const BLUEPRINTS: readonly { template: BlueprintTemplate; copies: number }[] = [
         pattern: "any",
         accepts: { kind: "any" },
         cost: { metal: 1, energy: 0, goods: 0 },
-        discardsCard: true,
+        discardsCards: 1,
         effect: { kind: "gain", resources: { energy: 6 } },
       },
     },
@@ -440,6 +440,67 @@ const BLUEPRINTS: readonly { template: BlueprintTemplate; copies: number }[] = [
       prestige: 2,
       // "You may build more than one" is the exception itself, not a perk.
       duplicable: true,
+    },
+  },
+  {
+    copies: 2,
+    template: {
+      name: "Power Plant",
+      type: "utility",
+      tool: "gear",
+      buildCost: { metal: 3, energy: 0, goods: 0 },
+      prestige: 1,
+      // The Foundry's mirror: it pays energy for a die instead of charging it,
+      // and asks for nothing back.
+      perk: {
+        dice: 1,
+        pattern: "any",
+        accepts: { kind: "any" },
+        cost: FREE,
+        effect: { kind: "gainByFace", resource: "energy" },
+      },
+    },
+  },
+  {
+    copies: 3,
+    template: {
+      name: "Recycling Plant",
+      type: "production",
+      tool: "gear",
+      buildCost: { metal: 2, energy: 0, goods: 0 },
+      prestige: 1,
+      // Two cards into the furnace for a good and one back — the only perk
+      // that eats more than a single blueprint.
+      perk: {
+        dice: 0,
+        pattern: "any",
+        accepts: { kind: "any" },
+        cost: { metal: 0, energy: 2, goods: 0 },
+        discardsCards: 2,
+        effect: {
+          kind: "all",
+          effects: [{ kind: "gain", resources: { goods: 1 } }, { kind: "draw", count: 1 }],
+        },
+      },
+    },
+  },
+  {
+    copies: 2,
+    template: {
+      name: "Refinery",
+      type: "utility",
+      tool: "wrench",
+      buildCost: { metal: 1, energy: 3, goods: 0 },
+      // The Incinerator run backwards: a card and energy for metal, at a
+      // fixed rate, so what goes in makes no difference.
+      perk: {
+        dice: 0,
+        pattern: "any",
+        accepts: { kind: "any" },
+        cost: { metal: 0, energy: 3, goods: 0 },
+        discardsCards: 1,
+        effect: { kind: "gain", resources: { metal: 3 } },
+      },
     },
   },
 ];

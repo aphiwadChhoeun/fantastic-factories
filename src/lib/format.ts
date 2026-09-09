@@ -60,7 +60,7 @@ export function describeEffect(effect: Effect): string {
         : `Roll ${dice} this round`;
     }
     case "gainCardCost":
-      return `Gain the discarded blueprint's build cost back, up to ${effect.max}`;
+      return `Gain the discarded blueprints' build cost back, up to ${effect.max}`;
     // Only the first part of a run keeps its capital, and a choice says it is
     // one — otherwise "gain a good and gain 2 metal or 3 energy" reads as
     // though the good were in question too.
@@ -117,7 +117,9 @@ export function describePerkCost(perk: BlueprintPerk): string {
         : `${perk.dice} ${pattern}dice`;
   const accepts =
     perk.dice > 1 && perk.accepts.kind !== "any" ? ` (${describeRequirement(perk.accepts)})` : "";
-  const card = perk.discardsCard ? "a blueprint from hand" : "";
+  const eats = perk.discardsCards ?? 0;
+  const card =
+    eats === 0 ? "" : eats === 1 ? "a blueprint from hand" : `${eats} blueprints from hand`;
   const cost = costsSomething(perk.cost) ? describeResources(perk.cost) : "";
   // A price read off a face cannot be a number until the face is settled —
   // by rolling it, or by the Golem, by choosing it.
@@ -198,9 +200,9 @@ function describeChoice(state: GameState, move: Extract<Move, { type: "activate"
   const perk = player.compound.find((b) => b.card.id === move.cardId)?.card.perk;
   if (!perk) return "";
 
-  const eaten = move.paymentCardId
-    ? (player.hand.find((card) => card.id === move.paymentCardId) ?? null)
-    : null;
+  const eaten = (move.paymentCardIds ?? []).flatMap(
+    (cardId) => player.hand.find((card) => card.id === cardId) ?? [],
+  );
   const chosen = activationOptions(perk, eaten)[move.option];
   return chosen ? lowered(chosen) : "";
 }
@@ -255,8 +257,9 @@ export function describeMove(state: GameState, move: Move): string {
           : ` with ${move.dieIds.map((id) => dieFace(state, id)).join(", ")}`;
       // Whatever the move settled: what it eats, the face it buys, and which
       // of the perk's alternatives is being taken.
+      const burnt = (move.paymentCardIds ?? []).map((cardId) => findCardName(state, cardId));
       const parts = [
-        move.paymentCardId ? `burn ${findCardName(state, move.paymentCardId)}` : "",
+        burnt.length > 0 ? `burn ${burnt.join(" and ")}` : "",
         move.face ? `take a die showing ${move.face}` : "",
         describeChoice(state, move),
       ].filter(Boolean);
