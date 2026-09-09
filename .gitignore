@@ -44,3 +44,6 @@ next-env.d.ts
 /out/
 .wrangler/
 .dev.vars
+
+# claude code — launch.json holds an absolute path to this machine's node
+.claude/
