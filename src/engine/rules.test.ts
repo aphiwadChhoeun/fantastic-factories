@@ -2289,6 +2289,129 @@ describe("the Megalith", () => {
   });
 });
 
+describe("the Motherlode", () => {
+  const lode = cardNamed(createBlueprintDeck(), "Motherlode");
+
+  function withLode(dice: readonly DieFace[]): GameState {
+    const state = createInitialState({ seed: 3 });
+    const { color } = state.players[0];
+    return patchPlayer({ ...state, phase: "work" }, 0, {
+      compound: [{ card: lode, dice: [], worked: false }],
+      dice: dice.map((face, i) => ({ id: `d${i}`, face, color, extra: false, spent: false })),
+      rolled: true,
+      resources: { metal: 0, energy: 0, goods: 0 },
+    });
+  }
+
+  const metalFrom = (face: DieFace) =>
+    applyMove(withLode([face]), { type: "activate", cardId: lode.id, dieIds: ["d0"] }).players[0]
+      .resources.metal;
+
+  it("is a Training shovel costing 1 metal and 3 energy, worth a prestige", () => {
+    expect(lode.type).toBe("training");
+    expect(lode.tool).toBe("shovel");
+    expect(lode.buildCost).toEqual({ metal: 1, energy: 3, goods: 0 });
+    expect(lode.prestige).toBe(1);
+    // One die, read for its value — not a run of three.
+    expect(lode.perk?.dice).toBe(1);
+    expect(lode.perk?.accepts).toEqual({ kind: "any" });
+  });
+
+  it("pays 1 metal for a low die and 2 for a high one", () => {
+    expect([1, 2, 3].map((face) => metalFrom(face as DieFace))).toEqual([1, 1, 1]);
+    expect([4, 5, 6].map((face) => metalFrom(face as DieFace))).toEqual([2, 2, 2]);
+  });
+
+  it("takes any die at all — the bands cover the whole d6", () => {
+    const state = withLode([1, 3, 4, 6]);
+    const dice = legalMoves(state)
+      .filter((move) => move.type === "activate")
+      .map((move) => (move.type === "activate" ? move.dieIds[0] : undefined));
+
+    expect(dice).toEqual(["d0", "d1", "d2", "d3"]);
+  });
+});
+
+describe("the Nuclear Plant", () => {
+  const plant = cardNamed(createBlueprintDeck(), "Nuclear Plant");
+
+  function withPlant(dice: readonly DieFace[]): GameState {
+    const state = createInitialState({ seed: 3 });
+    const { color } = state.players[0];
+    return patchPlayer({ ...state, phase: "work" }, 0, {
+      compound: [{ card: plant, dice: [], worked: false }],
+      dice: dice.map((face, i) => ({ id: `d${i}`, face, color, extra: false, spent: false })),
+      rolled: true,
+      resources: { metal: 0, energy: 0, goods: 0 },
+    });
+  }
+
+  it("is a Production gear costing 2 metal and 2 energy, worth a prestige", () => {
+    expect(plant.type).toBe("production");
+    expect(plant.tool).toBe("gear");
+    expect(plant.buildCost).toEqual({ metal: 2, energy: 2, goods: 0 });
+    expect(plant.prestige).toBe(1);
+  });
+
+  it("takes a 6 for a good and an energy, and nothing else at all", () => {
+    const next = applyMove(withPlant([6, 5, 1, 3]), {
+      type: "activate",
+      cardId: plant.id,
+      dieIds: ["d0"],
+    });
+    expect(next.players[0].resources).toEqual({ metal: 0, energy: 1, goods: 1 });
+
+    expect(
+      legalMoves(withPlant([1, 2, 3, 5])).filter((move) => move.type === "activate"),
+    ).toEqual([]);
+    expect(() =>
+      applyMove(withPlant([5, 1, 3, 4]), { type: "activate", cardId: plant.id, dieIds: ["d0"] }),
+    ).toThrow(/A 5 does not work Nuclear Plant/);
+  });
+});
+
+describe("the Obelisk", () => {
+  const obelisks = copiesOf("Obelisk");
+
+  it("is a hammer costing 3 metal and 1 energy, worth two prestige", () => {
+    expect(obelisks).toHaveLength(5);
+    expect(obelisks[0].tool).toBe("hammer");
+    expect(obelisks[0].buildCost).toEqual({ metal: 3, energy: 1, goods: 0 });
+    expect(obelisks[0].prestige).toBe(2);
+    // Read as a Monument — the card gave no type. See cards.ts.
+    expect(obelisks[0].type).toBe("monument");
+  });
+
+  it("is pure score: nothing to work, and no set bonus", () => {
+    expect(obelisks[0].perk).toBeUndefined();
+    expect(obelisks[0].passive).toBeUndefined();
+    expect(obelisks[0].prestigeBonus).toBeUndefined();
+    // Five of them are worth ten, and not a pip more.
+    expect(prestigeOf(obelisks.map(standing))).toBe(10);
+  });
+
+  it("may be stacked, and counts as a Monument for the Megalith", () => {
+    const megaliths = copiesOf("Megalith");
+    const state = createInitialState({ seed: 3 });
+    const staged = patchPlayer({ ...state, phase: "work" }, 0, {
+      compound: obelisks.slice(0, 2).map(standing),
+      hand: [obelisks[2], obelisks[3], megaliths[0], cardNamed(createBlueprintDeck(), "Golem")],
+      resources: { metal: 9, energy: 9, goods: 0 },
+      rolled: true,
+    });
+
+    const builds = legalMoves(staged).filter((move) => move.type === "build");
+    expect(builds.map((move) => move.cardId)).toContain(obelisks[2].id);
+
+    // Two Obelisks standing take two metal off a Megalith.
+    expect(buildCostFor(staged.players[0], megaliths[0])).toEqual({
+      metal: 3,
+      energy: 2,
+      goods: 0,
+    });
+  });
+});
+
 describe("the end-of-phase limits", () => {
   /** A rolled player in their Work Phase, holding whatever is passed in. */
   function holding(patch: Partial<Player>): GameState {

@@ -70,6 +70,10 @@ export function describeEffect(effect: Effect): string {
         .join(", and ");
     case "oneOf":
       return `either ${effect.options.map(lowered).join(", or ")}`;
+    case "byFace":
+      return effect.bands
+        .map((band) => `${describeRequirement(band.accepts)}: ${lowered(band.effect)}`)
+        .join("; ");
     case "flipDie":
       return "Turn an unspent die over to its opposite face — 5 becomes 2";
     case "stepDie": {

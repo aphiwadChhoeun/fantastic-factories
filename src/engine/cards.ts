@@ -379,6 +379,69 @@ const BLUEPRINTS: readonly { template: BlueprintTemplate; copies: number }[] = [
       passive: { kind: "cheaperPerCard", per: "monument" },
     },
   },
+  {
+    copies: 2,
+    template: {
+      name: "Motherlode",
+      type: "training",
+      tool: "shovel",
+      buildCost: { metal: 1, energy: 3, goods: 0 },
+      prestige: 1,
+      // One die, worth more the higher it is — and unlike the Headquarters'
+      // Mine, a low die is worth something too.
+      perk: {
+        dice: 1,
+        pattern: "any",
+        accepts: { kind: "any" },
+        cost: FREE,
+        effect: {
+          kind: "byFace",
+          bands: [
+            {
+              accepts: { kind: "atMost", face: 3 },
+              effect: { kind: "gain", resources: { metal: 1 } },
+            },
+            {
+              accepts: { kind: "atLeast", face: 4 },
+              effect: { kind: "gain", resources: { metal: 2 } },
+            },
+          ],
+        },
+      },
+    },
+  },
+  {
+    copies: 2,
+    template: {
+      name: "Nuclear Plant",
+      type: "production",
+      tool: "gear",
+      buildCost: { metal: 2, energy: 2, goods: 0 },
+      prestige: 1,
+      perk: {
+        dice: 1,
+        pattern: "any",
+        accepts: { kind: "exact", face: 6 },
+        cost: FREE,
+        effect: { kind: "gain", resources: { goods: 1, energy: 1 } },
+      },
+    },
+  },
+  {
+    copies: 5,
+    template: {
+      name: "Obelisk",
+      // TODO: the card gave no type — "type: hammer" was the tool. Read as a
+      // Monument: pure score, stackable, no perk, which is the Beacon and the
+      // Megalith exactly. One word to change if it is wrong.
+      type: "monument",
+      tool: "hammer",
+      buildCost: { metal: 3, energy: 1, goods: 0 },
+      prestige: 2,
+      // "You may build more than one" is the exception itself, not a perk.
+      duplicable: true,
+    },
+  },
 ];
 
 /**

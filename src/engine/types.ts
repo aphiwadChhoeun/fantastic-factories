@@ -110,6 +110,22 @@ export type Effect =
   /** Everything in turn — the Mega Factory pays goods *and* hands over a die. */
   | { readonly kind: "all"; readonly effects: readonly Effect[] }
   /**
+   * What the die placed on the perk is worth, band by band — the Motherlode
+   * pays one metal for a low die and two for a high one. The first band the
+   * face satisfies is the one that pays, and the player chooses nothing: the
+   * die they placed has already decided it.
+   *
+   * The perk's own `accepts` must cover every band between them, or a die will
+   * be offered a card that has nothing to pay it.
+   */
+  | {
+      readonly kind: "byFace";
+      readonly bands: readonly {
+        readonly accepts: ActivationRequirement;
+        readonly effect: Effect;
+      }[];
+    }
+  /**
    * One of several, whichever the player takes — the Harvester pays four metal
    * or seven energy, never both. Which one is on the move, as an index.
    */

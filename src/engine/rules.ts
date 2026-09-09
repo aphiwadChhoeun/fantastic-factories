@@ -938,6 +938,14 @@ function applyEffect(
       if (face === undefined) throw new Error("No face chosen for the die");
       return grantDie(state, playerIndex, face);
     }
+    case "byFace": {
+      const face = choice.faces?.[0];
+      if (face === undefined) throw new Error("No die placed to read");
+      // A gap between the bands would strand a die the perk had accepted.
+      const band = effect.bands.find((option) => satisfies(option.accepts, face));
+      if (!band) throw new Error(`Nothing on this card pays a ${face}`);
+      return applyEffect(state, playerIndex, band.effect, choice);
+    }
     case "gainByFace": {
       const face = choice.faces?.[0];
       if (face === undefined) throw new Error("No die placed to read");
@@ -996,6 +1004,9 @@ function describeEffectForLog(effect: Effect): string {
     }
     case "all":
       return effect.effects.map(describeEffectForLog).join(", and ");
+    // The die on the card says which band paid; the resources line shows it.
+    case "byFace":
+      return "paying by the die placed";
     // The activation logs which alternative it took, once it is settled.
     case "gainCardCost":
     case "oneOf":
