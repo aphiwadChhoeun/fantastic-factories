@@ -97,8 +97,8 @@ export function describePassive(passive: Passive): string {
   switch (passive.kind) {
     case "drawOnGoods":
       return "Draw a blueprint the first time you gain goods each round";
-    case "cheaperCopies":
-      return `Later copies cost 1 metal less per ${passive.per} card standing`;
+    case "cheaperPerCard":
+      return `Costs 1 metal less to build per ${passive.per} card standing`;
   }
 }
 

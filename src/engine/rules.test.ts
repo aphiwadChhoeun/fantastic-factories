@@ -2222,22 +2222,30 @@ describe("the Megalith", () => {
     // "Future Megaliths" only means anything if you may stand more than one.
     expect(megaliths[0].duplicable).toBe(true);
     expect(megaliths[0].perk).toBeUndefined();
-    expect(megaliths[0].passive).toEqual({ kind: "cheaperCopies", per: "monument" });
+    expect(megaliths[0].passive).toEqual({ kind: "cheaperPerCard", per: "monument" });
   });
 
-  it("costs full price until one is standing, however many Monuments there are", () => {
-    const state = holdingMegalith(beacons.slice(0, 3).map(standing));
-
-    // Three Beacons up and the first Megalith is still 5 metal: the discount
-    // is what a standing Megalith grants, not what Monuments grant.
-    expect(buildCostFor(state.players[0], megaliths[1])).toEqual({
+  it("costs full price with nothing standing", () => {
+    expect(buildCostFor(holdingMegalith([]).players[0], megaliths[1])).toEqual({
       metal: 5,
       energy: 2,
       goods: 0,
     });
   });
 
-  it("takes a metal off the next for every Monument standing", () => {
+  it("is discounted by Monuments already up, with no Megalith among them", () => {
+    const state = holdingMegalith(beacons.slice(0, 3).map(standing));
+
+    // The discount is read when the card is built, so the first Megalith is
+    // as cheap as the three Beacons beside it make it.
+    expect(buildCostFor(state.players[0], megaliths[1])).toEqual({
+      metal: 2,
+      energy: 2,
+      goods: 0,
+    });
+  });
+
+  it("takes a metal off for every Monument standing, itself included", () => {
     // One Megalith and two Beacons: three Monuments, so three metal off.
     const state = holdingMegalith([megaliths[0], beacons[0], beacons[1]].map(standing));
 

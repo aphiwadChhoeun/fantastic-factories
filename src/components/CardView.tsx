@@ -21,7 +21,7 @@ type Props = {
   card: Card;
   /**
    * What this card costs *this* player, when that is not what is printed on
-   * it — a standing Megalith discounts the next one.
+   * it — a Megalith is discounted by the Monuments already standing.
    */
   buildCost?: Resources;
   /** A blueprint standing in a compound, rather than one held in hand. */

@@ -111,19 +111,18 @@ function alreadyBuilt(player: Player, card: BlueprintCard): boolean {
 
 /**
  * What a blueprint costs this player to build, which is not always what is
- * printed on it: a Megalith already standing takes a metal off the next one
- * for every Monument up, itself included.
+ * printed on it: the Megalith takes a metal off for every Monument already
+ * standing, and never goes below nothing.
  *
- * The discount comes from a *standing* copy — "future Megaliths", as the card
- * puts it — so the first one is always full price however many Beacons are
- * beside it. Never below nothing.
+ * Worked out when the card is built, off the compound as it is then — so the
+ * discount is on the card being built rather than on one already up, and the
+ * first Megalith is as cheap as the Beacons beside it make it.
  *
  * Exported because the board has to show the price the player will pay.
  */
 export function buildCostFor(player: Player, card: BlueprintCard): Resources {
-  const standing = player.compound.find((building) => building.card.name === card.name);
-  const passive = standing?.card.passive;
-  if (passive?.kind !== "cheaperCopies") return card.buildCost;
+  const { passive } = card;
+  if (passive?.kind !== "cheaperPerCard") return card.buildCost;
 
   const off = player.compound.filter((building) => building.card.type === passive.per).length;
   return { ...card.buildCost, metal: Math.max(0, card.buildCost.metal - off) };

@@ -297,11 +297,14 @@ export type Passive =
   /** Draw a blueprint the first time goods are gained this round. */
   | { readonly kind: "drawOnGoods" }
   /**
-   * Later copies of this card cost a metal less for every card of `per` type
-   * already standing — the Megalith, which gets cheaper the more Monuments
-   * are up. Continuous rather than once a round, so it spends no `worked`.
+   * This card costs a metal less to build for every card of `per` type already
+   * standing — the Megalith, which gets cheaper the more Monuments are up.
+   *
+   * Read off the compound when the card is built, so it needs no copy standing
+   * first: three Beacons take three metal off the very first Megalith. Nothing
+   * to work, and no `worked` spent.
    */
-  | { readonly kind: "cheaperCopies"; readonly per: BlueprintCategory };
+  | { readonly kind: "cheaperPerCard"; readonly per: BlueprintCategory };
 
 /** Built into your compound, where its perk can be used once per round. */
 export type BlueprintCard = CardBase & {

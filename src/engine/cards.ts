@@ -373,10 +373,10 @@ const BLUEPRINTS: readonly { template: BlueprintTemplate; copies: number }[] = [
       tool: "wrench",
       buildCost: { metal: 5, energy: 2, goods: 0 },
       prestige: 3,
-      // Meant to be stacked, like the Beacon — "future Megaliths" says as much
-      // — and each one standing makes the next cheaper.
+      // Meant to be stacked, like the Beacon, and every Monument already up
+      // takes a metal off the next one — itself a Monument, so they compound.
       duplicable: true,
-      passive: { kind: "cheaperCopies", per: "monument" },
+      passive: { kind: "cheaperPerCard", per: "monument" },
     },
   },
 ];

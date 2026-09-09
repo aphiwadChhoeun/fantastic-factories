@@ -229,15 +229,14 @@ fired this round` so you can tell which.
 The automaton never works a perk, and a card in hand would be the first it ever
 held, so a Laboratory in its compound stays quiet like the rest of it.
 
-**The Megalith discounts the next one.** It is not worked either: while one
-stands, every later Megalith costs a metal less for each Monument in your
-compound — the Megalith itself included — down to nothing but the wrench.
+**The Megalith gets cheaper the more Monuments you have.** It is not worked
+either: it simply costs a metal less for each Monument standing when you build
+it, down to nothing but the wrench.
 
-Read as written, `future Megalith's build cost is reduced`, the discount is
-what a *standing* Megalith grants. So the first one is full price however many
-Beacons are beside it, and only the second onwards is cheap. The other reading
-— that the card is simply cheaper the more Monuments you hold, first one
-included — is a one-line change if it is the right one.
+The discount is on the card going up, not on one already there, so it needs no
+Megalith standing first — three Beacons take three metal off your very first
+one. And since a Megalith is itself a Monument, each one you stand makes the
+next cheaper again.
 
 It is the second blueprint you may stand more than one of, and at 3 prestige
 each it is the heaviest scorer in the deck.
@@ -426,8 +425,6 @@ Start in `src/engine/rules.ts`. The implemented slice is: take a card from one
 of the two rows, roll dice, spend dice to build blueprints, activate your
 compound and work your Headquarters, end the round. Known stubs:
 
-- the Megalith's discount is read as coming from a *standing* Megalith, so the
-  first one is full price. That "future" is doing all the work — see Passives
 - **44 cards, and the shape is evening out.** Hammers are still the thinnest
   tool at 6, and Special the thinnest type at 2 — so the automaton's purple die
   now has something to count, but only just
