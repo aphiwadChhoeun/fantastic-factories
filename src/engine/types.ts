@@ -100,14 +100,18 @@ export type Effect =
    */
   | { readonly kind: "extraDice"; readonly count: number; readonly chosen: boolean }
   /**
-   * Discard a blueprint from hand and take its build cost back as metal and
-   * energy — the Black Market. Never more than `max` in total: a card that
-   * cost more than that pays out only part, and the player says which part.
+   * Take back what the blueprint the perk ate would have cost to build — the
+   * Black Market. Never more than `max` in total: a card that cost more than
+   * that pays out only part, and the player says which part.
    *
-   * Which card, and which part, ride on the move rather than the card, so this
-   * is the one effect that cannot resolve on its own.
+   * The eating is the perk's `discardsCard`; this is only the payout.
    */
-  | { readonly kind: "discardForResources"; readonly max: number }
+  | { readonly kind: "gainCardCost"; readonly max: number }
+  /**
+   * One of several payouts, whichever the player takes — the Harvester pays
+   * four metal or seven energy, never both.
+   */
+  | { readonly kind: "gainOneOf"; readonly options: readonly Resources[] }
   /**
    * Turn an unspent die over to the face on the other side — the Dojo. The die
    * is not spent and does not go on the card: it stays on the table showing
@@ -262,6 +266,14 @@ export type BlueprintPerk = {
   /** Resources paid to use it, on top of the dice. Usually nothing. */
   readonly cost: Resources;
   /**
+   * The perk also eats a blueprint out of hand, on top of everything else —
+   * the Incinerator burns one, the Black Market sells one.
+   *
+   * A cost, not an effect: what the card is worth afterwards is the effect's
+   * business, and for the Incinerator it is worth nothing at all.
+   */
+  readonly discardsCard?: boolean;
+  /**
    * A price read off a face rather than printed: this much of this resource,
    * equal to the face the perk turns on. The Concrete Plant takes two matching
    * dice and charges metal equal to the pair, so a 3, 3 costs 3 metal; the
@@ -272,6 +284,16 @@ export type BlueprintPerk = {
   readonly costByFace?: keyof Resources;
   readonly effect: Effect;
 };
+
+/**
+ * An ability that fires on its own rather than being worked. A card with one
+ * has no perk: nothing is placed on it, nothing is paid, and there is nothing
+ * to click. It still spends its `worked` flag, which is what holds it to once
+ * a round.
+ */
+export type Passive =
+  /** Draw a blueprint the first time goods are gained this round. */
+  { readonly kind: "drawOnGoods" };
 
 /** Built into your compound, where its perk can be used once per round. */
 export type BlueprintCard = CardBase & {
@@ -303,6 +325,8 @@ export type BlueprintCard = CardBase & {
   readonly duplicable?: boolean;
   /** Some blueprints are pure score, and do nothing once standing. */
   readonly perk?: BlueprintPerk;
+  /** Fires by itself instead of being worked. A card has one or the other. */
+  readonly passive?: Passive;
 };
 
 /**

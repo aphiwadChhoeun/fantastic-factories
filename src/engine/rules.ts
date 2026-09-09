@@ -238,6 +238,23 @@ function sameResources(a: Resources, b: Resources): boolean {
 }
 
 /**
+ * The payouts an effect offers, when it offers more than one. `null` stands
+ * for "no choice to make" — most effects pay what they say and nothing has to
+ * ride on the move.
+ *
+ * `eaten` is the blueprint the perk is about to burn, which the Black Market's
+ * payout is worked out from and everything else ignores.
+ */
+function payoutOptions(
+  effect: Effect | undefined,
+  eaten: BlueprintCard | null,
+): (Resources | null)[] {
+  if (effect?.kind === "gainOneOf") return [...effect.options];
+  if (effect?.kind === "gainCardCost" && eaten) return gainSplits(eaten.buildCost, effect.max);
+  return [null];
+}
+
+/**
  * Every distinct set of dice that could work a building's perk right now. A
  * perk that takes no dice yields one empty set — it is still a move.
  */
@@ -377,18 +394,6 @@ export function legalMoves(state: GameState): Move[] {
             continue;
           }
 
-          // The Black Market eats a card out of hand and pays back what that
-          // card cost, so every blueprint held is a different move — and one
-          // that cost more than the cap is several, one per way to take it.
-          if (effect?.kind === "discardForResources") {
-            for (const payment of player.hand) {
-              for (const gain of gainSplits(payment.buildCost, effect.max)) {
-                moves.push({ type: "activate", cardId, dieIds, paymentCardId: payment.id, gain });
-              }
-            }
-            continue;
-          }
-
           // A perk that changes a die names the one it acts on rather than one
           // it spends, so it is one move per face on the table — two dice
           // showing the same number change to the same thing. A face it cannot
@@ -404,7 +409,21 @@ export function legalMoves(state: GameState): Move[] {
             continue;
           }
 
-          moves.push({ type: "activate", cardId, dieIds });
+          // What is left to settle is which blueprint the perk eats, if it eats
+          // one, and which payout is taken, if there is a choice. A perk that
+          // eats a card with an empty hand has no move at all.
+          const eaten = perk?.discardsCard ? player.hand : [null];
+          for (const payment of eaten) {
+            for (const gain of payoutOptions(effect, payment)) {
+              moves.push({
+                type: "activate",
+                cardId,
+                dieIds,
+                ...(payment ? { paymentCardId: payment.id } : {}),
+                ...(gain ? { gain } : {}),
+              });
+            }
+          }
         }
       }
 
@@ -582,6 +601,54 @@ function buildFromDeck(state: GameState, playerIndex: number): GameState {
 }
 
 /**
+ * Adds resources, and lets anything watching for them fire.
+ *
+ * Every payout goes through here rather than touching `resources` directly,
+ * which is what keeps a passive from being missed when a new card gains goods
+ * by some route nobody thought of yet.
+ */
+function gainResources(
+  state: GameState,
+  playerIndex: number,
+  gain: Partial<Resources>,
+): GameState {
+  const added = updatePlayer(state, playerIndex, (player) => ({
+    ...player,
+    resources: addResources(player.resources, gain),
+  }));
+  return (gain.goods ?? 0) > 0 ? drawOnGoods(added, playerIndex) : added;
+}
+
+/**
+ * The Laboratory: the first goods of the round draw a blueprint. It spends its
+ * `worked` flag doing so, which is what holds it to once a round however many
+ * goods arrive, and cleanup clears that with everything else.
+ *
+ * The automaton never works a perk, and a card in hand would be the first it
+ * ever held, so its Laboratories sit quiet like the rest of its compound.
+ */
+function drawOnGoods(state: GameState, playerIndex: number): GameState {
+  const player = state.players[playerIndex];
+  if (player.isAi) return state;
+
+  const lab = player.compound.find(
+    (building) => building.card.passive?.kind === "drawOnGoods" && !building.worked,
+  );
+  if (!lab) return state;
+
+  const spent = updatePlayer(state, playerIndex, (p) => ({
+    ...p,
+    compound: p.compound.map((building) =>
+      building.card.id === lab.card.id ? { ...building, worked: true } : building,
+    ),
+  }));
+  return log(
+    drawBlueprints(spent, playerIndex, 1),
+    `${player.name} drew a blueprint from ${lab.card.name}`,
+  );
+}
+
+/**
  * Turns the top blueprint face up, pays out its build cost in metal and
  * energy, and discards it. The card is only ever revealed — it does not reach
  * hand. Goods never appear in a build cost, so nothing is lost by ignoring
@@ -611,36 +678,6 @@ function revealForResources(state: GameState, playerIndex: number): GameState {
   return log(
     paid,
     `${player.name} revealed ${card.name} — gained ${describeResourcesForLog(gain)}`,
-  );
-}
-
-/**
- * Feeds a blueprint out of hand to the Black Market and pays out `gain` — the
- * card's own build cost, or as much of it as the cap allows. Both the card and
- * the split were checked by the move that got here.
- */
-function discardForResources(
-  state: GameState,
-  playerIndex: number,
-  card: BlueprintCard,
-  gain: Resources,
-): GameState {
-  const player = state.players[playerIndex];
-  const traded = updatePlayer(
-    {
-      ...state,
-      blueprints: { ...state.blueprints, discard: [...state.blueprints.discard, card] },
-    },
-    playerIndex,
-    (p) => ({
-      ...p,
-      hand: p.hand.filter((c) => c.id !== card.id),
-      resources: addResources(p.resources, gain),
-    }),
-  );
-  return log(
-    traded,
-    `${player.name} sold ${card.name} — gained ${describeResourcesForLog(gain)}`,
   );
 }
 
@@ -712,9 +749,9 @@ function grantPerks(state: GameState, playerIndex: number, grant: Partial<WorkPe
 }
 
 /**
- * The parts of an effect the card cannot decide for itself, settled by the
- * move that played it. Only the Black Market needs any: which blueprint it
- * eats, and which resources to take when that card cost more than it pays.
+ * The parts of an activation the card cannot decide for itself, settled by the
+ * move that played it: which blueprint it eats, which of several payouts is
+ * taken, which die it acts on, which face it sells.
  */
 type EffectChoice = {
   readonly discard?: BlueprintCard;
@@ -733,9 +770,10 @@ type EffectChoice = {
 function activationChoice(
   player: Player,
   cardName: string,
-  effect: Effect,
+  perk: BlueprintPerk,
   move: Extract<Move, { type: "activate" }>,
 ): EffectChoice {
+  const effect = perk.effect;
   // Only the perk that asks for a thing may be handed it, so each branch
   // turns down what is not its business.
   const refuse = (given: unknown, what: string) => {
@@ -766,26 +804,33 @@ function activationChoice(
   refuse(move.face, "hand over a die");
   refuse(move.targetDieId, "change a die");
 
-  if (effect.kind !== "discardForResources") {
+  // A perk that eats a blueprint says which on the move.
+  let discard: BlueprintCard | undefined;
+  if (perk.discardsCard) {
+    if (!move.paymentCardId) throw new Error(`${cardName} needs a blueprint to discard`);
+    discard = player.hand.find((card) => card.id === move.paymentCardId);
+    if (!discard) throw new Error(`${player.name} does not hold ${move.paymentCardId}`);
+  } else {
     refuse(move.paymentCardId, "take a blueprint");
-    return {};
   }
 
-  if (!move.paymentCardId) throw new Error(`${cardName} needs a blueprint to discard`);
-  const discard = player.hand.find((card) => card.id === move.paymentCardId);
-  if (!discard) throw new Error(`${player.name} does not hold ${move.paymentCardId}`);
-
-  // A card that cost more than the cap pays out only part of it, and which
-  // part is the player's call — so it has to be on the move.
-  const allowed = gainSplits(discard.buildCost, effect.max);
-  if (!move.gain && allowed.length > 1) {
-    throw new Error(`${cardName} pays at most ${effect.max} — say which resources to take`);
+  // And a payout with more than one shape says which of them. A card that cost
+  // more than the Black Market's cap pays only part, and which part is the
+  // player's call.
+  const allowed = payoutOptions(effect, discard ?? null);
+  const [first] = allowed;
+  if (first === null) {
+    refuse(move.gain, "pay more than one way");
+    return { discard };
   }
-  const gain = move.gain ?? allowed[0];
-  if (!allowed.some((split) => sameResources(split, gain))) {
-    throw new Error(
-      `${discard.name} does not pay ${describeResourcesForLog(gain)} at ${cardName}`,
-    );
+
+  const options = allowed as Resources[];
+  if (!move.gain && options.length > 1) {
+    throw new Error(`${cardName} pays more than one way — say which`);
+  }
+  const gain = move.gain ?? options[0];
+  if (!options.some((option) => sameResources(option, gain))) {
+    throw new Error(`${cardName} does not pay ${describeResourcesForLog(gain)}`);
   }
 
   return { discard, gain };
@@ -806,10 +851,7 @@ function applyEffect(
 ): GameState {
   switch (effect.kind) {
     case "gain":
-      return updatePlayer(state, playerIndex, (player) => ({
-        ...player,
-        resources: addResources(player.resources, effect.resources),
-      }));
+      return gainResources(state, playerIndex, effect.resources);
     case "draw":
       return drawBlueprints(state, playerIndex, effect.count);
     case "buildFromDeck":
@@ -824,11 +866,18 @@ function applyEffect(
         playerIndex,
         effect.chosen ? { extraChosen: effect.count } : { extraRolled: effect.count },
       );
-    case "discardForResources": {
-      // Only an activation carries these, and only after checking them.
-      const { discard, gain } = choice;
-      if (!discard || !gain) throw new Error("No blueprint chosen to discard");
-      return discardForResources(state, playerIndex, discard, gain);
+    // Both pay what the move settled on: one of several printed payouts, or
+    // whatever the blueprint the perk ate would have cost. Logged, because
+    // which one was taken is the whole decision.
+    case "gainOneOf":
+    case "gainCardCost": {
+      const { gain } = choice;
+      if (!gain) throw new Error("No payout chosen");
+      const announced = log(
+        state,
+        `${state.players[playerIndex].name} took ${describeResourcesForLog(gain)}`,
+      );
+      return gainResources(announced, playerIndex, gain);
     }
     case "flipDie":
     case "stepDie": {
@@ -848,14 +897,11 @@ function applyEffect(
     case "gainByFace": {
       const face = choice.faces?.[0];
       if (face === undefined) throw new Error("No die placed to read");
-      return updatePlayer(state, playerIndex, (player) => ({
-        ...player,
-        resources: addResources(player.resources, {
-          metal: effect.resource === "metal" ? face : 0,
-          energy: effect.resource === "energy" ? face : 0,
-          goods: effect.resource === "goods" ? face : 0,
-        }),
-      }));
+      return gainResources(state, playerIndex, {
+        metal: effect.resource === "metal" ? face : 0,
+        energy: effect.resource === "energy" ? face : 0,
+        goods: effect.resource === "goods" ? face : 0,
+      });
     }
   }
 }
@@ -904,9 +950,10 @@ function describeEffectForLog(effect: Effect): string {
       const dice = `${effect.count} extra white ${effect.count === 1 ? "die" : "dice"}`;
       return effect.chosen ? `gets ${dice} at a face of their choice` : `rolls ${dice}`;
     }
-    // Logs the card and the haul itself, once both are known.
-    case "discardForResources":
-      return "selling a blueprint";
+    // The activation has already said what it ate and what it paid.
+    case "gainCardCost":
+    case "gainOneOf":
+      return "taking the payout";
     // These log which die, and what it became.
     case "flipDie":
       return "turning a die over";
@@ -1394,9 +1441,9 @@ export function applyMove(state: GameState, move: Move): GameState {
       if (!fitsPattern(perk.pattern, faces)) {
         throw new Error(`${building.card.name} needs ${perk.pattern} dice`);
       }
-      // A perk that eats a card, changes a die or sells one says so on the
-      // move, and is checked here before anything is paid.
-      const chosen = activationChoice(player, building.card.name, perk.effect, move);
+      // A perk that eats a card, changes a die, sells one or pays more than
+      // one way says so on the move, and is checked before anything is paid.
+      const chosen = activationChoice(player, building.card.name, perk, move);
       const choice = { faces, ...chosen };
 
       // Some perks read their price off a face, so it is only known now — and
@@ -1406,14 +1453,34 @@ export function applyMove(state: GameState, move: Move): GameState {
         throw new Error(`${building.card.name} costs ${describeResourcesForLog(cost)} to use`);
       }
 
-      const used = updatePlayer(state, index, (p) => ({
-        ...dice.reduce((spent, die) => spendDie(spent, die.id), p),
-        compound: p.compound.map((b) =>
-          b.card.id === building.card.id ? { ...b, dice: faces, worked: true } : b,
-        ),
-        resources: spendResources(p.resources, cost),
-      }));
-      const paid = costsNothing(cost) ? "" : ` for ${describeResourcesForLog(cost)}`;
+      const eaten = chosen.discard;
+      const used = updatePlayer(
+        eaten
+          ? {
+              ...state,
+              blueprints: {
+                ...state.blueprints,
+                discard: [...state.blueprints.discard, eaten],
+              },
+            }
+          : state,
+        index,
+        (p) => ({
+          ...dice.reduce((spent, die) => spendDie(spent, die.id), p),
+          // The card the perk eats is part of the price, not of the payout.
+          hand: eaten ? p.hand.filter((c) => c.id !== eaten.id) : p.hand,
+          compound: p.compound.map((b) =>
+            b.card.id === building.card.id ? { ...b, dice: faces, worked: true } : b,
+          ),
+          resources: spendResources(p.resources, cost),
+        }),
+      );
+
+      const price = [
+        eaten?.name,
+        costsNothing(cost) ? undefined : describeResourcesForLog(cost),
+      ].filter(Boolean);
+      const paid = price.length > 0 ? ` for ${price.join(" and ")}` : "";
       const withDice = faces.length > 0 ? ` with ${faces.join(", ")}` : "";
       const announced = log(
         used,

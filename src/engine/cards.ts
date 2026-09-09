@@ -121,7 +121,8 @@ const BLUEPRINTS: readonly { template: BlueprintTemplate; copies: number }[] = [
         pattern: "any",
         accepts: { kind: "any" },
         cost: FREE,
-        effect: { kind: "discardForResources", max: 4 },
+        discardsCard: true,
+        effect: { kind: "gainCardCost", max: 4 },
       },
     },
   },
@@ -253,6 +254,62 @@ const BLUEPRINTS: readonly { template: BlueprintTemplate; copies: number }[] = [
         cost: { metal: 0, energy: 1, goods: 0 },
         effect: { kind: "stepDie", by: 1 },
       },
+    },
+  },
+  {
+    copies: 2,
+    template: {
+      name: "Harvester",
+      type: "utility",
+      tool: "hammer",
+      buildCost: { metal: 1, energy: 2, goods: 0 },
+      prestige: 1,
+      // One payout or the other, never both.
+      perk: {
+        dice: 2,
+        pattern: "matching",
+        accepts: { kind: "any" },
+        cost: FREE,
+        effect: {
+          kind: "gainOneOf",
+          options: [
+            { metal: 4, energy: 0, goods: 0 },
+            { metal: 0, energy: 7, goods: 0 },
+          ],
+        },
+      },
+    },
+  },
+  {
+    copies: 2,
+    template: {
+      name: "Incinerator",
+      type: "utility",
+      tool: "shovel",
+      buildCost: { metal: 2, energy: 1, goods: 0 },
+      prestige: 1,
+      // Burns a card for energy. Unlike the Black Market it pays a flat rate,
+      // so what goes in the fire makes no difference.
+      perk: {
+        dice: 0,
+        pattern: "any",
+        accepts: { kind: "any" },
+        cost: { metal: 1, energy: 0, goods: 0 },
+        discardsCard: true,
+        effect: { kind: "gain", resources: { energy: 6 } },
+      },
+    },
+  },
+  {
+    copies: 2,
+    template: {
+      name: "Laboratory",
+      type: "special",
+      tool: "wrench",
+      buildCost: { metal: 1, energy: 4, goods: 0 },
+      prestige: 1,
+      // No perk at all: it watches for goods and draws once a round.
+      passive: { kind: "drawOnGoods" },
     },
   },
 ];

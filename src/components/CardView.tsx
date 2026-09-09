@@ -5,7 +5,12 @@ import {
   BLUEPRINT_TOOL_GLYPHS,
   BLUEPRINT_TOOL_SWATCHES,
 } from "@/lib/colors";
-import { describeEffect, describePerkCost, describeResources } from "@/lib/format";
+import {
+  describeEffect,
+  describePassive,
+  describePerkCost,
+  describeResources,
+} from "@/lib/format";
 import styles from "./game.module.css";
 
 function costsResources(cost: Resources): boolean {
@@ -100,6 +105,10 @@ export function CardView({
         <span className={styles.cardMeta}>{describeEffect(card.effect)}</span>
       ) : (
         card.perk && <span className={styles.cardMeta}>{describeEffect(card.perk.effect)}</span>
+      )}
+      {/* A passive is not worked, so it has no Work line — only what it does. */}
+      {card.kind === "blueprint" && card.passive && (
+        <span className={styles.cardMeta}>{describePassive(card.passive)}</span>
       )}
       {card.kind === "blueprint" && card.prestige ? (
         <span className={styles.cardMeta}>

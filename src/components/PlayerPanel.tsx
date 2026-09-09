@@ -61,11 +61,13 @@ export type PanelInteraction = {
  * right there — but one you cannot pay for looks broken without this.
  */
 function perkNote(player: Player, building: Building): string | undefined {
-  const { perk, prestigeBonus } = building.card;
+  const { perk, passive, prestigeBonus } = building.card;
+  // A passive fires by itself; `worked` is how it remembers that it has.
+  if (passive) return building.worked ? "already fired this round" : "watching";
   if (!perk) return prestigeBonus ? "scores, and stacks" : "scores only";
   if (building.worked) return "worked this round";
-  // The Black Market's price is a card out of hand, not a resource.
-  if (perk.effect.kind === "discardForResources" && player.hand.length === 0) {
+  // Some perks are priced in cards rather than resources.
+  if (perk.discardsCard && player.hand.length === 0) {
     return "needs a blueprint in hand";
   }
   if (!canAfford(player.resources, perk.cost)) {

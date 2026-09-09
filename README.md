@@ -149,11 +149,19 @@ resources on top; and some take no dice at all.
 A perk takes all its dice at once, so you need the whole set before you can
 work it and no die is ever left stranded on a half-filled card.
 
-Two perks charge something other than a printed price. The Concrete Plant reads
-its cost off the table — metal equal to the pair of dice put on it, once for
-the pair and not once each — so the same card is cheap on two 1s and dear on
-two 6s. The Black Market charges a card instead: a blueprint out of hand, which
-pays back what that blueprint would have cost to build.
+Some perks charge something other than a printed price. The Concrete Plant
+reads its cost off the table — metal equal to the pair of dice put on it, once
+for the pair and not once each — so the same card is cheap on two 1s and dear
+on two 6s.
+
+**Two perks are paid in cards.** The Black Market and the Incinerator each eat
+a blueprint out of hand on top of whatever else they charge. What the card was
+matters to one and not the other: the Black Market pays back what it would have
+cost to build, while the Incinerator burns anything for the same flat six
+energy. A Beacon is worth four at the Black Market and six in the fire.
+
+**The Harvester pays one way or the other.** Two matching dice buy four metal
+*or* seven energy, never both, and which one is the player's to say.
 
 **Some perks pay out in dice rather than in goods.** Three of them change a die
 you already have: the Dojo turns it over to the face on the other side —
@@ -195,6 +203,24 @@ both limits at once. `End turn` is simply not offered until you are.
 None of this touches the automaton: it holds no cards and is dealt no metal or
 energy, so it can never be over either.
 
+### Passives
+
+**The Laboratory is not worked at all.** It has no perk: nothing goes on it,
+nothing is paid, and there is nothing to click. It watches, and the first time
+you gain goods in a round it draws you a blueprint.
+
+Once a round however many goods arrive, and it does not care where they came
+from — a perk, a Headquarters section, or anything added later. Every payout in
+the engine goes through one function, which is what stops a future card from
+gaining goods by a route the Laboratory never hears about.
+
+It marks its round as spent with the same `worked` flag a perk uses, so cleanup
+clears it along with everything else. The card says `watching` or `already
+fired this round` so you can tell which.
+
+The automaton never works a perk, and a card in hand would be the first it ever
+held, so a Laboratory in its compound stays quiet like the rest of it.
+
 ### Scoring
 
 **Your score is your goods plus the prestige standing in your compound.**
@@ -205,9 +231,12 @@ Most blueprints are worth 1 prestige; the Concrete Plant and the three Training
 cards are worth none, and the Beacon scores as a set. The highest score wins,
 and an equal score is a draw.
 
+Every Training card is worth nothing but what it does to your dice, which is
+the closest thing the deck has to a trade-off between scoring and playing well.
+
 ### The real blueprints so far
 
-Thirty-one cards, thirteen of them distinct — every one a real card.
+Thirty-seven cards, sixteen of them distinct — every one a real card.
 
 | Blueprint        | Copies | Type       | Tool   | Build cost         | Perk                                     | Prestige      |
 | ---------------- | -----: | ---------- | ------ | ------------------ | ---------------------------------------- | ------------- |
@@ -224,6 +253,9 @@ Thirty-one cards, thirteen of them distinct — every one a real card.
 | Fulfillment Center |    2 | Production | hammer | 2 metal + 1 energy | a 4 + 2 energy → 1 good, 1 metal           | 1             |
 | Golem            |      2 | Monument   | hammer | 4 metal            | buy an extra die at any face, for that much energy | 1     |
 | Gymnasium        |      3 | Training   | shovel | 1 metal            | 1 energy → put 1 on an unspent die         | —             |
+| Harvester        |      2 | Utility    | hammer | 1 metal + 2 energy | 2 matching dice → 4 metal *or* 7 energy    | 1             |
+| Incinerator      |      2 | Utility    | shovel | 2 metal + 1 energy | a blueprint from hand + 1 metal → 6 energy | 1             |
+| Laboratory       |      2 | Special    | wrench | 1 metal + 4 energy | none — it watches (see below)              | 1             |
 
 Every build cost is on top of discarding a blueprint of the same tool.
 
@@ -342,7 +374,8 @@ nothing to drag at it, so it is clicked instead.
 The Dojo, the Fitness Center and the Gymnasium are dragged at like anything
 else, even though they spend no die: drop the die you want changed onto one and
 it comes back showing its new face. The Golem has nothing to drag at it — there
-is no die yet — so it is clicked, and it asks which face you are buying.
+is no die yet — so it is clicked, and it asks which face you are buying. The
+Laboratory cannot be clicked at all; it is not worked, and it says so.
 
 Over a limit, the panel says so and `End turn` disappears until you are back
 inside. Resource discards are buttons — there is nothing on the board to point
@@ -369,12 +402,10 @@ Start in `src/engine/rules.ts`. The implemented slice is: take a card from one
 of the two rows, roll dice, spend dice to build blueprints, activate your
 compound and work your Headquarters, end the round. Known stubs:
 
-- **the deck is 31 cards and still short in places.** Hammers are the thinnest
-  tool at 4 of the 31, so the Golem and the Fulfillment Center are hard to
-  build — each needs the other in hand — and the contractor row's hammer token
-  is often unpayable. Special has no cards at all, which leaves the automaton's
-  purple die dead. Both are holes in the deck rather than in the rules
-- **31 cards is still a small deck.** Setup deals eleven of them — four to
+- **37 cards, and the shape is evening out.** Hammers are still the thinnest
+  tool at 6, and Special the thinnest type at 2 — so the automaton's purple die
+  now has something to count, but only just
+- **37 cards is still a smallish deck.** Setup deals eleven of them — four to
   hand, four to the row, three to the automaton — so the draw pile turns over
   fast and the discard reshuffles often. Nothing breaks; games just repeat
   themselves
@@ -384,18 +415,18 @@ compound and work your Headquarters, end the round. Known stubs:
   the Specialist's extra die is white like the Hired Hands dice — neither is
   spelled out on the card
 - an equal score is a draw. No tiebreak is defined
-- 13 distinct blueprints and a Beacon that stacks four deep put the 10-card
+- 16 distinct blueprints and a Beacon that stacks four deep put the 10-card
   `END_COMPOUND_SIZE` only just in reach for a human — the automaton, dealt
   three and taking one a turn, gets there in seven rounds
 - the Headquarters is the same for every player. The published game hands out
   one of several starting tiles
-- `Effect` — the real game needs many more variants than the eleven here
+- `Effect` — the real game needs many more variants than the twelve here
 - a `draw` effect always pulls blueprints; no card lets you choose a deck yet
 - the Black Market's cap is read as four resources in total, and the card it
   eats is discarded rather than kept. Taking less than the cap is not offered
 - the automaton's dice are lopsided against the deck it draws from: 13
-  Production copies to 8 Training, 6 Monument (which never pays), 4 Utility
-  and no Special. Its blue die does most of the work and its purple one none
+  Production copies to 8 Training, 8 Utility, 6 Monument (which never pays)
+  and 2 Special. Its blue die does most of the work and its purple one least
 - no rule reads a blueprint's type outside the automaton's Work Phase
 - a Specialist die is set before anything is spent, but the Dojo and the
   Fitness Center now *do* change a die mid-phase. Whether a Specialist die

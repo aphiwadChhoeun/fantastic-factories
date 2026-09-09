@@ -958,7 +958,8 @@ describe("the Black Market", () => {
     expect(next.players[0].resources).toEqual({ metal: 2, energy: 1, goods: 0 });
     expect(next.players[0].hand).toEqual([]);
     expect(next.blueprints.discard).toContain(line);
-    expect(logged(next, /sold Assembly Line — gained 2 metal, 1 energy/)).toBe(true);
+    expect(logged(next, /worked Black Market with 5 for Assembly Line/)).toBe(true);
+    expect(logged(next, /took 2 metal, 1 energy/)).toBe(true);
   });
 
   it("offers one move per blueprint in hand, and none with an empty hand", () => {
@@ -1804,6 +1805,259 @@ describe("the Gymnasium", () => {
         targetDieId: "d0",
       }),
     ).toThrow(/Gymnasium cannot change a 6/);
+  });
+});
+
+describe("the Harvester", () => {
+  const harvester = cardNamed(createBlueprintDeck(), "Harvester");
+  const METAL = { metal: 4, energy: 0, goods: 0 };
+  const ENERGY = { metal: 0, energy: 7, goods: 0 };
+
+  function withHarvester(dice: readonly DieFace[]): GameState {
+    const state = createInitialState({ seed: 3 });
+    const { color } = state.players[0];
+    return patchPlayer({ ...state, phase: "work" }, 0, {
+      compound: [{ card: harvester, dice: [], worked: false }],
+      dice: dice.map((face, i) => ({ id: `d${i}`, face, color, extra: false, spent: false })),
+      rolled: true,
+      resources: { metal: 0, energy: 0, goods: 0 },
+    });
+  }
+
+  it("is a Utility hammer costing 1 metal and 2 energy, worth a prestige", () => {
+    expect(harvester.type).toBe("utility");
+    expect(harvester.tool).toBe("hammer");
+    expect(harvester.buildCost).toEqual({ metal: 1, energy: 2, goods: 0 });
+    expect(harvester.prestige).toBe(1);
+    expect(harvester.perk?.dice).toBe(2);
+    expect(harvester.perk?.pattern).toBe("matching");
+    expect(harvester.perk?.effect).toEqual({ kind: "gainOneOf", options: [METAL, ENERGY] });
+  });
+
+  it("offers both payouts for a pair, and pays only the one taken", () => {
+    const state = withHarvester([3, 3, 5, 1]);
+    const gains = legalMoves(state)
+      .filter((move) => move.type === "activate")
+      .map((move) => (move.type === "activate" ? move.gain : undefined));
+
+    expect(gains).toEqual([METAL, ENERGY]);
+
+    const next = applyMove(state, {
+      type: "activate",
+      cardId: harvester.id,
+      dieIds: ["d0", "d1"],
+      gain: ENERGY,
+    });
+    expect(next.players[0].resources).toEqual({ metal: 0, energy: 7, goods: 0 });
+    expect(logged(next, /took 7 energy/)).toBe(true);
+  });
+
+  it("refuses a payout it does not print, and one that mixes the two", () => {
+    const state = withHarvester([3, 3, 5, 1]);
+    const activate = (gain: Resources): Move => ({
+      type: "activate",
+      cardId: harvester.id,
+      dieIds: ["d0", "d1"],
+      gain,
+    });
+
+    expect(() => applyMove(state, activate({ metal: 4, energy: 7, goods: 0 }))).toThrow(
+      /does not pay/,
+    );
+    expect(() => applyMove(state, activate({ metal: 0, energy: 0, goods: 4 }))).toThrow(
+      /does not pay/,
+    );
+    // Two payouts and no word on which is not a move.
+    expect(() =>
+      applyMove(state, { type: "activate", cardId: harvester.id, dieIds: ["d0", "d1"] }),
+    ).toThrow(/pays more than one way/);
+  });
+
+  it("still wants a matching pair", () => {
+    expect(
+      legalMoves(withHarvester([1, 2, 3, 4])).filter((move) => move.type === "activate"),
+    ).toEqual([]);
+  });
+});
+
+describe("the Incinerator", () => {
+  const incinerator = cardNamed(createBlueprintDeck(), "Incinerator");
+  const beacon = copiesOf("Beacon")[0];
+
+  function withIncinerator(hand: readonly BlueprintCard[], metal = 1): GameState {
+    const state = createInitialState({ seed: 3 });
+    return patchPlayer({ ...state, phase: "work" }, 0, {
+      compound: [{ card: incinerator, dice: [], worked: false }],
+      rolled: true,
+      hand: [...hand],
+      resources: { metal, energy: 0, goods: 0 },
+    });
+  }
+
+  it("is a Utility shovel costing 2 metal and 1 energy, worth a prestige", () => {
+    expect(incinerator.type).toBe("utility");
+    expect(incinerator.tool).toBe("shovel");
+    expect(incinerator.buildCost).toEqual({ metal: 2, energy: 1, goods: 0 });
+    expect(incinerator.prestige).toBe(1);
+    // No dice: a card and a metal are the whole price.
+    expect(incinerator.perk?.dice).toBe(0);
+    expect(incinerator.perk?.discardsCard).toBe(true);
+    expect(incinerator.perk?.cost).toEqual({ metal: 1, energy: 0, goods: 0 });
+  });
+
+  it("burns a card and a metal for six energy, whatever the card was", () => {
+    const state = withIncinerator([beacon]);
+
+    const next = applyMove(state, {
+      type: "activate",
+      cardId: incinerator.id,
+      dieIds: [],
+      paymentCardId: beacon.id,
+    });
+
+    // A Beacon cost 2 metal and 4 energy, and the fire pays the same flat 6.
+    expect(next.players[0].resources).toEqual({ metal: 0, energy: 6, goods: 0 });
+    expect(next.players[0].hand).toEqual([]);
+    expect(next.blueprints.discard).toContain(beacon);
+    expect(logged(next, /worked Incinerator for Beacon and 1 metal/)).toBe(true);
+  });
+
+  it("offers one move per card in hand, and none with an empty hand or no metal", () => {
+    const line = cardNamed(createBlueprintDeck(), "Assembly Line");
+    const activations = (state: GameState) =>
+      legalMoves(state).filter((move) => move.type === "activate");
+
+    expect(activations(withIncinerator([beacon, line]))).toHaveLength(2);
+    expect(activations(withIncinerator([]))).toEqual([]);
+    expect(activations(withIncinerator([beacon], 0))).toEqual([]);
+  });
+
+  it("needs to be told which card to burn", () => {
+    expect(() =>
+      applyMove(withIncinerator([beacon]), {
+        type: "activate",
+        cardId: incinerator.id,
+        dieIds: [],
+      }),
+    ).toThrow(/needs a blueprint to discard/);
+  });
+});
+
+describe("the Laboratory", () => {
+  const lab = cardNamed(createBlueprintDeck(), "Laboratory");
+  const battery = cardNamed(createBlueprintDeck(), "Battery Factory");
+
+  /** The Battery Factory beside a Laboratory: 4 energy buys a good. */
+  function withLab(energy = 8): GameState {
+    const state = createInitialState({ seed: 3 });
+    return patchPlayer({ ...state, phase: "work" }, 0, {
+      compound: [
+        { card: lab, dice: [], worked: false },
+        { card: battery, dice: [], worked: false },
+      ],
+      rolled: true,
+      hand: [],
+      resources: { metal: 0, energy, goods: 0 },
+    });
+  }
+
+  const workBattery = (state: GameState) =>
+    applyMove(state, { type: "activate", cardId: battery.id, dieIds: [] });
+
+  it("is a Special wrench costing 1 metal and 4 energy, and has no perk", () => {
+    expect(lab.type).toBe("special");
+    expect(lab.tool).toBe("wrench");
+    expect(lab.buildCost).toEqual({ metal: 1, energy: 4, goods: 0 });
+    expect(lab.prestige).toBe(1);
+    // Nothing is placed on it and nothing paid — it is not worked at all.
+    expect(lab.perk).toBeUndefined();
+    expect(lab.passive).toEqual({ kind: "drawOnGoods" });
+  });
+
+  it("is never offered as a move — it fires by itself", () => {
+    const state = withLab();
+    const activations = legalMoves(state).filter(
+      (move) => move.type === "activate" && move.cardId === lab.id,
+    );
+
+    expect(activations).toEqual([]);
+    expect(() =>
+      applyMove(state, { type: "activate", cardId: lab.id, dieIds: [] }),
+    ).toThrow(/has no perk to work/);
+  });
+
+  it("draws a blueprint the first time goods are gained", () => {
+    const next = workBattery(withLab());
+
+    expect(next.players[0].resources.goods).toBe(1);
+    expect(next.players[0].hand).toHaveLength(1);
+    expect(logged(next, /drew a blueprint from Laboratory/)).toBe(true);
+  });
+
+  it("draws once a round however many goods arrive, and again after cleanup", () => {
+    // Two Battery Factories would be two builds, so this reuses the one card
+    // by clearing `worked` the way cleanup does.
+    const first = workBattery(withLab());
+    const refreshed = patchPlayer(first, 0, {
+      compound: first.players[0].compound.map((b) =>
+        b.card.id === battery.id ? { ...b, worked: false } : b,
+      ),
+    });
+
+    const second = workBattery(refreshed);
+    expect(second.players[0].resources.goods).toBe(2);
+    // Still one card: the Laboratory has spent its round.
+    expect(second.players[0].hand).toHaveLength(1);
+    expect(second.players[0].compound.find((b) => b.card.id === lab.id)?.worked).toBe(true);
+
+    const cleaned = applyMove({ ...second, phase: "cleanup" }, { type: "endPhase" });
+    expect(cleaned.players[0].compound.find((b) => b.card.id === lab.id)?.worked).toBe(false);
+  });
+
+  it("does not fire on metal or energy", () => {
+    const foundry = cardNamed(createBlueprintDeck(), "Foundry");
+    const state = createInitialState({ seed: 3 });
+    const { color } = state.players[0];
+    const staged = patchPlayer({ ...state, phase: "work" }, 0, {
+      compound: [
+        { card: lab, dice: [], worked: false },
+        { card: foundry, dice: [], worked: false },
+      ],
+      dice: [{ id: "d0", face: 3, color, extra: false, spent: false }],
+      rolled: true,
+      hand: [],
+      resources: { metal: 0, energy: 3, goods: 0 },
+    });
+
+    // Three energy in, three metal out — and not a good in sight.
+    const next = applyMove(staged, { type: "activate", cardId: foundry.id, dieIds: ["d0"] });
+    expect(next.players[0].resources).toEqual({ metal: 3, energy: 0, goods: 0 });
+    expect(next.players[0].hand).toEqual([]);
+  });
+
+  it("stays quiet for the automaton, which holds no cards", () => {
+    const state = createInitialState({ seed: 3 });
+    const staged = patchPlayer({ ...state, phase: "work", currentPlayerIndex: 1 }, 1, {
+      compound: [
+        { card: lab, dice: [], worked: false },
+        { card: cardNamed(createBlueprintDeck(), "Aluminum Factory"), dice: [], worked: false },
+      ],
+      dice: AUTOMA_DIE_COLORS.map((color, i) => ({
+        id: `a${i}`,
+        face: 1,
+        color,
+        extra: false,
+        spent: false,
+      })),
+      rolled: true,
+    });
+
+    // Blue 1 finds the Production card and purple 1 finds the Laboratory,
+    // which is Special — so goods do arrive, and the trigger has its chance.
+    const next = applyMove(staged, { type: "automaWork" });
+
+    expect(next.players[1].resources.goods).toBe(2);
+    expect(next.players[1].hand).toEqual([]);
   });
 });
 

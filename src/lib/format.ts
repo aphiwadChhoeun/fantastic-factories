@@ -11,6 +11,7 @@ import {
   type GameState,
   type HqReward,
   type Move,
+  type Passive,
   type Resources,
 } from "@/engine";
 
@@ -57,8 +58,10 @@ export function describeEffect(effect: Effect): string {
         ? `Take ${dice} at a face of your choice after rolling`
         : `Roll ${dice} this round`;
     }
-    case "discardForResources":
-      return `Discard a blueprint from hand — gain its build cost back, up to ${effect.max}`;
+    case "gainCardCost":
+      return `Gain the discarded blueprint's build cost back, up to ${effect.max}`;
+    case "gainOneOf":
+      return `Gain ${effect.options.map((option) => describeResources(option)).join(" or ")}`;
     case "flipDie":
       return "Turn an unspent die over to its opposite face — 5 becomes 2";
     case "stepDie": {
@@ -73,6 +76,14 @@ export function describeEffect(effect: Effect): string {
   }
 }
 
+/** What a card does by itself, with nothing placed on it and nothing paid. */
+export function describePassive(passive: Passive): string {
+  switch (passive.kind) {
+    case "drawOnGoods":
+      return "Draw a blueprint the first time you gain goods each round";
+  }
+}
+
 /** What a built blueprint's perk asks for: dice first, then any resource cost. */
 export function describePerkCost(perk: BlueprintPerk): string {
   const pattern = perk.pattern === "any" ? "" : `${perk.pattern} `;
@@ -84,6 +95,7 @@ export function describePerkCost(perk: BlueprintPerk): string {
         : `${perk.dice} ${pattern}dice`;
   const accepts =
     perk.dice > 1 && perk.accepts.kind !== "any" ? ` (${describeRequirement(perk.accepts)})` : "";
+  const card = perk.discardsCard ? "a blueprint from hand" : "";
   const cost = costsSomething(perk.cost) ? describeResources(perk.cost) : "";
   // A price read off a face cannot be a number until the face is settled —
   // by rolling it, or by the Golem, by choosing it.
@@ -93,7 +105,7 @@ export function describePerkCost(perk: BlueprintPerk): string {
       ? `${perk.costByFace} equal to the face bought`
       : `${perk.costByFace} equal to the ${perk.dice === 1 ? "die" : "dice"}`;
 
-  return [`${dice}${accepts}`, cost, scaled].filter(Boolean).join(" + ") || "nothing";
+  return [`${dice}${accepts}`, card, cost, scaled].filter(Boolean).join(" + ") || "nothing";
 }
 
 function costsSomething(resources: Resources): boolean {
@@ -195,12 +207,12 @@ export function describeMove(state: GameState, move: Move): string {
         move.dieIds.length === 0
           ? ""
           : ` with ${move.dieIds.map((id) => dieFace(state, id)).join(", ")}`;
-      // The Black Market: what it eats, and what it pays for it.
-      const traded = move.paymentCardId
-        ? ` — sell ${findCardName(state, move.paymentCardId)}${
-            move.gain ? ` for ${describeResources(move.gain)}` : ""
-          }`
+      // What it eats, and which of its payouts is being taken.
+      const eaten = move.paymentCardId
+        ? ` — burn ${findCardName(state, move.paymentCardId)}`
         : "";
+      const taken = move.gain ? ` for ${describeResources(move.gain)}` : "";
+      const traded = eaten + taken;
       // A perk that changes a die: which one, and what it becomes. The card
       // itself says how, so the label reads off its effect.
       if (move.targetDieId) {
