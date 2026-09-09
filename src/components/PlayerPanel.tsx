@@ -1,6 +1,7 @@
 import type { DragEvent } from "react";
 import {
   AUTOMA_PRODUCTION,
+  buildCostFor,
   canAfford,
   countByCategory,
   HAND_LIMIT,
@@ -331,6 +332,7 @@ export function PlayerPanel({ player, active, interaction }: Props) {
                 <CardView
                   key={card.id}
                   card={card}
+                  buildCost={buildCostFor(player, card)}
                   highlight={paying || buildable || droppable}
                   selected={pending}
                   onSelect={clickable ? () => interaction?.onSelectCard(card.id) : undefined}

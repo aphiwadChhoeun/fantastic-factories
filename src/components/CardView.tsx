@@ -19,6 +19,11 @@ function costsResources(cost: Resources): boolean {
 
 type Props = {
   card: Card;
+  /**
+   * What this card costs *this* player, when that is not what is printed on
+   * it — a standing Megalith discounts the next one.
+   */
+  buildCost?: Resources;
   /** A blueprint standing in a compound, rather than one held in hand. */
   built?: boolean;
   /** Why this card cannot be used right now, when that is not obvious. */
@@ -42,6 +47,7 @@ type Props = {
 
 export function CardView({
   card,
+  buildCost,
   built = false,
   note,
   dice = [],
@@ -92,12 +98,19 @@ export function CardView({
         <span className={styles.cardMeta}>Also costs: {describeResources(card.extraCost)}</span>
       )}
       {/* Built, the build cost is history; in hand, both matter. */}
-      {card.kind === "blueprint" && !built && (
-        <span className={styles.cardMeta}>
-          Build: discard a {card.tool}
-          {costsResources(card.buildCost) ? `, ${describeResources(card.buildCost)}` : ""}
-        </span>
-      )}
+      {card.kind === "blueprint" &&
+        !built &&
+        (() => {
+          const price = buildCost ?? card.buildCost;
+          const discounted = price.metal < card.buildCost.metal;
+          return (
+            <span className={styles.cardMeta}>
+              Build: discard a {card.tool}
+              {costsResources(price) ? `, ${describeResources(price)}` : ""}
+              {discounted ? " (discounted)" : ""}
+            </span>
+          );
+        })()}
       {card.kind === "blueprint" && card.perk && (
         <span className={styles.cardMeta}>Work: {describePerkCost(card.perk)}</span>
       )}
