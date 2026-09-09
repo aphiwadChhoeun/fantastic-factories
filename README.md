@@ -277,9 +277,8 @@ Blueprints in hand are worth nothing — prestige only counts once built. Metal
 and energy are not score either; they are what you spend to get there.
 
 Most blueprints are worth 1 prestige; the Megalith is worth 3 and the Obelisk
-2, the Concrete Plant, the Refinery and three of the Training cards are worth
-none, and the Beacon scores as a set. The highest score wins, and an equal
-score is a draw.
+2, the Concrete Plant and three of the Training cards are worth none, and the
+Beacon scores as a set. The highest score wins, and an equal score is a draw.
 
 The Dojo, the Fitness Center and the Gymnasium are worth nothing but what they
 do to your dice, which is the closest thing the deck has to a trade-off between
@@ -315,7 +314,7 @@ Sixty cards, twenty-five of them distinct — every one a real card.
 | Obelisk          |      5 | Monument   | hammer | 3 metal + 1 energy | none — it is pure score                    | 2             |
 | Power Plant      |      2 | Utility    | gear   | 3 metal            | any die → that much energy                 | 1             |
 | Recycling Plant  |      3 | Production | gear   | 2 metal            | 2 blueprints from hand + 2 energy → 1 good, draw 1 | 1     |
-| Refinery         |      2 | Utility    | wrench | 1 metal + 3 energy | a blueprint from hand + 3 energy → 3 metal | —             |
+| Refinery         |      2 | Utility    | wrench | 1 metal + 3 energy | a blueprint from hand + 3 energy → 3 metal | 1             |
 
 Every build cost is on top of discarding a blueprint of the same tool.
 

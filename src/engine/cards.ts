@@ -491,6 +491,7 @@ const BLUEPRINTS: readonly { template: BlueprintTemplate; copies: number }[] = [
       type: "utility",
       tool: "wrench",
       buildCost: { metal: 1, energy: 3, goods: 0 },
+      prestige: 1,
       // The Incinerator run backwards: a card and energy for metal, at a
       // fixed rate, so what goes in makes no difference.
       perk: {

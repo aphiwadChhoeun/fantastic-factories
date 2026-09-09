@@ -2561,12 +2561,11 @@ describe("the Refinery", () => {
     });
   }
 
-  it("is a Utility wrench costing 1 metal and 3 energy, and scores nothing", () => {
+  it("is a Utility wrench costing 1 metal and 3 energy, worth a prestige", () => {
     expect(refinery.type).toBe("utility");
     expect(refinery.tool).toBe("wrench");
     expect(refinery.buildCost).toEqual({ metal: 1, energy: 3, goods: 0 });
-    // No prestige line on the card, unlike the two beside it.
-    expect(refinery.prestige).toBeUndefined();
+    expect(refinery.prestige).toBe(1);
     expect(refinery.perk?.dice).toBe(0);
     expect(refinery.perk?.discardsCards).toBe(1);
     expect(refinery.perk?.cost).toEqual({ metal: 0, energy: 3, goods: 0 });
