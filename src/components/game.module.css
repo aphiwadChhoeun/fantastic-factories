@@ -101,6 +101,31 @@
   letter-spacing: 0.08em;
 }
 
+/*
+ * The debug panel. Dashed and tinted so it never passes for part of the game,
+ * on the off chance it is ever seen where it should not be.
+ */
+.devPanel {
+  border-style: dashed;
+  border-color: color-mix(in srgb, #d4a017 45%, transparent);
+}
+
+.devRow {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.devSelect {
+  font-family: inherit;
+  font-size: 13px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  background: transparent;
+  color: inherit;
+}
+
 /* The automaton's compound, counted by type — the whole of its Work Phase. */
 .automaTypes {
   display: flex;

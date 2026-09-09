@@ -13,6 +13,14 @@ const nextConfig: NextConfig = {
    */
   output: "export",
   images: { unoptimized: true },
+  /**
+   * Declared here so it is *inlined* rather than looked up at runtime. Left to
+   * Next's own `NEXT_PUBLIC_` handling an unset variable compiles to a live
+   * `process.env` read, which no bundler can fold — and the debug panel then
+   * ships as dead code even though it never renders. Pinned to a literal, the
+   * flag folds to `false` and the panel is dropped outright.
+   */
+  env: { NEXT_PUBLIC_DEV_TOOLS: process.env.NEXT_PUBLIC_DEV_TOOLS ?? "" },
   /** Emits out/index.html style paths, which Workers Assets serves cleanly. */
   trailingSlash: true,
 };

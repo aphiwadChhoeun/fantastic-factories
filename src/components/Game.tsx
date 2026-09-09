@@ -2,9 +2,11 @@
 
 import { useMemo, useState } from "react";
 import { PHASE_LABELS, type Move } from "@/engine";
+import { DEV_TOOLS } from "@/dev/flag";
 import { useGame } from "@/hooks/useGame";
 import { indexMoves, paymentOf, paymentsFor } from "@/lib/board";
 import { describeMove } from "@/lib/format";
+import { DevPanel } from "./DevPanel";
 import { GameLog } from "./GameLog";
 import { Marketplace, type MarketInteraction } from "./Marketplace";
 import { MoveList } from "./MoveList";
@@ -34,7 +36,7 @@ type Pending = {
 
 export function Game() {
   const [seed, setSeed] = useState(DEFAULT_SEED);
-  const { state, moves, active, isAiTurn, play, reset } = useGame(seed);
+  const { state, moves, active, isAiTurn, play, reset, debug } = useGame(seed);
 
   const [pending, setPending] = useState<Pending | null>(null);
   const [dragged, setDragged] = useState<string | null>(null);
@@ -184,6 +186,8 @@ export function Game() {
           <button type="button" className={styles.resetButton} onClick={newGame}>
             New game (seed {seed + 1})
           </button>
+          {/* Folds to `false` in a production build, and the panel goes with it. */}
+          {DEV_TOOLS && <DevPanel debug={debug} />}
           <GameLog entries={state.log} />
         </div>
       </div>

@@ -37,7 +37,32 @@ src/
   hooks/      useGame — React state plus the AI turn loop
   components/ board UI
   lib/        display formatting
+  dev/        debug tools, compiled out of production
 ```
+
+## Debug tools
+
+A panel in the right-hand column conjures any blueprint straight into your hand
+or standing in your compound, so a card can be tried without playing towards
+it. Nothing is paid and nothing is checked — that is the point.
+
+It is on by default under `npm run dev`. To keep it in a production build:
+
+```bash
+NEXT_PUBLIC_DEV_TOOLS=1 npm run build
+```
+
+Without that, `DEV_TOOLS` folds to `false` at build time and the panel is
+dropped from the bundle outright — not merely hidden. `next.config.ts` pins
+the variable to a literal for exactly this reason: left to Next's own handling,
+an *unset* `NEXT_PUBLIC_` variable compiles to a live `process.env` lookup,
+which no bundler can fold, and the panel then ships as dead code. Grep `out/`
+for `Dev tools` after a build if you ever want to check.
+
+A granted card is not a move, so it goes through a `debug` escape hatch on
+`useGame` rather than `applyMove` — the AI would otherwise be offered it, and
+the rules would have to make sense of it. The cost is that a poked game no
+longer replays from its seed and move list, which the log marks with `[dev]`.
 
 ### The two rules that keep this maintainable
 
