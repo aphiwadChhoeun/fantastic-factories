@@ -155,12 +155,21 @@ the pair and not once each — so the same card is cheap on two 1s and dear on
 two 6s. The Black Market charges a card instead: a blueprint out of hand, which
 pays back what that blueprint would have cost to build.
 
-**Two perks pay out in dice rather than in goods.** The Dojo turns an unspent
-die over to the face on the other side — opposite faces on a d6 add up to
-seven, so a 5 becomes a 2. The Fitness Center takes one pip off instead, which
-is why it cannot touch a 1: there is nowhere below it. Either way the die is
-not spent and does not go on the card. It stays on the table showing its new
-face, for whatever it now fits. Once a round each, and only your own dice.
+**Some perks pay out in dice rather than in goods.** Three of them change a die
+you already have: the Dojo turns it over to the face on the other side —
+opposite faces on a d6 add up to seven, so a 5 becomes a 2 — while the Fitness
+Center takes a pip off and the Gymnasium puts one on. A step that would run off
+the die is simply not offered, which is the whole of why the Fitness Center
+cannot touch a 1 and the Gymnasium cannot touch a 6.
+
+None of them spends the die or puts it on the card. It stays on the table
+showing its new face, for whatever it now fits. Once a round each, and only
+your own dice.
+
+**The Golem sells you a die outright.** Name a face and pay that much energy —
+a 5 costs five — and it arrives white and unspent, yours for the round like a
+contractor's loan, and gone at cleanup. It is the only perk whose price you
+choose rather than read.
 
 **The Foundry's payout is the die too.** Place any die, pay energy equal to its
 face, and take that much metal — a 5 costs five energy and pays five metal. It
@@ -192,13 +201,13 @@ energy, so it can never be over either.
 Blueprints in hand are worth nothing — prestige only counts once built. Metal
 and energy are not score either; they are what you spend to get there.
 
-Most blueprints are worth 1 prestige; the Concrete Plant, Dojo and Fitness
-Center are worth none, and the Beacon scores as a set. The highest score wins,
+Most blueprints are worth 1 prestige; the Concrete Plant and the three Training
+cards are worth none, and the Beacon scores as a set. The highest score wins,
 and an equal score is a draw.
 
 ### The real blueprints so far
 
-Twenty-six cards, eleven of them distinct — every one a real card.
+Thirty-one cards, thirteen of them distinct — every one a real card.
 
 | Blueprint        | Copies | Type       | Tool   | Build cost         | Perk                                     | Prestige      |
 | ---------------- | -----: | ---------- | ------ | ------------------ | ---------------------------------------- | ------------- |
@@ -213,6 +222,8 @@ Twenty-six cards, eleven of them distinct — every one a real card.
 | Fitness Center   |      3 | Training   | wrench | 1 metal            | 1 energy → take 1 off an unspent die       | —             |
 | Foundry          |      2 | Utility    | gear   | 2 metal + 1 energy | any die + energy equal to it → that much metal | 1         |
 | Fulfillment Center |    2 | Production | hammer | 2 metal + 1 energy | a 4 + 2 energy → 1 good, 1 metal           | 1             |
+| Golem            |      2 | Monument   | hammer | 4 metal            | buy an extra die at any face, for that much energy | 1     |
+| Gymnasium        |      3 | Training   | shovel | 1 metal            | 1 energy → put 1 on an unspent die         | —             |
 
 Every build cost is on top of discarding a blueprint of the same tool.
 
@@ -328,9 +339,10 @@ slot it would fill lights up with them. Dropping a die on a perk that wants two
 plays both at once. A perk that takes no dice — the Battery Factory — has
 nothing to drag at it, so it is clicked instead.
 
-The Dojo and the Fitness Center are dragged at like anything else, even though
-they spend no die: drop the die you want changed onto one and it comes back
-showing its new face.
+The Dojo, the Fitness Center and the Gymnasium are dragged at like anything
+else, even though they spend no die: drop the die you want changed onto one and
+it comes back showing its new face. The Golem has nothing to drag at it — there
+is no die yet — so it is clicked, and it asks which face you are buying.
 
 Over a limit, the panel says so and `End turn` disappears until you are back
 inside. Resource discards are buttons — there is nothing on the board to point
@@ -357,32 +369,32 @@ Start in `src/engine/rules.ts`. The implemented slice is: take a card from one
 of the two rows, roll dice, spend dice to build blueprints, activate your
 compound and work your Headquarters, end the round. Known stubs:
 
-- **the deck is 26 cards and short in places.** Only two of them are hammers,
-  both Fulfillment Centers — and building one costs a hammer out of hand, so it
-  takes holding both copies at once. In practice it is close to unbuildable,
-  and the contractor row's hammer token is close to unpayable. Special has no
-  cards at all, which leaves the automaton's purple die dead. Both are holes in
-  the deck rather than in the rules
-- **26 cards is a small deck.** Setup deals eleven of them — four to hand, four
-  to the row, three to the automaton — so the draw pile turns over fast and the
-  discard reshuffles often. Nothing breaks; games just repeat themselves
+- **the deck is 31 cards and still short in places.** Hammers are the thinnest
+  tool at 4 of the 31, so the Golem and the Fulfillment Center are hard to
+  build — each needs the other in hand — and the contractor row's hammer token
+  is often unpayable. Special has no cards at all, which leaves the automaton's
+  purple die dead. Both are holes in the deck rather than in the rules
+- **31 cards is still a small deck.** Setup deals eleven of them — four to
+  hand, four to the row, three to the automaton — so the draw pile turns over
+  fast and the discard reshuffles often. Nothing breaks; games just repeat
+  themselves
 - `cards.ts` — every blueprint is now a real card, but neither deck is
   complete. The scaffold's invented placeholders are gone
 - the Investor discards the blueprint it reveals rather than keeping it, and
   the Specialist's extra die is white like the Hired Hands dice — neither is
   spelled out on the card
 - an equal score is a draw. No tiebreak is defined
-- 11 distinct blueprints and a Beacon that stacks four deep put the 10-card
+- 13 distinct blueprints and a Beacon that stacks four deep put the 10-card
   `END_COMPOUND_SIZE` only just in reach for a human — the automaton, dealt
   three and taking one a turn, gets there in seven rounds
 - the Headquarters is the same for every player. The published game hands out
   one of several starting tiles
-- `Effect` — the real game needs many more variants than the ten here
+- `Effect` — the real game needs many more variants than the eleven here
 - a `draw` effect always pulls blueprints; no card lets you choose a deck yet
 - the Black Market's cap is read as four resources in total, and the card it
   eats is discarded rather than kept. Taking less than the cap is not offered
 - the automaton's dice are lopsided against the deck it draws from: 13
-  Production copies to 5 Training, 4 Utility, 4 Monument (which never pays)
+  Production copies to 8 Training, 6 Monument (which never pays), 4 Utility
   and no Special. Its blue die does most of the work and its purple one none
 - no rule reads a blueprint's type outside the automaton's Work Phase
 - a Specialist die is set before anything is spent, but the Dojo and the

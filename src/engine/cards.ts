@@ -217,6 +217,44 @@ const BLUEPRINTS: readonly { template: BlueprintTemplate; copies: number }[] = [
       },
     },
   },
+  {
+    copies: 2,
+    template: {
+      name: "Golem",
+      type: "monument",
+      tool: "hammer",
+      buildCost: { metal: 4, energy: 0, goods: 0 },
+      prestige: 1,
+      // Buys a die outright: name a face, pay that much energy, and it is on
+      // the table for the rest of the round.
+      perk: {
+        dice: 0,
+        pattern: "any",
+        accepts: { kind: "any" },
+        cost: FREE,
+        costByFace: "energy",
+        effect: { kind: "gainDie" },
+      },
+    },
+  },
+  {
+    copies: 3,
+    template: {
+      name: "Gymnasium",
+      type: "training",
+      tool: "shovel",
+      buildCost: { metal: 1, energy: 0, goods: 0 },
+      // The Fitness Center the other way up. A 6 has nowhere above it, so it
+      // is simply never on offer.
+      perk: {
+        dice: 0,
+        pattern: "any",
+        accepts: { kind: "any" },
+        cost: { metal: 0, energy: 1, goods: 0 },
+        effect: { kind: "stepDie", by: 1 },
+      },
+    },
+  },
 ];
 
 /**

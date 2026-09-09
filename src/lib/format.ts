@@ -68,6 +68,8 @@ export function describeEffect(effect: Effect): string {
     }
     case "gainByFace":
       return `Gain ${effect.resource} equal to the die placed`;
+    case "gainDie":
+      return "Buy an extra white die at any face — it costs what it shows";
   }
 }
 
@@ -83,10 +85,13 @@ export function describePerkCost(perk: BlueprintPerk): string {
   const accepts =
     perk.dice > 1 && perk.accepts.kind !== "any" ? ` (${describeRequirement(perk.accepts)})` : "";
   const cost = costsSomething(perk.cost) ? describeResources(perk.cost) : "";
-  // A price read off the dice cannot be a number until they are on the table.
-  const scaled = perk.costByFace
-    ? `${perk.costByFace} equal to the ${perk.dice === 1 ? "die" : "dice"}`
-    : "";
+  // A price read off a face cannot be a number until the face is settled —
+  // by rolling it, or by the Golem, by choosing it.
+  const scaled = !perk.costByFace
+    ? ""
+    : perk.effect.kind === "gainDie"
+      ? `${perk.costByFace} equal to the face bought`
+      : `${perk.costByFace} equal to the ${perk.dice === 1 ? "die" : "dice"}`;
 
   return [`${dice}${accepts}`, cost, scaled].filter(Boolean).join(" + ") || "nothing";
 }
@@ -202,6 +207,8 @@ export function describeMove(state: GameState, move: Move): string {
         const face = dieFace(state, move.targetDieId);
         return `Work ${name} — turn a ${face} into a ${changedFaceLabel(state, move, face)}`;
       }
+      // The Golem: the face bought is also what it costs.
+      if (move.face) return `Work ${name} — buy a die showing ${move.face}`;
       return `Work ${name}${dice}${traded}`;
     }
     case "discard":

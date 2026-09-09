@@ -52,6 +52,7 @@ export function Game() {
           ...(board.takes.get(choice.cardId) ?? []),
           ...(board.builds.get(choice.cardId) ?? []),
           ...(board.discards.cards.get(choice.cardId) ?? []),
+          ...(board.freeActivations.get(choice.cardId) ?? []),
         ];
     return choice.paymentCardId
       ? all.filter((move) => paymentOf(move) === choice.paymentCardId)

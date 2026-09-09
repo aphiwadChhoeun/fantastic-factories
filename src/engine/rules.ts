@@ -361,10 +361,21 @@ export function legalMoves(state: GameState): Move[] {
       }
 
       for (const building of player.compound) {
-        const effect = building.card.perk?.effect;
+        const perk = building.card.perk;
+        const effect = perk?.effect;
         for (const dice of perkDice(player, building)) {
           const dieIds = dice.map((die) => die.id);
           const cardId = building.card.id;
+
+          // The Golem sells a die at the face you name, priced by that face:
+          // one move per face the energy stretches to.
+          if (perk && effect?.kind === "gainDie") {
+            for (const face of DIE_FACES) {
+              if (!canAfford(player.resources, perkCost(perk, [face]))) continue;
+              moves.push({ type: "activate", cardId, dieIds, face });
+            }
+            continue;
+          }
 
           // The Black Market eats a card out of hand and pays back what that
           // card cost, so every blueprint held is a different move — and one
@@ -670,6 +681,25 @@ function setDieFace(
   return log(changed, `${player.name} turned a ${target.face} into a ${face}`);
 }
 
+/**
+ * Hands over an extra die at the face bought. White and flagged `extra` like a
+ * contractor's loan, so cleanup takes it back with everything else.
+ */
+function grantDie(state: GameState, playerIndex: number, face: DieFace): GameState {
+  const player = state.players[playerIndex];
+  const die: Die = {
+    id: dieId(player, state.round),
+    face,
+    color: EXTRA_DIE_COLOR,
+    extra: true,
+    spent: false,
+  };
+  return log(
+    updatePlayer(state, playerIndex, (p) => ({ ...p, dice: [...p.dice, die] })),
+    `${player.name} bought an extra white die showing ${face}`,
+  );
+}
+
 function grantPerks(state: GameState, playerIndex: number, grant: Partial<WorkPerks>): GameState {
   return updatePlayer(state, playerIndex, (player) => ({
     ...player,
@@ -706,8 +736,15 @@ function activationChoice(
   effect: Effect,
   move: Extract<Move, { type: "activate" }>,
 ): EffectChoice {
+  // Only the perk that asks for a thing may be handed it, so each branch
+  // turns down what is not its business.
+  const refuse = (given: unknown, what: string) => {
+    if (given) throw new Error(`${cardName} does not ${what}`);
+  };
+
   if (changesDie(effect)) {
-    if (move.paymentCardId) throw new Error(`${cardName} does not take a blueprint`);
+    refuse(move.paymentCardId, "take a blueprint");
+    refuse(move.face, "hand over a die");
     if (!move.targetDieId) throw new Error(`${cardName} needs a die to change`);
     // Unspent, because a die already on a card or a section is done with.
     const target = requireUnspentDie(player, move.targetDieId);
@@ -717,13 +754,23 @@ function activationChoice(
     return { target };
   }
 
+  if (effect.kind === "gainDie") {
+    refuse(move.paymentCardId, "take a blueprint");
+    refuse(move.targetDieId, "change a die");
+    if (!move.face) throw new Error(`${cardName} needs a face to sell`);
+    // The face is both what the die shows and what it costs, so it stands in
+    // for a placed one everywhere a face is read.
+    return { faces: [move.face] };
+  }
+
+  refuse(move.face, "hand over a die");
+  refuse(move.targetDieId, "change a die");
+
   if (effect.kind !== "discardForResources") {
-    if (move.paymentCardId) throw new Error(`${cardName} does not take a blueprint`);
-    if (move.targetDieId) throw new Error(`${cardName} does not change a die`);
+    refuse(move.paymentCardId, "take a blueprint");
     return {};
   }
 
-  if (move.targetDieId) throw new Error(`${cardName} does not change a die`);
   if (!move.paymentCardId) throw new Error(`${cardName} needs a blueprint to discard`);
   const discard = player.hand.find((card) => card.id === move.paymentCardId);
   if (!discard) throw new Error(`${player.name} does not hold ${move.paymentCardId}`);
@@ -792,6 +839,11 @@ function applyEffect(
         throw new Error("No die chosen to change");
       }
       return setDieFace(state, playerIndex, target, face);
+    }
+    case "gainDie": {
+      const face = choice.faces?.[0];
+      if (face === undefined) throw new Error("No face chosen for the die");
+      return grantDie(state, playerIndex, face);
     }
     case "gainByFace": {
       const face = choice.faces?.[0];
@@ -862,6 +914,9 @@ function describeEffectForLog(effect: Effect): string {
       return `taking ${Math.abs(effect.by)} off a die`;
     case "gainByFace":
       return `gaining ${effect.resource} equal to the die`;
+    // Logs the face it handed over itself.
+    case "gainDie":
+      return "buying a die";
   }
 }
 
@@ -1339,17 +1394,17 @@ export function applyMove(state: GameState, move: Move): GameState {
       if (!fitsPattern(perk.pattern, faces)) {
         throw new Error(`${building.card.name} needs ${perk.pattern} dice`);
       }
-      // Some perks read their price off the dice, so it is only known now.
-      const cost = perkCost(perk, faces);
+      // A perk that eats a card, changes a die or sells one says so on the
+      // move, and is checked here before anything is paid.
+      const chosen = activationChoice(player, building.card.name, perk.effect, move);
+      const choice = { faces, ...chosen };
+
+      // Some perks read their price off a face, so it is only known now — and
+      // for the Golem that face is the one bought, not one on the table.
+      const cost = perkCost(perk, choice.faces ?? faces);
       if (!canAfford(player.resources, cost)) {
         throw new Error(`${building.card.name} costs ${describeResourcesForLog(cost)} to use`);
       }
-
-      // A perk that eats a card, or turns a die over, says which on the move.
-      const choice = {
-        ...activationChoice(player, building.card.name, perk.effect, move),
-        faces,
-      };
 
       const used = updatePlayer(state, index, (p) => ({
         ...dice.reduce((spent, die) => spendDie(spent, die.id), p),

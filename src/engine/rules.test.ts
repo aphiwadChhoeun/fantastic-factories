@@ -17,6 +17,7 @@ import {
   DIE_COLORS,
   DIE_FACES,
   END_GOODS,
+  EXTRA_DIE_COLOR,
   HAND_LIMIT,
   HQ_SECTIONS,
   overLimits,
@@ -472,13 +473,15 @@ describe("the Engineer", () => {
       [factory, ...copiesOf("Battery Factory")],
     );
 
+    const before = staged.players[0].hand;
     const [player] = takeStaged(staged).players;
 
     expect(player.compound.map((b) => b.card.id)).toContain(factory.id);
     // The Engineer's own cost is paid, the blueprint's build cost is not.
     expect(player.resources).toEqual({ metal: 0, energy: 0, goods: 0 });
-    // No die was needed, and the card never passed through hand.
-    expect(player.hand.map((card) => card.id)).not.toContain(factory.id);
+    // No die was needed, and the card never passed through hand: the hand is
+    // exactly what it was, less the blueprint spent on the contractor.
+    expect(player.hand).toEqual(before.slice(1));
     expect(player.dice).toEqual([]);
   });
 
@@ -1635,6 +1638,172 @@ describe("the Fulfillment Center", () => {
         dieIds: ["d0"],
       }),
     ).toThrow(/A 5 does not work Fulfillment Center/);
+  });
+});
+
+describe("the Golem", () => {
+  const golem = cardNamed(createBlueprintDeck(), "Golem");
+
+  function withGolem(energy: number): GameState {
+    const state = createInitialState({ seed: 3 });
+    const { color } = state.players[0];
+    return patchPlayer({ ...state, phase: "work" }, 0, {
+      compound: [{ card: golem, dice: [], worked: false }],
+      dice: [{ id: "d0", face: 2, color, extra: false, spent: false }],
+      rolled: true,
+      resources: { metal: 0, energy, goods: 0 },
+    });
+  }
+
+  function faces(state: GameState) {
+    return legalMoves(state)
+      .filter((move) => move.type === "activate")
+      .map((move) => (move.type === "activate" ? move.face : undefined));
+  }
+
+  it("is a Monument hammer costing 4 metal, worth a prestige", () => {
+    expect(golem.type).toBe("monument");
+    expect(golem.tool).toBe("hammer");
+    expect(golem.buildCost).toEqual({ metal: 4, energy: 0, goods: 0 });
+    expect(golem.prestige).toBe(1);
+    expect(golem.perk?.dice).toBe(0);
+    expect(golem.perk?.costByFace).toBe("energy");
+    expect(golem.perk?.effect).toEqual({ kind: "gainDie" });
+  });
+
+  it("sells a die at the face you name, for that much energy", () => {
+    const next = applyMove(withGolem(6), {
+      type: "activate",
+      cardId: golem.id,
+      dieIds: [],
+      face: 4,
+    });
+
+    const bought = next.players[0].dice.at(-1)!;
+    expect(bought.face).toBe(4);
+    expect(bought.spent).toBe(false);
+    // White and lent for the round, like a contractor's dice.
+    expect(bought.color).toBe(EXTRA_DIE_COLOR);
+    expect(bought.extra).toBe(true);
+    expect(next.players[0].resources.energy).toBe(2);
+    expect(logged(next, /bought an extra white die showing 4/)).toBe(true);
+  });
+
+  it("offers only the faces the energy stretches to", () => {
+    expect(faces(withGolem(6))).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(faces(withGolem(3))).toEqual([1, 2, 3]);
+    expect(faces(withGolem(0))).toEqual([]);
+
+    expect(() =>
+      applyMove(withGolem(3), { type: "activate", cardId: golem.id, dieIds: [], face: 5 }),
+    ).toThrow(/costs 5 energy to use/);
+  });
+
+  it("needs a face, and no other perk takes one", () => {
+    expect(() =>
+      applyMove(withGolem(6), { type: "activate", cardId: golem.id, dieIds: [] }),
+    ).toThrow(/needs a face to sell/);
+
+    const battery = cardNamed(createBlueprintDeck(), "Battery Factory");
+    const state = patchPlayer(withGolem(6), 0, {
+      compound: [{ card: battery, dice: [], worked: false }],
+    });
+    expect(() =>
+      applyMove(state, { type: "activate", cardId: battery.id, dieIds: [], face: 3 }),
+    ).toThrow(/does not hand over a die/);
+  });
+
+  it("hands back a die that can be spent, and cleanup takes it away", () => {
+    const bought = applyMove(withGolem(6), {
+      type: "activate",
+      cardId: golem.id,
+      dieIds: [],
+      face: 5,
+    });
+
+    // The bought die is on the table like any other: it can go on the HQ.
+    const placements = legalMoves(bought).filter(
+      (move) => move.type === "placeDie" && move.dieId === bought.players[0].dice.at(-1)!.id,
+    );
+    expect(placements.length).toBeGreaterThan(0);
+
+    const cleaned = applyMove({ ...bought, phase: "cleanup" }, { type: "endPhase" });
+    expect(cleaned.players[0].dice).toEqual([]);
+  });
+
+  it("works once a round, like any other perk", () => {
+    const once = applyMove(withGolem(6), {
+      type: "activate",
+      cardId: golem.id,
+      dieIds: [],
+      face: 1,
+    });
+
+    expect(faces(once)).toEqual([]);
+    expect(once.players[0].compound[0].worked).toBe(true);
+  });
+});
+
+describe("the Gymnasium", () => {
+  const gym = cardNamed(createBlueprintDeck(), "Gymnasium");
+
+  function withGym(dice: readonly DieFace[], energy = 2): GameState {
+    const state = createInitialState({ seed: 3 });
+    const { color } = state.players[0];
+    return patchPlayer({ ...state, phase: "work" }, 0, {
+      compound: [{ card: gym, dice: [], worked: false }],
+      dice: dice.map((face, i) => ({ id: `d${i}`, face, color, extra: false, spent: false })),
+      rolled: true,
+      resources: { metal: 0, energy, goods: 0 },
+    });
+  }
+
+  function targets(state: GameState) {
+    return legalMoves(state)
+      .filter((move) => move.type === "activate")
+      .map((move) =>
+        move.type === "activate" && move.targetDieId
+          ? state.players[0].dice.find((d) => d.id === move.targetDieId)!.face
+          : null,
+      );
+  }
+
+  it("is a Training shovel costing 1 metal, worth no prestige", () => {
+    expect(gym.type).toBe("training");
+    expect(gym.tool).toBe("shovel");
+    expect(gym.buildCost).toEqual({ metal: 1, energy: 0, goods: 0 });
+    expect(gym.prestige).toBeUndefined();
+    // The Fitness Center's step, the other way up.
+    expect(gym.perk?.effect).toEqual({ kind: "stepDie", by: 1 });
+  });
+
+  it("puts one on a die and leaves it unspent", () => {
+    const next = applyMove(withGym([2, 5, 3, 4]), {
+      type: "activate",
+      cardId: gym.id,
+      dieIds: [],
+      targetDieId: "d0",
+    });
+
+    const die = next.players[0].dice.find((d) => d.id === "d0")!;
+    expect(die.face).toBe(3);
+    expect(die.spent).toBe(false);
+    expect(next.players[0].resources.energy).toBe(1);
+    expect(logged(next, /turned a 2 into a 3/)).toBe(true);
+  });
+
+  it("will not touch a 6 — there is nowhere for it to go", () => {
+    expect(targets(withGym([6, 6, 6, 6]))).toEqual([]);
+    expect(targets(withGym([6, 1, 1, 4]))).toEqual([1, 4]);
+
+    expect(() =>
+      applyMove(withGym([6, 1, 3, 4]), {
+        type: "activate",
+        cardId: gym.id,
+        dieIds: [],
+        targetDieId: "d0",
+      }),
+    ).toThrow(/Gymnasium cannot change a 6/);
   });
 });
 

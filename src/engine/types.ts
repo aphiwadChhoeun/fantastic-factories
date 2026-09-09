@@ -129,7 +129,15 @@ export type Effect =
    * Gain this resource equal to the face of the die placed on the perk — the
    * Foundry turns energy into metal at whatever rate the die says.
    */
-  | { readonly kind: "gainByFace"; readonly resource: keyof Resources };
+  | { readonly kind: "gainByFace"; readonly resource: keyof Resources }
+  /**
+   * An extra die at a face the player buys outright — the Golem. The face is
+   * on the move rather than on the table, and the perk's `costByFace` is what
+   * charges for it, so a 5 costs five.
+   *
+   * White and lent for the round, like a contractor's dice.
+   */
+  | { readonly kind: "gainDie" };
 
 /**
  * The three sections of the Headquarters tile. Dice go on them during the Work
@@ -254,11 +262,12 @@ export type BlueprintPerk = {
   /** Resources paid to use it, on top of the dice. Usually nothing. */
   readonly cost: Resources;
   /**
-   * A price read off the dice rather than printed: this much of this resource,
-   * equal to the face put on it. The Concrete Plant takes two matching dice and
-   * charges metal equal to the pair, so a 3, 3 costs 3 metal.
+   * A price read off a face rather than printed: this much of this resource,
+   * equal to the face the perk turns on. The Concrete Plant takes two matching
+   * dice and charges metal equal to the pair, so a 3, 3 costs 3 metal; the
+   * Golem charges for the face it hands over rather than one on the table.
    *
-   * Charged once for the set, not per die, and added to `cost`.
+   * Charged once, not per die, and added to `cost`.
    */
   readonly costByFace?: keyof Resources;
   readonly effect: Effect;
@@ -506,6 +515,11 @@ export type Move =
        * Never one of `dieIds`: it is not paid, and it does not go on the card.
        */
       readonly targetDieId?: string;
+      /**
+       * The face bought, for a perk that hands over a die — the Golem. It is
+       * what the die will show and what it costs, both.
+       */
+      readonly face?: DieFace;
     }
   | { readonly type: "endPhase" };
 

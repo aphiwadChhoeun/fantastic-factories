@@ -34,7 +34,7 @@ export type PanelInteraction = {
   /** Hand cards that could be built right now. */
   readonly buildable: ReadonlySet<string>;
   /** Buildings whose perk takes no dice, and so is clicked rather than dragged. */
-  readonly freeActivations: ReadonlyMap<string, Move>;
+  readonly freeActivations: ReadonlyMap<string, readonly Move[]>;
   /** Hand cards that could come off to meet the end-of-phase limit. */
   readonly discardable: ReadonlySet<string>;
   /** Resource discards forced by the limit. Nothing on the board to point at. */
@@ -268,7 +268,7 @@ export function PlayerPanel({ player, active, interaction }: Props) {
               const droppable = targets?.activations.has(cardId) ?? false;
               // A perk that takes no dice has nothing to drag at it, so it is
               // worked by clicking the card instead.
-              const free = interaction?.freeActivations.get(cardId);
+              const free = (interaction?.freeActivations.get(cardId)?.length ?? 0) > 0;
               // The card mid-choice stays clickable, to back out of it.
               const choosing = interaction?.pending === cardId;
               return (
@@ -281,14 +281,12 @@ export function PlayerPanel({ player, active, interaction }: Props) {
                   note={automaton ? undefined : perkNote(player, building)}
                   dice={building.dice}
                   spent={building.worked}
-                  highlight={Boolean(free)}
+                  highlight={free}
                   selected={choosing}
+                  // Both cases go through the same click: working a perk that
+                  // offers a choice asks it, and clicking again backs out.
                   onSelect={
-                    choosing
-                      ? () => interaction?.onSelectCard(cardId)
-                      : free
-                        ? () => interaction?.onPlay(free)
-                        : undefined
+                    choosing || free ? () => interaction?.onSelectCard(cardId) : undefined
                   }
                   selectLabel={
                     choosing ? `Cancel ${building.card.name}` : `Work ${building.card.name}`

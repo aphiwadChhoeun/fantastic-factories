@@ -36,10 +36,13 @@ export type BoardMoves = {
    */
   readonly builds: ReadonlyMap<string, readonly Move[]>;
   /**
-   * Compound card id -> a perk that costs resources and no dice at all. There
+   * Compound card id -> a perk that takes no dice off the table at all. There
    * is nothing to drag onto it, so it is clicked instead.
+   *
+   * A list, because such a perk can still offer a choice: the Golem sells a
+   * die at any face the energy stretches to.
    */
-  readonly freeActivations: ReadonlyMap<string, Move>;
+  readonly freeActivations: ReadonlyMap<string, readonly Move[]>;
   /** Die id -> where that die can go. */
   readonly dice: ReadonlyMap<string, DieTargets>;
   /**
@@ -73,7 +76,7 @@ function push(index: Map<string, Move[]>, key: string, move: Move): void {
 export function indexMoves(moves: readonly Move[], rolled: readonly Die[] = []): BoardMoves {
   const takes = new Map<string, Move[]>();
   const builds = new Map<string, Move[]>();
-  const freeActivations = new Map<string, Move>();
+  const freeActivations = new Map<string, Move[]>();
   const dice = new Map<string, DieTargets>();
   const discardResources: Move[] = [];
   const discardCards = new Map<string, Move[]>();
@@ -99,7 +102,7 @@ export function indexMoves(moves: readonly Move[], rolled: readonly Die[] = []):
         // die — not the empty `dieIds` — is what gets dropped on the card.
         const involved = move.targetDieId ? [move.targetDieId] : move.dieIds;
         if (involved.length === 0) {
-          freeActivations.set(move.cardId, move);
+          push(freeActivations, move.cardId, move);
           break;
         }
         // A perk only ever reads faces, so two dice showing the same number are
