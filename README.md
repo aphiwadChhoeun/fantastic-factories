@@ -286,11 +286,11 @@ scoring and playing well.
 
 ### The real blueprints so far
 
-Seventy-five cards, thirty-two of them distinct — every one a real card.
+Seventy-four cards, thirty-two of them distinct — every one a real card.
 
 | Blueprint        | Copies | Type       | Tool   | Build cost         | Perk                                     | Prestige      |
 | ---------------- | -----: | ---------- | ------ | ------------------ | ---------------------------------------- | ------------- |
-| Aluminum Factory |      3 | Production | shovel | 2 metal + 2 energy | 2 matching dice + 5 energy → 2 goods, 1 metal | 1        |
+| Aluminum Factory |      2 | Production | shovel | 2 metal + 2 energy | 2 matching dice + 5 energy → 2 goods, 1 metal | 1        |
 | Assembly Line    |      2 | Production | gear   | 2 metal + 1 energy | 3 consecutive dice → 2 goods             | 1             |
 | Battery Factory  |      2 | Production | wrench | 2 metal + 1 energy | 4 energy, no dice → 1 good               | 1             |
 | Beacon           |      4 | Monument   | shovel | 2 metal + 4 energy | none — it is pure score                  | 1 each, +1 set |
@@ -543,11 +543,11 @@ compound and work your Headquarters, end the round. Known stubs:
   it resolves when taken and is discarded — so there would be nothing for the
   dice to go on. If contractors were meant, this needs a different mechanic,
   not a wider filter
-- **75 cards, and the tools have evened out** — 21 gears to 16 wrenches, where
+- **74 cards, and the tools have evened out** — 21 gears to 16 wrenches, where
   hammers were once 2 of 26 and are now 18. Utility and Training are the
   thinnest types at 12, and Special has gone from the runt to 11, so the
   automaton's purple die finally has something to count
-- **75 cards is a comfortable deck.** Setup deals eleven — four to hand, four
+- **74 cards is a comfortable deck.** Setup deals eleven — four to hand, four
   to the row, three to the automaton — so the draw pile no longer turns over in
   a couple of rounds
 - **`gainOnBuild` fires on every build, not the first of a round.** Nothing on

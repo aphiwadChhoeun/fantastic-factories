@@ -24,7 +24,7 @@ const FREE: Resources = { metal: 0, energy: 0, goods: 0 };
 
 const BLUEPRINTS: readonly { template: BlueprintTemplate; copies: number }[] = [
   {
-    copies: 3,
+    copies: 2,
     template: {
       name: "Aluminum Factory",
       type: "production",
