@@ -35,8 +35,11 @@ export type PanelInteraction = {
   readonly targets: DieTargets | null;
   /** Hand cards that could be built right now. */
   readonly buildable: ReadonlySet<string>;
-  /** Buildings whose perk takes no dice, and so is clicked rather than dragged. */
-  readonly freeActivations: ReadonlyMap<string, readonly Move[]>;
+  /**
+   * Buildings worked by clicking rather than by dragging: a perk that takes no
+   * dice, or one that copies and has to be asked which card first.
+   */
+  readonly workable: ReadonlySet<string>;
   /** Hand cards that could come off to meet the end-of-phase limit. */
   readonly discardable: ReadonlySet<string>;
   /** Resource discards forced by the limit. Nothing on the board to point at. */
@@ -290,9 +293,10 @@ export function PlayerPanel({ player, active, market, interaction }: Props) {
             {player.compound.map((building) => {
               const cardId = building.card.id;
               const droppable = targets?.activations.has(cardId) ?? false;
-              // A perk that takes no dice has nothing to drag at it, so it is
-              // worked by clicking the card instead.
-              const free = (interaction?.freeActivations.get(cardId)?.length ?? 0) > 0;
+              // A perk with nothing to drag at it is worked by clicking the
+              // card instead — it takes no dice, or it has to be told what to
+              // copy before its dice mean anything.
+              const free = interaction?.workable.has(cardId) ?? false;
               // The card mid-choice stays clickable, to back out of it.
               const choosing = interaction?.pending === cardId;
               return (

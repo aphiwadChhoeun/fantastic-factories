@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Die, DieFace, Move } from "@/engine";
-import { indexMoves, paymentsFor, paymentsOf } from "./board";
+import { borrowOf, borrowsFor, indexMoves, paymentsFor, paymentsOf } from "./board";
 
 function dice(faces: readonly DieFace[]): Die[] {
   return faces.map((face, i) => ({
@@ -92,6 +92,47 @@ describe("indexMoves", () => {
       ["a"],
     );
     expect([...after.keys()]).toEqual(["b", "c"]);
+  });
+
+  it("files a copy under the card that copies, dice or no dice", () => {
+    // The Replicator is clicked first whatever it copies: the row has to be
+    // asked before the dice mean anything. A copy that wants dice is still a
+    // drop target under each of them.
+    const free: Move = {
+      type: "activate",
+      cardId: "replicator",
+      dieIds: [],
+      borrowCardId: "incinerator",
+    };
+    const withDice: Move = {
+      type: "activate",
+      cardId: "replicator",
+      dieIds: ["d0"],
+      borrowCardId: "foundry",
+    };
+
+    const board = indexMoves([free, withDice], dice([5]));
+
+    expect(board.copies.get("replicator")).toEqual([free, withDice]);
+    // Never in both, or clicking the card would offer the same move twice.
+    expect(board.freeActivations.has("replicator")).toBe(false);
+    expect(board.dice.get("d0")?.activations.get("replicator")).toEqual([withDice]);
+  });
+
+  it("gathers the face-up blueprints a copy could work", () => {
+    const moves: Move[] = [
+      { type: "activate", cardId: "replicator", dieIds: [], borrowCardId: "a" },
+      { type: "activate", cardId: "replicator", dieIds: [], borrowCardId: "b" },
+      { type: "activate", cardId: "replicator", dieIds: [], borrowCardId: "b", option: 1 },
+      { type: "activate", cardId: "factory", dieIds: ["d0"] },
+    ];
+
+    const borrows = borrowsFor(moves);
+
+    expect([...borrows.keys()]).toEqual(["a", "b"]);
+    // Two ways to work "b" — it still has to be told which payout to take.
+    expect(borrows.get("b")).toHaveLength(2);
+    expect(borrowOf(moves[3])).toBeUndefined();
   });
 
   it("points a perk that turns a die over at the die it names", () => {

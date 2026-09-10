@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { PHASE_LABELS, type Move } from "@/engine";
 import { DEV_TOOLS } from "@/dev/flag";
 import { useGame } from "@/hooks/useGame";
-import { indexMoves, paymentsFor, paymentsOf } from "@/lib/board";
+import { borrowOf, borrowsFor, indexMoves, paymentsFor, paymentsOf } from "@/lib/board";
 import { describeMove } from "@/lib/format";
 import { DevPanel } from "./DevPanel";
 import { GameLog } from "./GameLog";
@@ -30,6 +30,11 @@ type Pending = {
   readonly cardId: string;
   /** The die dropped on it, when the choice started with a drag. */
   readonly dieId?: string;
+  /**
+   * The face-up blueprint being copied, once that much is settled — clicking
+   * the Replicator asks the row before it asks anything else.
+   */
+  readonly borrowCardId?: string;
   /**
    * The blueprints picked out of hand to pay with so far, in click order. A
    * list because a perk can eat more than one, and the player names them one
@@ -59,12 +64,14 @@ export function Game() {
           ...(board.builds.get(choice.cardId) ?? []),
           ...(board.discards.cards.get(choice.cardId) ?? []),
           ...(board.freeActivations.get(choice.cardId) ?? []),
+          ...(board.copies.get(choice.cardId) ?? []),
         ];
-    // A move fits only if it spends everything picked so far, so each click in
-    // hand narrows the field rather than replacing the last answer.
+    // A move fits only if it settles the same way: the card being copied, and
+    // everything picked out of hand. Each click narrows the field rather than
+    // replacing the last answer.
     const paying = choice.paying ?? [];
-    if (paying.length === 0) return all;
     return all.filter((move) => {
+      if (choice.borrowCardId && borrowOf(move) !== choice.borrowCardId) return false;
       const spends = paymentsOf(move);
       return paying.every((cardId) => spends.includes(cardId));
     });
@@ -77,19 +84,25 @@ export function Game() {
   const dragging = dragged && board.dice.has(dragged) ? dragged : null;
 
   const settled = pending?.paying ?? [];
+  // Which card to copy comes first: until the Replicator has been told, there
+  // is nothing to say about the dice or the price, since both are that card's.
+  const borrowers = borrowsFor(options);
+  const borrowing = choice && !pending?.borrowCardId && borrowers.size > 1 ? borrowers : null;
   const payers = paymentsFor(options, settled);
   // With several blueprints in hand that could pay, the hand is the next
   // question. Anything still open after that is spelled out as buttons —
   // which resources the Black Market pays, or which run works an Assembly Line.
-  const payments = choice && payers.size > 1 ? payers : null;
-  // A move that spends nothing more out of hand cannot be picked by
-  // highlighting a card, so it is always spelled out. That is what keeps
-  // "discard this card" reachable on a card you could also build, where the
-  // rest of the options want a payment.
+  const payments = choice && !borrowing && payers.size > 1 ? payers : null;
+  // A move that cannot be picked by pointing at the card being asked for is
+  // always spelled out instead. That is what keeps "discard this card"
+  // reachable on a card you could also build, where the rest of the options
+  // want a payment.
   const open = choice
-    ? payments
-      ? options.filter((move) => paymentsOf(move).length === settled.length)
-      : options
+    ? borrowing
+      ? options.filter((move) => borrowOf(move) === undefined)
+      : payments
+        ? options.filter((move) => paymentsOf(move).length === settled.length)
+        : options
     : [];
   const choices = open.map((move) => ({ move, label: describeMove(state, move) }));
 
@@ -126,8 +139,13 @@ export function Game() {
       return;
     }
 
-    // Mid-choice, a click in hand names a payment rather than starting over.
-    // Cards add up: a perk that eats two is fed one click at a time.
+    // Mid-choice, a click in the row names the card being copied.
+    if (choice && borrowing?.has(cardId)) {
+      resolve({ ...choice, borrowCardId: cardId });
+      return;
+    }
+    // And a click in hand names a payment rather than starting over. Cards add
+    // up: a perk that eats two is fed one click at a time.
     if (choice && payments?.has(cardId)) {
       resolve({ ...choice, paying: [...(choice.paying ?? []), cardId] });
       return;
@@ -138,6 +156,7 @@ export function Game() {
   const marketInteraction: MarketInteraction | undefined = playable
     ? {
         takeable: new Set(board.takes.keys()),
+        copyable: new Set(borrowing?.keys() ?? []),
         choosingPaymentFor: choice?.cardId ?? null,
         onSelect: selectCard,
       }
@@ -151,7 +170,9 @@ export function Game() {
       onDragChange: setDragged,
       targets: dragging ? (board.dice.get(dragging) ?? null) : null,
       buildable: new Set(board.builds.keys()),
-      freeActivations: board.freeActivations,
+      // A card is clicked to work it either because nothing is placed on it,
+      // or because it copies and has to be asked what.
+      workable: new Set([...board.freeActivations.keys(), ...board.copies.keys()]),
       discardable: new Set(board.discards.cards.keys()),
       discards: board.discards.resources.map((move) => ({
         move,

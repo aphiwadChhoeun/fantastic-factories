@@ -14,6 +14,11 @@ function pileSummary(deck: readonly unknown[], discard: readonly unknown[]): str
  */
 export type MarketInteraction = {
   readonly takeable: ReadonlySet<string>;
+  /**
+   * Face-up blueprints a Replicator mid-choice could copy. Empty the rest of
+   * the time, which is most of it.
+   */
+  readonly copyable: ReadonlySet<string>;
   /** The contractor waiting for the player to choose a payment, if any. */
   readonly choosingPaymentFor: string | null;
   readonly onSelect: (cardId: string) => void;
@@ -70,28 +75,38 @@ function ContractorRow({ market, interaction }: { market: ContractorMarket } & R
 }
 
 function BlueprintRow({ pool, interaction }: { pool: CardPool<BlueprintCard> } & RowProps) {
+  const copying = (interaction?.copyable.size ?? 0) > 0;
+
   return (
     <div>
       <div className={styles.sectionTitle}>
         Blueprints · {pileSummary(pool.deck, pool.discard)}
       </div>
+      {/* Only while a Replicator is waiting to be told which card to work. */}
+      {copying && (
+        <p className={styles.prompt}>Click a highlighted blueprint to work it from here.</p>
+      )}
       {pool.row.length === 0 ? (
         <p className={styles.empty}>This row is empty.</p>
       ) : (
         <div className={styles.cardRow}>
-          {pool.row.map((card) => (
-            <CardView
-              key={card.id}
-              card={card}
-              highlight={interaction?.takeable.has(card.id)}
-              onSelect={
-                interaction?.takeable.has(card.id)
-                  ? () => interaction.onSelect(card.id)
-                  : undefined
-              }
-              selectLabel={`Draft ${card.name}`}
-            />
-          ))}
+          {pool.row.map((card) => {
+            // Taking and copying are never on offer at once — one is a Market
+            // Phase move and the other a Work Phase one.
+            const live =
+              interaction?.takeable.has(card.id) || interaction?.copyable.has(card.id);
+            return (
+              <CardView
+                key={card.id}
+                card={card}
+                highlight={live}
+                onSelect={live ? () => interaction?.onSelect(card.id) : undefined}
+                selectLabel={
+                  interaction?.copyable.has(card.id) ? `Work ${card.name}` : `Draft ${card.name}`
+                }
+              />
+            );
+          })}
         </div>
       )}
     </div>

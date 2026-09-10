@@ -43,6 +43,16 @@ export type BoardMoves = {
    * die at any face the energy stretches to.
    */
   readonly freeActivations: ReadonlyMap<string, readonly Move[]>;
+  /**
+   * Compound card id -> the activations that work a market card instead of
+   * this one — the Replicator. Clicked, whether or not the copied perk wants
+   * dice, because the question they ask first is *which card*, and that is
+   * answered by pointing at the row.
+   *
+   * Kept out of `freeActivations` so no move is in both: a borrowing move
+   * that wants dice is still a drop target under each of them.
+   */
+  readonly copies: ReadonlyMap<string, readonly Move[]>;
   /** Die id -> where that die can go. */
   readonly dice: ReadonlyMap<string, DieTargets>;
   /**
@@ -77,6 +87,7 @@ export function indexMoves(moves: readonly Move[], rolled: readonly Die[] = []):
   const takes = new Map<string, Move[]>();
   const builds = new Map<string, Move[]>();
   const freeActivations = new Map<string, Move[]>();
+  const copies = new Map<string, Move[]>();
   const dice = new Map<string, DieTargets>();
   const discardResources: Move[] = [];
   const discardCards = new Map<string, Move[]>();
@@ -101,10 +112,12 @@ export function indexMoves(moves: readonly Move[], rolled: readonly Die[] = []):
         // A perk that turns a die over names it without spending it, so that
         // die — not the empty `dieIds` — is what gets dropped on the card.
         const involved = move.targetDieId ? [move.targetDieId] : move.dieIds;
-        if (involved.length === 0) {
-          push(freeActivations, move.cardId, move);
-          break;
-        }
+        // Copying is always a click first: the card to copy has to be named
+        // before there is anything to say about dice.
+        if (move.borrowCardId !== undefined) push(copies, move.cardId, move);
+        else if (involved.length === 0) push(freeActivations, move.cardId, move);
+        // Nothing on the table to point at, so there is no drag to index.
+        if (involved.length === 0) break;
         // A perk only ever reads faces, so two dice showing the same number are
         // interchangeable in it. The engine enumerates one move per face rather
         // than one per pair, so index it under every die that could stand in —
@@ -127,9 +140,29 @@ export function indexMoves(moves: readonly Move[], rolled: readonly Die[] = []):
     takes,
     builds,
     freeActivations,
+    copies,
     dice,
     discards: { resources: discardResources, cards: discardCards },
   };
+}
+
+/** The face-up blueprint a move copies, if it copies one. */
+export function borrowOf(move: Move): string | undefined {
+  return move.type === "activate" ? move.borrowCardId : undefined;
+}
+
+/**
+ * The face-up blueprints that could answer a pending choice, by card id —
+ * which card the Replicator copies. Shaped like `paymentsFor`, because it is
+ * the same question asked of the row instead of the hand.
+ */
+export function borrowsFor(options: readonly Move[]): ReadonlyMap<string, readonly Move[]> {
+  const borrows = new Map<string, Move[]>();
+  for (const move of options) {
+    const cardId = borrowOf(move);
+    if (cardId) push(borrows, cardId, move);
+  }
+  return borrows;
 }
 
 /**
