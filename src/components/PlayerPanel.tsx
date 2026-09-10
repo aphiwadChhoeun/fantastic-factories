@@ -9,6 +9,7 @@ import {
   perkCost,
   RESOURCE_LIMIT,
   scoreOf,
+  type BlueprintCard,
   type Building,
   type Move,
   type Player,
@@ -66,12 +67,24 @@ export type PanelInteraction = {
  * A perk that wants dice you have not rolled explains itself — the dice are
  * right there — but one you cannot pay for looks broken without this.
  */
-function perkNote(player: Player, building: Building): string | undefined {
+function perkNote(
+  player: Player,
+  building: Building,
+  market: readonly BlueprintCard[],
+): string | undefined {
   const { perk, passive, prestigeBonus } = building.card;
   // A passive fires by itself; `worked` is how it remembers that it has.
   if (passive) return building.worked ? "already fired this round" : "watching";
   if (!perk) return prestigeBonus ? "scores, and stacks" : "scores only";
   if (building.worked) return "worked this round";
+  // A card with no perk of its own is only as good as the row it copies from,
+  // and a row of Monuments leaves it nothing to do.
+  if (perk.effect.kind === "borrowFromMarket") {
+    const copyable = market.some(
+      (card) => card.perk && card.perk.effect.kind !== "borrowFromMarket",
+    );
+    if (!copyable) return "nothing face up to copy";
+  }
   // Some perks are priced in cards rather than resources.
   const eats = perk.discardsCards ?? 0;
   if (player.hand.length < eats) {
@@ -150,10 +163,12 @@ function Choices({ interaction }: { interaction?: PanelInteraction }) {
 type Props = {
   player: Player;
   active: boolean;
+  /** The face-up blueprint row — what a Replicator standing here could copy. */
+  market: readonly BlueprintCard[];
   interaction?: PanelInteraction;
 };
 
-export function PlayerPanel({ player, active, interaction }: Props) {
+export function PlayerPanel({ player, active, market, interaction }: Props) {
   const targets = interaction?.targets ?? null;
   // The automaton holds no cards and never places a die on its Headquarters,
   // so both sections would be permanently empty furniture.
@@ -287,7 +302,7 @@ export function PlayerPanel({ player, active, interaction }: Props) {
                   built
                   // The automaton never works a perk, so "needs 2 energy"
                   // would be reporting a failure it is not having.
-                  note={automaton ? undefined : perkNote(player, building)}
+                  note={automaton ? undefined : perkNote(player, building, market)}
                   dice={building.dice}
                   spent={building.worked}
                   highlight={free}

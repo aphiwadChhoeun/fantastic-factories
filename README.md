@@ -286,7 +286,7 @@ scoring and playing well.
 
 ### The real blueprints so far
 
-Sixty cards, twenty-five of them distinct — every one a real card.
+Sixty-two cards, twenty-six of them distinct — every one a real card.
 
 | Blueprint        | Copies | Type       | Tool   | Build cost         | Perk                                     | Prestige      |
 | ---------------- | -----: | ---------- | ------ | ------------------ | ---------------------------------------- | ------------- |
@@ -315,6 +315,7 @@ Sixty cards, twenty-five of them distinct — every one a real card.
 | Power Plant      |      2 | Utility    | gear   | 3 metal            | any die → that much energy                 | 1             |
 | Recycling Plant  |      3 | Production | gear   | 2 metal            | 2 blueprints from hand + 2 energy → 1 good, draw 1 | 1     |
 | Refinery         |      2 | Utility    | wrench | 1 metal + 3 energy | a blueprint from hand + 3 energy → 3 metal | 1             |
+| Replicator       |      2 | Special    | shovel | 2 metal + 2 energy | 1 energy → work a face-up blueprint's perk (see below) | 1 |
 
 Every build cost is on top of discarding a blueprint of the same tool.
 
@@ -325,6 +326,14 @@ not matter, so a roll of 4, 2, 3 works the Assembly Line.
 pays out whole; one that cost more pays four, and the player says which four —
 a Beacon, at 2 metal and 4 energy, can be sold for any of 4 energy, 1 metal and
 3 energy, or 2 metal and 2 energy.
+
+**The Replicator has no perk of its own.** It works a face-up blueprint's
+instead, for 1 energy on top of whatever that card charges — its dice, its
+faces, its pattern, its payout, and any blueprint it eats. The copied card
+stays in the market: only its perk is borrowed, and the dice go on the
+Replicator. It reads the row as it stands when you work it, so a card swept
+away is a card you can no longer copy. A Monument or a Laboratory has nothing
+to lend, and a Replicator cannot copy another Replicator.
 
 **Four perks are priced in cards rather than resources.** The Black Market
 sells one out of hand, the Incinerator burns one, the Refinery melts one down,
@@ -476,10 +485,15 @@ compound and work your Headquarters, end the round. Known stubs:
   Beacon and the Megalith exactly. It is one word in `cards.ts` if that is
   wrong, and it matters: type is what the automaton's dice count and what the
   Megalith's discount counts
-- **60 cards, and the tools have evened out** — 19 gears to 11 hammers, where
-  hammers were once 2 of 26. Special is still much the thinnest type at 2, so
-  the automaton's purple die has little to count
-- **60 cards is a comfortable deck.** Setup deals eleven — four to hand, four
+- **the Replicator copies the blueprint row only.** "A card in the market"
+  could take in the contractor row too, but a contractor has no perk to work —
+  it resolves when taken and is discarded — so there would be nothing for the
+  dice to go on. If contractors were meant, this needs a different mechanic,
+  not a wider filter
+- **62 cards, and the tools have evened out** — 19 gears to 11 hammers, where
+  hammers were once 2 of 26. Special is the thinnest type at 4, so the
+  automaton's purple die still has little to count
+- **62 cards is a comfortable deck.** Setup deals eleven — four to hand, four
   to the row, three to the automaton — so the draw pile no longer turns over in
   a couple of rounds
 - **the Recycling Plant is the first perk to eat two cards**, which is why
@@ -492,12 +506,14 @@ compound and work your Headquarters, end the round. Known stubs:
   the Specialist's extra die is white like the Hired Hands dice — neither is
   spelled out on the card
 - an equal score is a draw. No tiebreak is defined
-- 25 distinct blueprints, plus three Monuments that stack, put the 10-card
+- 26 distinct blueprints, plus three Monuments that stack, put the 10-card
   `END_COMPOUND_SIZE` only just in reach for a human — the automaton, dealt
   three and taking one a turn, gets there in seven rounds
 - the Headquarters is the same for every player. The published game hands out
   one of several starting tiles
-- `Effect` — the real game needs many more variants than the fourteen here
+- `Effect` — the real game needs many more variants than the fifteen here, one
+  of which (`borrowFromMarket`) is a marker rather than an effect: it is
+  swapped for the copied card's before anything runs
 - a `draw` effect always pulls blueprints; no card lets you choose a deck yet
 - the Black Market's cap is read as four resources in total, and the card it
   eats is discarded rather than kept. Taking less than the cap is not offered

@@ -504,6 +504,26 @@ const BLUEPRINTS: readonly { template: BlueprintTemplate; copies: number }[] = [
       },
     },
   },
+  {
+    copies: 2,
+    template: {
+      name: "Replicator",
+      type: "special",
+      tool: "shovel",
+      buildCost: { metal: 2, energy: 2, goods: 0 },
+      prestige: 1,
+      // It asks for nothing itself. Whichever face-up blueprint it copies
+      // decides the dice, the faces and the rest of the price; the 1 energy
+      // here is charged on top of that card's own cost.
+      perk: {
+        dice: 0,
+        pattern: "any",
+        accepts: { kind: "any" },
+        cost: { metal: 0, energy: 1, goods: 0 },
+        effect: { kind: "borrowFromMarket" },
+      },
+    },
+  },
 ];
 
 /**

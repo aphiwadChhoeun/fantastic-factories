@@ -191,6 +191,7 @@ export function Game() {
               key={player.id}
               player={player}
               active={!state.gameOver && index === state.currentPlayerIndex}
+              market={state.blueprints.row}
               interaction={panelFor(index)}
             />
           ))}

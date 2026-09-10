@@ -23,6 +23,7 @@ import {
   HAND_LIMIT,
   HQ_SECTIONS,
   overLimits,
+  perkFor,
   RESOURCE_LIMIT,
   stockOf,
   legalMoves,
@@ -2590,6 +2591,215 @@ describe("the Refinery", () => {
 
     expect(activations(withRefinery([]))).toEqual([]);
     expect(activations(withRefinery([beacon], 2))).toEqual([]);
+  });
+});
+
+describe("the Replicator", () => {
+  const deck = createBlueprintDeck();
+  const replicator = cardNamed(deck, "Replicator");
+  const named = (name: string) => cardNamed(deck, name);
+
+  /**
+   * A Replicator standing, with exactly `row` face up in the market. The dice
+   * and resources are whatever the copied card will need.
+   */
+  function withReplicator(
+    row: readonly string[],
+    faces: readonly DieFace[] = [],
+    patch: Partial<Player> = {},
+  ): GameState {
+    const state = createInitialState({ seed: 3 });
+    const { color } = state.players[0];
+    const staged: GameState = {
+      ...state,
+      phase: "work",
+      blueprints: { ...state.blueprints, row: row.map(named) },
+    };
+    return patchPlayer(staged, 0, {
+      compound: [{ card: replicator, dice: [], worked: false }],
+      dice: faces.map((face, i) => ({
+        id: `d${i}`,
+        face,
+        color,
+        extra: false,
+        spent: false,
+      })),
+      rolled: true,
+      hand: [],
+      resources: { metal: 0, energy: 0, goods: 0 },
+      ...patch,
+    });
+  }
+
+  const activations = (state: GameState) =>
+    legalMoves(state).filter((move) => move.type === "activate");
+
+  it("is a Special shovel costing 2 metal and 2 energy, worth a prestige", () => {
+    expect(replicator.type).toBe("special");
+    expect(replicator.tool).toBe("shovel");
+    expect(replicator.buildCost).toEqual({ metal: 2, energy: 2, goods: 0 });
+    expect(replicator.prestige).toBe(1);
+    // It asks for no dice of its own — whatever it copies does the asking.
+    expect(replicator.perk?.dice).toBe(0);
+    expect(replicator.perk?.cost).toEqual({ metal: 0, energy: 1, goods: 0 });
+    expect(replicator.perk?.effect).toEqual({ kind: "borrowFromMarket" });
+  });
+
+  it("offers one activation per face-up blueprint that has a perk", () => {
+    // The Beacon and the Laboratory have no perk to lend; the other two do.
+    const state = withReplicator(
+      ["Beacon", "Laboratory", "Nuclear Plant", "Power Plant"],
+      [6],
+      { resources: { metal: 0, energy: 1, goods: 0 } },
+    );
+
+    const copied = activations(state).map((move) =>
+      move.type === "activate" ? move.borrowCardId : undefined,
+    );
+
+    expect(copied).toEqual([named("Nuclear Plant").id, named("Power Plant").id]);
+  });
+
+  it("charges its own energy on top of what the copied card asks", () => {
+    const foundry = named("Foundry");
+    const perk = perkFor(
+      withReplicator(["Foundry"]),
+      replicator,
+      foundry.id,
+    );
+
+    // The Foundry's own perk is free but scales with the face; the
+    // Replicator's 1 energy rides on top of it.
+    expect(perk?.dice).toBe(foundry.perk?.dice);
+    expect(perk?.accepts).toEqual(foundry.perk?.accepts);
+    expect(perk?.effect).toEqual(foundry.perk?.effect);
+    expect(perk?.cost).toEqual({ metal: 0, energy: 1, goods: 0 });
+    expect(perk?.costByFace).toBe("energy");
+  });
+
+  it("works the copied perk, pays for both, and keeps the die on itself", () => {
+    // A 5 on a borrowed Foundry: 5 energy for the Foundry, 1 for the
+    // Replicator, and 5 metal back.
+    const state = withReplicator(["Foundry"], [5], {
+      resources: { metal: 0, energy: 6, goods: 0 },
+    });
+    const [move] = activations(state);
+
+    const next = applyMove(state, move);
+
+    expect(next.players[0].resources).toEqual({ metal: 5, energy: 0, goods: 0 });
+    // The die is spent, and stands on the Replicator rather than the Foundry.
+    expect(next.players[0].dice[0].spent).toBe(true);
+    expect(next.players[0].compound[0].card.name).toBe("Replicator");
+    expect(next.players[0].compound[0].dice).toEqual([5]);
+    expect(next.players[0].compound[0].worked).toBe(true);
+    expect(logged(next, /worked Replicator as Foundry with 5 for 6 energy/)).toBe(true);
+  });
+
+  it("leaves the copied card face up in the market — it is only borrowed", () => {
+    const state = withReplicator(["Foundry"], [5], {
+      resources: { metal: 0, energy: 6, goods: 0 },
+    });
+
+    const next = applyMove(state, activations(state)[0]);
+
+    expect(next.blueprints).toEqual(state.blueprints);
+    expect(next.players[0].compound).toHaveLength(1);
+  });
+
+  it("copies once a round, however many cards are face up", () => {
+    const state = withReplicator(["Power Plant", "Nuclear Plant"], [6], {
+      resources: { metal: 0, energy: 1, goods: 0 },
+    });
+    expect(activations(state)).toHaveLength(2);
+
+    const next = applyMove(state, activations(state)[0]);
+    expect(activations(next)).toEqual([]);
+  });
+
+  it("copies a perk that eats a card, and takes the card too", () => {
+    const beacon = copiesOf("Beacon")[1];
+    const state = withReplicator(["Incinerator"], [], {
+      hand: [beacon],
+      // 1 metal for the Incinerator, 1 energy for the Replicator.
+      resources: { metal: 1, energy: 1, goods: 0 },
+    });
+
+    const next = applyMove(state, activations(state)[0]);
+
+    expect(next.players[0].resources).toEqual({ metal: 0, energy: 6, goods: 0 });
+    expect(next.players[0].hand).toEqual([]);
+    expect(next.blueprints.discard).toContain(beacon);
+  });
+
+  it("copies a perk that turns a die over, and hands the die back", () => {
+    const state = withReplicator(["Dojo"], [5], {
+      // 1 energy for the Dojo, 1 for the Replicator.
+      resources: { metal: 0, energy: 2, goods: 0 },
+    });
+    const [move] = activations(state);
+
+    expect(move.type === "activate" && move.targetDieId).toBe("d0");
+
+    const next = applyMove(state, move);
+    // Turned over, not spent: it is back on the table showing a 2.
+    expect(next.players[0].dice[0]).toMatchObject({ face: 2, spent: false });
+    expect(next.players[0].resources.energy).toBe(0);
+  });
+
+  it("will not copy a card that is not face up, or has nothing to lend", () => {
+    const state = withReplicator(["Beacon", "Power Plant"], [3], {
+      resources: { metal: 0, energy: 1, goods: 0 },
+    });
+    const copy = (borrowCardId?: string): Move => ({
+      type: "activate",
+      cardId: replicator.id,
+      dieIds: borrowCardId === named("Power Plant").id ? ["d0"] : [],
+      borrowCardId,
+    });
+
+    expect(() => applyMove(state, copy(named("Beacon").id))).toThrow(/has no perk to copy/);
+    expect(() => applyMove(state, copy(named("Foundry").id))).toThrow(/is not face up/);
+    expect(() => applyMove(state, copy())).toThrow(/needs a blueprint to copy/);
+  });
+
+  it("will not copy another Replicator — that would only ask again", () => {
+    const other = copiesOf("Replicator")[1];
+    const state = withReplicator(["Power Plant"], [3], {
+      resources: { metal: 0, energy: 1, goods: 0 },
+    });
+    const staged: GameState = {
+      ...state,
+      blueprints: { ...state.blueprints, row: [...state.blueprints.row, other] },
+    };
+
+    // Only the Power Plant is on offer, and naming the other one is refused.
+    expect(activations(staged)).toHaveLength(1);
+    expect(() =>
+      applyMove(staged, {
+        type: "activate",
+        cardId: replicator.id,
+        dieIds: [],
+        borrowCardId: other.id,
+      }),
+    ).toThrow(/has no perk of its own to copy/);
+  });
+
+  it("leaves every other perk alone — nothing else copies", () => {
+    const battery = named("Battery Factory");
+    const state = patchPlayer(withReplicator(["Foundry"]), 0, {
+      compound: [{ card: battery, dice: [], worked: false }],
+      resources: { metal: 0, energy: 4, goods: 0 },
+    });
+
+    expect(() =>
+      applyMove(state, {
+        type: "activate",
+        cardId: battery.id,
+        dieIds: [],
+        borrowCardId: named("Foundry").id,
+      }),
+    ).toThrow(/does not copy a blueprint/);
   });
 });
 

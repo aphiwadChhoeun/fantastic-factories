@@ -4,6 +4,7 @@ import {
   activationOptions,
   hqSection,
   oppositeFace,
+  perkFor,
   type ActivationRequirement,
   type BlueprintPerk,
   type Card,
@@ -87,6 +88,10 @@ export function describeEffect(effect: Effect): string {
     // the face and the Mega Factory throws it in.
     case "gainDie":
       return "Take an extra white die at any face";
+    // The Work line says only what this card charges; whatever it copies asks
+    // for its own dice and its own price on top, so that is said here.
+    case "borrowFromMarket":
+      return "Work a face-up blueprint as if you owned it — on top of what that card asks";
   }
 }
 
@@ -171,6 +176,27 @@ function dieFace(state: GameState, dieId: string): string {
 }
 
 /**
+ * The perk a move actually works, which is not always the one printed on the
+ * card it names — a Replicator borrows one from the market.
+ */
+function perkOf(
+  state: GameState,
+  move: Extract<Move, { type: "activate" }>,
+): BlueprintPerk | undefined {
+  const card = state.players[state.currentPlayerIndex].compound.find(
+    (building) => building.card.id === move.cardId,
+  )?.card;
+  if (!card) return undefined;
+  // A label is not worth throwing over: a move this cannot read is a move the
+  // engine will refuse anyway.
+  try {
+    return perkFor(state, card, move.borrowCardId);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * What a die-changing perk would leave its target showing. The engine has
  * already decided the move is legal; this only has to name the result.
  */
@@ -181,9 +207,7 @@ function changedFaceLabel(
 ): string {
   if (face === "?") return "?";
   const current = Number(face) as DieFace;
-  const effect = state.players[state.currentPlayerIndex].compound.find(
-    (building) => building.card.id === move.cardId,
-  )?.card.perk?.effect;
+  const effect = perkOf(state, move)?.effect;
 
   if (effect?.kind === "flipDie") return String(oppositeFace(current));
   if (effect?.kind === "stepDie") return String(current + effect.by);
@@ -197,7 +221,7 @@ function changedFaceLabel(
 function describeChoice(state: GameState, move: Extract<Move, { type: "activate" }>): string {
   if (move.option === undefined) return "";
   const player = state.players[state.currentPlayerIndex];
-  const perk = player.compound.find((b) => b.card.id === move.cardId)?.card.perk;
+  const perk = perkOf(state, move);
   if (!perk) return "";
 
   const eaten = (move.paymentCardIds ?? []).flatMap(
@@ -243,7 +267,11 @@ export function describeMove(state: GameState, move: Move): string {
         move.paymentCardId,
       )}`;
     case "activate": {
-      const name = findCardName(state, move.cardId);
+      // A Replicator is only as interesting as what it copies, so the copied
+      // card is named ahead of everything the move settled.
+      const name =
+        findCardName(state, move.cardId) +
+        (move.borrowCardId ? ` as ${findCardName(state, move.borrowCardId)}` : "");
       // A perk that changes a die: which one, and what it becomes. The card
       // itself says how, so the label reads off its effect.
       if (move.targetDieId) {

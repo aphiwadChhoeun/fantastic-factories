@@ -159,7 +159,19 @@ export type Effect =
    *
    * White and lent for the round, like a contractor's dice.
    */
-  | { readonly kind: "gainDie" };
+  | { readonly kind: "gainDie" }
+  /**
+   * Not an effect so much as a stand-in for one: the perk has none of its own
+   * and works a face-up blueprint's instead — the Replicator. Which card is
+   * on the move, and everything about the activation is read off that card:
+   * its dice, its pattern, its faces, its costs, its payout.
+   *
+   * Never reaches `applyEffect`, because the borrowed perk replaces this one
+   * before anything is paid or placed. It exists so that a borrowing perk is
+   * still an ordinary `BlueprintPerk` with an effect, and so the card has
+   * something to print on its face.
+   */
+  | { readonly kind: "borrowFromMarket" };
 
 /**
  * The three sections of the Headquarters tile. Dice go on them during the Work
@@ -574,6 +586,12 @@ export type Move =
        * two, the Manufactory's three, the Black Market's ways to take a cap.
        */
       readonly option?: number;
+      /**
+       * The face-up blueprint whose perk is being worked instead of this
+       * card's own — the Replicator. The card stays in the market; only its
+       * perk is used, and every other part of this move answers to it.
+       */
+      readonly borrowCardId?: string;
     }
   | { readonly type: "endPhase" };
 

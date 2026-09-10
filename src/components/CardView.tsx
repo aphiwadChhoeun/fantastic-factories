@@ -128,9 +128,14 @@ export function CardView({
           {card.prestige} prestige{card.prestigeBonus ? `, +${card.prestigeBonus} for the set` : ""}
         </span>
       ) : null}
-      {card.kind === "blueprint" && built && card.perk && card.perk.dice > 0 && (
+      {/*
+        * How many slots the perk has, except for a card that borrows one: the
+        * Replicator prints no dice of its own and holds however many the perk
+        * it copied asked for.
+        */}
+      {card.kind === "blueprint" && built && card.perk && (card.perk.dice > 0 || dice.length > 0) && (
         <div className={styles.dice}>
-          {Array.from({ length: card.perk.dice }, (_, index) => {
+          {Array.from({ length: Math.max(card.perk.dice, dice.length) }, (_, index) => {
             const face = dice[index];
             return face === undefined ? (
               <span key={index} className={`${styles.die} ${styles.hqSlot}`} />

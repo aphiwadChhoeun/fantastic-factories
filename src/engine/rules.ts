@@ -286,6 +286,72 @@ function optionsOf(effect: Effect, eaten: readonly BlueprintCard[]): Effect[] {
   return [];
 }
 
+/** A perk with nothing of its own to do: it works another card's — the Replicator. */
+function borrows(perk: BlueprintPerk): boolean {
+  return perk.effect.kind === "borrowFromMarket";
+}
+
+/**
+ * A market card's perk as the borrower would work it: the card's own demands
+ * throughout — its dice, its faces, its payout — with the borrower's price
+ * added to whatever it already charges.
+ */
+function copiedPerk(borrower: BlueprintPerk, source: BlueprintPerk): BlueprintPerk {
+  return { ...source, cost: addResources(source.cost, borrower.cost) };
+}
+
+/**
+ * The blueprints a borrowing perk could copy: the face-up row, minus the cards
+ * with no perk to lend and minus any borrower, which would only send the
+ * question round again.
+ */
+function copyable(state: GameState): BlueprintCard[] {
+  return state.blueprints.row.filter((card) => card.perk && !borrows(card.perk));
+}
+
+/**
+ * The perk an activation actually works: the card's own, or — for the
+ * Replicator — one borrowed off a face-up blueprint, priced as both.
+ *
+ * Undefined when the card has no perk at all, which is the caller's error to
+ * report. Everything else here throws, because a move naming a card that
+ * cannot be copied is a move that was never legal.
+ *
+ * Exported because the board has to say what a move would do, and for a
+ * borrowing move that is not what the card in the compound reads.
+ */
+export function perkFor(
+  state: GameState,
+  card: BlueprintCard,
+  borrowCardId?: string,
+): BlueprintPerk | undefined {
+  const printed = card.perk;
+  if (!printed || !borrows(printed)) {
+    if (borrowCardId !== undefined) throw new Error(`${card.name} does not copy a blueprint`);
+    return printed;
+  }
+
+  if (!borrowCardId) throw new Error(`${card.name} needs a blueprint to copy`);
+  const source = state.blueprints.row.find((other) => other.id === borrowCardId);
+  if (!source) throw new Error(`${borrowCardId} is not face up in the market`);
+  if (!source.perk) throw new Error(`${source.name} has no perk to copy`);
+  if (borrows(source.perk)) throw new Error(`${source.name} has no perk of its own to copy`);
+  return copiedPerk(printed, source.perk);
+}
+
+/** Every perk one building could work this round, and what it is copying. */
+type PerkUse = { readonly perk: BlueprintPerk | undefined; readonly borrowCardId?: string };
+
+function perkUses(state: GameState, card: BlueprintCard): PerkUse[] {
+  const printed = card.perk;
+  if (!printed || !borrows(printed)) return [{ perk: printed }];
+
+  return copyable(state).map((source) => ({
+    perk: copiedPerk(printed, source.perk!),
+    borrowCardId: source.id,
+  }));
+}
+
 /**
  * Whether a perk hands over a die, and so needs a face named on the move.
  *
@@ -301,9 +367,15 @@ function needsFace(effect: Effect): boolean {
 /**
  * Every distinct set of dice that could work a building's perk right now. A
  * perk that takes no dice yields one empty set — it is still a move.
+ *
+ * The perk is passed in rather than read off the card, because the Replicator
+ * works whichever one it is copying and asks for that card's dice.
  */
-function perkDice(player: Player, building: Building): Die[][] {
-  const { perk } = building.card;
+function perkDice(
+  player: Player,
+  building: Building,
+  perk: BlueprintPerk | undefined,
+): Die[][] {
   if (!perk) return [];
   // A perk takes all its dice at once, so a used one is simply full. One that
   // takes none is marked used by `worked` instead.
@@ -422,52 +494,57 @@ export function legalMoves(state: GameState): Move[] {
       }
 
       for (const building of player.compound) {
-        const perk = building.card.perk;
-        const effect = perk?.effect;
-        for (const dice of perkDice(player, building)) {
-          const dieIds = dice.map((die) => die.id);
-          const cardId = building.card.id;
+        // Usually one perk, the card's own. A Replicator offers one per
+        // face-up blueprint it could copy, each asking what that card asks.
+        for (const { perk, borrowCardId } of perkUses(state, building.card)) {
+          const effect = perk?.effect;
+          const copies = borrowCardId === undefined ? {} : { borrowCardId };
+          for (const dice of perkDice(player, building, perk)) {
+            const dieIds = dice.map((die) => die.id);
+            const cardId = building.card.id;
 
-          // A perk that changes a die names the one it acts on rather than one
-          // it spends, so it is one move per face on the table — two dice
-          // showing the same number change to the same thing. A face it cannot
-          // touch is no move at all.
-          if (effect && changesDie(effect)) {
-            const seen = new Set<DieFace>();
-            for (const die of unspentDice(player)) {
-              if (seen.has(die.face)) continue;
-              if (changedFace(effect, die.face) === null) continue;
-              seen.add(die.face);
-              moves.push({ type: "activate", cardId, dieIds, targetDieId: die.id });
+            // A perk that changes a die names the one it acts on rather than
+            // one it spends, so it is one move per face on the table — two
+            // dice showing the same number change to the same thing. A face it
+            // cannot touch is no move at all.
+            if (effect && changesDie(effect)) {
+              const seen = new Set<DieFace>();
+              for (const die of unspentDice(player)) {
+                if (seen.has(die.face)) continue;
+                if (changedFace(effect, die.face) === null) continue;
+                seen.add(die.face);
+                moves.push({ type: "activate", cardId, dieIds, ...copies, targetDieId: die.id });
+              }
+              continue;
             }
-            continue;
-          }
-          if (!perk) continue;
+            if (!perk) continue;
 
-          // What is left to settle: the face of a die it hands over, which
-          // blueprints it eats, and which of its alternatives is taken. Most
-          // perks settle none of these and are a single move.
-          const faces = needsFace(perk.effect)
-            ? DIE_FACES.filter((face) => canAfford(player.resources, perkCost(perk, [face])))
-            : [undefined];
-          // Every way to feed it out of hand. A perk that eats more cards than
-          // are held has no move at all, and one that eats none has exactly
-          // one — the empty set.
-          const meals = combinations(player.hand, perk.discardsCards ?? 0);
+            // What is left to settle: the face of a die it hands over, which
+            // blueprints it eats, and which of its alternatives is taken. Most
+            // perks settle none of these and are a single move.
+            const faces = needsFace(perk.effect)
+              ? DIE_FACES.filter((face) => canAfford(player.resources, perkCost(perk, [face])))
+              : [undefined];
+            // Every way to feed it out of hand. A perk that eats more cards
+            // than are held has no move at all, and one that eats none has
+            // exactly one — the empty set.
+            const meals = combinations(player.hand, perk.discardsCards ?? 0);
 
-          for (const meal of meals) {
-            const options = activationOptions(perk, meal);
-            const chosen = options.length > 1 ? options.map((_, index) => index) : [undefined];
-            for (const face of faces) {
-              for (const option of chosen) {
-                moves.push({
-                  type: "activate",
-                  cardId,
-                  dieIds,
-                  ...(meal.length > 0 ? { paymentCardIds: meal.map((card) => card.id) } : {}),
-                  ...(face === undefined ? {} : { face }),
-                  ...(option === undefined ? {} : { option }),
-                });
+            for (const meal of meals) {
+              const options = activationOptions(perk, meal);
+              const chosen = options.length > 1 ? options.map((_, index) => index) : [undefined];
+              for (const face of faces) {
+                for (const option of chosen) {
+                  moves.push({
+                    type: "activate",
+                    cardId,
+                    dieIds,
+                    ...copies,
+                    ...(meal.length > 0 ? { paymentCardIds: meal.map((card) => card.id) } : {}),
+                    ...(face === undefined ? {} : { face }),
+                    ...(option === undefined ? {} : { option }),
+                  });
+                }
               }
             }
           }
@@ -968,6 +1045,11 @@ function applyEffect(
         goods: effect.resource === "goods" ? face : 0,
       });
     }
+    // Unreachable: `perkFor` swaps the borrowed perk in before an activation
+    // pays for anything, so what arrives here is the copied card's effect and
+    // never the marker. Kept so the switch stays exhaustive.
+    case "borrowFromMarket":
+      throw new Error("A borrowed perk was never resolved");
   }
 }
 
@@ -1034,6 +1116,10 @@ function describeEffectForLog(effect: Effect): string {
     // Logs the face it handed over itself.
     case "gainDie":
       return "buying a die";
+    // The activation names the card it copied; by the time anything is logged
+    // the effect is that card's, never this marker.
+    case "borrowFromMarket":
+      return "copying a blueprint";
   }
 }
 
@@ -1489,7 +1575,10 @@ export function applyMove(state: GameState, move: Move): GameState {
       const building = player.compound.find((b) => b.card.id === move.cardId);
       if (!building) throw new Error(`${player.name} has no building ${move.cardId}`);
 
-      const { perk } = building.card;
+      // Not always the card's own: a Replicator works whichever face-up
+      // blueprint the move names, and pays for both.
+      const perk = perkFor(state, building.card, move.borrowCardId);
+      const copied = state.blueprints.row.find((card) => card.id === move.borrowCardId);
       if (!perk) throw new Error(`${building.card.name} has no perk to work`);
       if (building.worked) {
         throw new Error(`${building.card.name} was already used this round`);
@@ -1555,9 +1644,12 @@ export function applyMove(state: GameState, move: Move): GameState {
       ].filter(Boolean);
       const paid = price.length > 0 ? ` for ${price.join(" and ")}` : "";
       const withDice = faces.length > 0 ? ` with ${faces.join(", ")}` : "";
+      // The borrowed card is named, since the log would otherwise say only
+      // that a Replicator was worked and nothing about what it did.
+      const as = copied ? ` as ${copied.name}` : "";
       const announced = log(
         used,
-        `${player.name} worked ${building.card.name}${withDice}${paid}`,
+        `${player.name} worked ${building.card.name}${as}${withDice}${paid}`,
       );
       return applyEffect(announced, index, perk.effect, choice);
     }
