@@ -90,6 +90,8 @@ export function describeEffect(effect: Effect): string {
       return "Take an extra white die at any face";
     case "rollDie":
       return "Roll an extra white die, and keep it for the round";
+    case "rerollDice":
+      return "Throw any number of your unspent dice again — they land where they land";
     // The Work line says only what this card charges; whatever it copies asks
     // for its own dice and its own price on top, so that is said here.
     case "borrowFromMarket":
@@ -131,6 +133,8 @@ export function describePerkCost(perk: BlueprintPerk): string {
         : `${perk.dice} ${pattern}dice`;
   const accepts =
     perk.dice > 1 && perk.accepts.kind !== "any" ? ` (${describeRequirement(perk.accepts)})` : "";
+  // A floor on the set rather than on each die, so it is said of the set.
+  const adding = perk.minTotal === undefined ? "" : ` adding to ${perk.minTotal}+`;
   const eats = perk.discardsCards ?? 0;
   const card =
     eats === 0 ? "" : eats === 1 ? "a blueprint from hand" : `${eats} blueprints from hand`;
@@ -143,7 +147,7 @@ export function describePerkCost(perk: BlueprintPerk): string {
       ? `${perk.costByFace} equal to the face bought`
       : `${perk.costByFace} equal to the ${perk.dice === 1 ? "die" : "dice"}`;
 
-  return [`${dice}${accepts}`, card, cost, scaled].filter(Boolean).join(" + ") || "nothing";
+  return [`${dice}${accepts}${adding}`, card, cost, scaled].filter(Boolean).join(" + ") || "nothing";
 }
 
 function costsSomething(resources: Resources): boolean {
@@ -281,10 +285,16 @@ export function describeMove(state: GameState, move: Move): string {
       const name =
         findCardName(state, move.cardId) +
         (move.borrowCardId ? ` as ${findCardName(state, move.borrowCardId)}` : "");
-      // A perk that changes a die: which one, and what it becomes. The card
+      // A perk that changes dice: which ones, and what they become. The card
       // itself says how, so the label reads off its effect.
-      if (move.targetDieId) {
-        const face = dieFace(state, move.targetDieId);
+      const changing = move.targetDieIds ?? [];
+      if (changing.length > 0) {
+        const faces = changing.map((id) => dieFace(state, id));
+        // A throw has no answer until it lands, so it only names what goes in.
+        if (perkOf(state, move)?.effect.kind === "rerollDice") {
+          return `Work ${name} — throw ${faces.join(", ")} again`;
+        }
+        const [face] = faces;
         return `Work ${name} — turn a ${face} into a ${changedFaceLabel(state, move, face)}`;
       }
 

@@ -148,6 +148,14 @@ export type Effect =
    */
   | { readonly kind: "stepDie"; readonly by: number }
   /**
+   * Throw any number of unspent dice again — the Temp Agency. Which dice are
+   * on the move, and there is no telling what comes back: unlike a flip or a
+   * step, this one can leave a player worse off.
+   *
+   * They stay on the table, unspent, at whatever they now show.
+   */
+  | { readonly kind: "rerollDice" }
+  /**
    * Gain this resource equal to the face of the die placed on the perk — the
    * Foundry turns energy into metal at whatever rate the die says.
    */
@@ -297,14 +305,20 @@ export type BlueprintPerk = {
   /** How many dice it takes. They all go on at once. Some take none. */
   readonly dice: number;
   readonly pattern: DicePattern;
+  /**
+   * The dice placed must add up to at least this — the Warehouse takes three
+   * making fourteen. A floor on the set, where `accepts` is a rule about each
+   * die on its own. Absent on every other card.
+   */
+  readonly minTotal?: number;
   /** Which faces it will take at all. */
   readonly accepts: ActivationRequirement;
   /** Resources paid to use it, on top of the dice. Usually nothing. */
   readonly cost: Resources;
   /**
    * The perk also eats this many blueprints out of hand, on top of everything
-   * else — the Incinerator burns one, the Black Market sells one, the
-   * Recycling Plant swallows two.
+   * else — the Incinerator burns one, the Black Market sells one, and the
+   * Recycling Plant and the Trash Compactor swallow two.
    *
    * A cost, not an effect: what the cards are worth afterwards is the effect's
    * business, and for the Incinerator they are worth nothing at all.
@@ -585,10 +599,11 @@ export type Move =
        */
       readonly paymentCardIds?: readonly string[];
       /**
-       * The die a perk acts on rather than spends — the Dojo turns it over.
-       * Never one of `dieIds`: it is not paid, and it does not go on the card.
+       * The dice a perk acts on rather than spends — the Dojo turns one over,
+       * the Temp Agency throws any number of them again. Never among
+       * `dieIds`: they are not paid, and they do not go on the card.
        */
-      readonly targetDieId?: string;
+      readonly targetDieIds?: readonly string[];
       /**
        * The face bought, for a perk that hands over a die — the Golem, where
        * it is what the die shows and what it costs both, and the Mega Factory,

@@ -469,8 +469,8 @@ const BLUEPRINTS: readonly { template: BlueprintTemplate; copies: number }[] = [
       tool: "gear",
       buildCost: { metal: 2, energy: 0, goods: 0 },
       prestige: 1,
-      // Two cards into the furnace for a good and one back — the only perk
-      // that eats more than a single blueprint.
+      // Two cards into the furnace for a good and one back. No dice at all,
+      // which is what sets it apart from the Trash Compactor's pair.
       perk: {
         dice: 0,
         pattern: "any",
@@ -563,6 +563,66 @@ const BLUEPRINTS: readonly { template: BlueprintTemplate; copies: number }[] = [
       buildCost: { metal: 1, energy: 2, goods: 0 },
       // The Scrap Yard in energy.
       passive: { kind: "gainOnBuild", resources: { energy: 2 } },
+    },
+  },
+  {
+    copies: 2,
+    template: {
+      name: "Temp Agency",
+      type: "training",
+      tool: "hammer",
+      buildCost: { metal: 1, energy: 0, goods: 0 },
+      // The one Training card that can leave you worse off: a flip and a step
+      // are worked out in advance, and this is a throw.
+      perk: {
+        dice: 0,
+        pattern: "any",
+        accepts: { kind: "any" },
+        cost: { metal: 0, energy: 1, goods: 0 },
+        effect: { kind: "rerollDice" },
+      },
+    },
+  },
+  {
+    copies: 2,
+    template: {
+      name: "Trash Compactor",
+      type: "production",
+      tool: "shovel",
+      buildCost: { metal: 2, energy: 1, goods: 0 },
+      prestige: 1,
+      // Two dice and two cards, and no resources: where the Recycling Plant
+      // charges a pair of blueprints for nothing on the table, this one wants
+      // a matching pair as well.
+      perk: {
+        dice: 2,
+        pattern: "matching",
+        accepts: { kind: "any" },
+        cost: FREE,
+        discardsCards: 2,
+        effect: { kind: "gain", resources: { goods: 2 } },
+      },
+    },
+  },
+  {
+    copies: 2,
+    template: {
+      name: "Warehouse",
+      type: "production",
+      tool: "hammer",
+      buildCost: { metal: 2, energy: 2, goods: 0 },
+      prestige: 1,
+      // Three dice adding to fourteen — a high roll rather than a shaped one,
+      // which is why the pattern is `any` and the floor does the work. Nothing
+      // below a 2 can be part of one: even 6, 6, 1 falls short.
+      perk: {
+        dice: 3,
+        pattern: "any",
+        minTotal: 14,
+        accepts: { kind: "any" },
+        cost: FREE,
+        effect: { kind: "gain", resources: { goods: 2, energy: 2 } },
+      },
     },
   },
 ];

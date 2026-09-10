@@ -286,7 +286,7 @@ scoring and playing well.
 
 ### The real blueprints so far
 
-Sixty-nine cards, twenty-nine of them distinct — every one a real card.
+Seventy-five cards, thirty-two of them distinct — every one a real card.
 
 | Blueprint        | Copies | Type       | Tool   | Build cost         | Perk                                     | Prestige      |
 | ---------------- | -----: | ---------- | ------ | ------------------ | ---------------------------------------- | ------------- |
@@ -319,6 +319,9 @@ Sixty-nine cards, twenty-nine of them distinct — every one a real card.
 | Robot            |      3 | Special    | hammer | 1 metal + 1 energy | 1 metal → roll an extra white die          | —             |
 | Scrap Yard       |      2 | Special    | wrench | 1 metal + 2 energy | none — it pays on every build (see below)  | —             |
 | Solar Array      |      2 | Special    | gear   | 1 metal + 2 energy | none — it pays on every build (see below)  | —             |
+| Temp Agency      |      2 | Training   | hammer | 1 metal            | 1 energy → throw any number of your unspent dice again | — |
+| Trash Compactor  |      2 | Production | shovel | 2 metal + 1 energy | 2 matching dice + 2 blueprints from hand → 2 goods | 1     |
+| Warehouse        |      2 | Production | hammer | 2 metal + 2 energy | 3 dice adding to 14+ → 2 goods, 2 energy   | 1             |
 
 Every build cost is on top of discarding a blueprint of the same tool.
 
@@ -336,6 +339,18 @@ never the build that stood *them* there, so the first card either pays for is
 the next one. Unlike the Laboratory they are not held to once a round: build
 four cards and they pay four times. That covers a card the Engineer builds off
 the deck too, which costs nothing and is still a build.
+
+**The Temp Agency is the only Training card that can leave you worse off.** A
+flip and a step are worked out before you pay for them — you can see what a 5
+becomes. A throw is a throw: name any number of your unspent dice, pay the
+energy, and they land where they land. The sets are offered smallest first,
+since what you are really choosing is how much to risk.
+
+**The Warehouse asks for a big roll, not a shaped one.** Three dice adding to
+fourteen or more, in any combination — 6, 6, 2 and 5, 5, 4 both do it, and
+6, 5, 2 falls one short. That is a floor on the set, where every other card's
+requirement is a rule about each die on its own, so nothing below a 2 can ever
+be part of one: even 6, 6, 1 is thirteen.
 
 **The Robot is the Golem in reverse.** The Golem names the face it wants and
 pays energy equal to it; the Robot pays a flat metal and takes whatever comes
@@ -373,9 +388,9 @@ worked can still be copied out of the row — the copy is a second use of that
 perk in a round. And a Replicator cannot copy another Replicator, which would
 only ask the question again.
 
-**Four perks are priced in cards rather than resources.** The Black Market
+**Five perks are priced in cards rather than resources.** The Black Market
 sells one out of hand, the Incinerator burns one, the Refinery melts one down,
-and the Recycling Plant is the one card that swallows *two*. What goes in makes
+and the Recycling Plant and the Trash Compactor swallow *two*. What goes in makes
 no difference to any of them except the Black Market, which pays back what it
 was worth. On the board they are fed one click at a time: the hand narrows to
 the cards that could still pay, and what you have already promised stays lit.
@@ -528,11 +543,11 @@ compound and work your Headquarters, end the round. Known stubs:
   it resolves when taken and is discarded — so there would be nothing for the
   dice to go on. If contractors were meant, this needs a different mechanic,
   not a wider filter
-- **69 cards, and the tools have evened out** — 21 gears to 14 hammers, where
-  hammers were once 2 of 26. Training is now the thinnest type at 10, and
-  Special has gone from the runt to 11, so the automaton's purple die finally
-  has something to count
-- **69 cards is a comfortable deck.** Setup deals eleven — four to hand, four
+- **75 cards, and the tools have evened out** — 21 gears to 16 wrenches, where
+  hammers were once 2 of 26 and are now 18. Utility and Training are the
+  thinnest types at 12, and Special has gone from the runt to 11, so the
+  automaton's purple die finally has something to count
+- **75 cards is a comfortable deck.** Setup deals eleven — four to hand, four
   to the row, three to the automaton — so the draw pile no longer turns over in
   a couple of rounds
 - **`gainOnBuild` fires on every build, not the first of a round.** Nothing on
@@ -548,12 +563,12 @@ compound and work your Headquarters, end the round. Known stubs:
   the Specialist's extra die is white like the Hired Hands dice — neither is
   spelled out on the card
 - an equal score is a draw. No tiebreak is defined
-- 29 distinct blueprints, plus three Monuments that stack, put the 10-card
+- 32 distinct blueprints, plus three Monuments that stack, put the 10-card
   `END_COMPOUND_SIZE` only just in reach for a human — the automaton, dealt
   three and taking one a turn, gets there in seven rounds
 - the Headquarters is the same for every player. The published game hands out
   one of several starting tiles
-- `Effect` — the real game needs many more variants than the sixteen here, one
+- `Effect` — the real game needs many more variants than the seventeen here, one
   of which (`borrowFromMarket`) is a marker rather than an effect: it is
   swapped for the copied card's before anything runs
 - a `draw` effect always pulls blueprints; no card lets you choose a deck yet

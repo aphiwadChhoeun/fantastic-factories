@@ -145,6 +145,15 @@ function fitsPattern(pattern: DicePattern, faces: readonly DieFace[]): boolean {
   }
 }
 
+function total(faces: readonly DieFace[]): number {
+  return faces.reduce((sum, face) => sum + face, 0);
+}
+
+/** Whether a set of dice clears the perk's floor, if it prints one. */
+function meetsTotal(perk: BlueprintPerk, faces: readonly DieFace[]): boolean {
+  return perk.minTotal === undefined || total(faces) >= perk.minTotal;
+}
+
 /**
  * What a player is worth: their goods, plus the prestige standing in their
  * compound. Blueprints still in hand are worth nothing — only what is built.
@@ -386,7 +395,11 @@ function perkDice(
     const faces = set.map((die) => die.face);
     // Affordability is per set, not per perk: a face-scaled price means the
     // same card is cheap on a pair of 1s and out of reach on a pair of 6s.
-    return fitsPattern(perk.pattern, faces) && canAfford(player.resources, perkCost(perk, faces));
+    return (
+      fitsPattern(perk.pattern, faces) &&
+      meetsTotal(perk, faces) &&
+      canAfford(player.resources, perkCost(perk, faces))
+    );
   });
 
   // Two dice showing the same face are interchangeable, so sets that differ
@@ -503,17 +516,18 @@ export function legalMoves(state: GameState): Move[] {
             const dieIds = dice.map((die) => die.id);
             const cardId = building.card.id;
 
-            // A perk that changes a die names the one it acts on rather than
-            // one it spends, so it is one move per face on the table — two
-            // dice showing the same number change to the same thing. A face it
-            // cannot touch is no move at all.
+            // A perk that changes dice names the ones it acts on rather than
+            // any it spends: one move per face for a flip or a step, and one
+            // per subset for a re-roll.
             if (effect && changesDie(effect)) {
-              const seen = new Set<DieFace>();
-              for (const die of unspentDice(player)) {
-                if (seen.has(die.face)) continue;
-                if (changedFace(effect, die.face) === null) continue;
-                seen.add(die.face);
-                moves.push({ type: "activate", cardId, dieIds, ...copies, targetDieId: die.id });
+              for (const targets of dieTargets(player, effect)) {
+                moves.push({
+                  type: "activate",
+                  cardId,
+                  dieIds,
+                  ...copies,
+                  targetDieIds: targets.map((die) => die.id),
+                });
               }
               continue;
             }
@@ -833,7 +847,67 @@ function revealForResources(state: GameState, playerIndex: number): GameState {
 
 /** Perks that change a die on the table rather than spending one. */
 function changesDie(effect: Effect): boolean {
-  return effect.kind === "flipDie" || effect.kind === "stepDie";
+  return effect.kind === "flipDie" || effect.kind === "stepDie" || effect.kind === "rerollDice";
+}
+
+/**
+ * Every set of unspent dice such a perk could act on. A flip or a step takes
+ * one at a time; a re-roll takes any number, so it offers every subset.
+ *
+ * Deduped by what the dice show either way: which particular 5 of two is not a
+ * decision a player makes.
+ */
+function dieTargets(player: Player, effect: Effect): Die[][] {
+  const usable = unspentDice(player);
+  if (effect.kind === "rerollDice") return faceSubsets(usable);
+
+  const seen = new Set<DieFace>();
+  const sets: Die[][] = [];
+  for (const die of usable) {
+    if (seen.has(die.face)) continue;
+    // A face it cannot touch is no move at all — the Fitness Center on a 1.
+    if (changedFace(effect, die.face) === null) continue;
+    seen.add(die.face);
+    sets.push([die]);
+  }
+  return sets;
+}
+
+/**
+ * Every non-empty subset of these dice, counted by face rather than by die —
+ * taking either of two 5s is the same choice, so it is offered once.
+ *
+ * Built by taking 0..n of each face in turn, which never generates a duplicate
+ * to throw away afterwards.
+ */
+function faceSubsets(dice: readonly Die[]): Die[][] {
+  const byFace = new Map<DieFace, Die[]>();
+  for (const die of dice) {
+    const group = byFace.get(die.face);
+    if (group) group.push(die);
+    else byFace.set(die.face, [die]);
+  }
+
+  // Lowest face first, so a set always reads in order and two sets of the same
+  // dice are never written two ways.
+  let sets: Die[][] = [[]];
+  for (const face of [...byFace.keys()].sort((a, b) => a - b)) {
+    const group = byFace.get(face)!;
+    const grown: Die[][] = [];
+    for (const set of sets) {
+      for (let take = 0; take <= group.length; take++) {
+        grown.push([...set, ...group.slice(0, take)]);
+      }
+    }
+    sets = grown;
+  }
+
+  // Fewest dice first: a player weighing a throw is choosing how much to risk,
+  // and the smallest bets are the ones to read first.
+  const shows = (set: readonly Die[]) => set.map((die) => die.face).join(",");
+  return sets
+    .filter((set) => set.length > 0)
+    .sort((a, b) => a.length - b.length || shows(a).localeCompare(shows(b)));
 }
 
 /**
@@ -866,6 +940,37 @@ function setDieFace(
     dice: p.dice.map((die) => (die.id === target.id ? { ...die, face } : die)),
   }));
   return log(changed, `${player.name} turned a ${target.face} into a ${face}`);
+}
+
+/**
+ * Throws the named dice again where they lie — the Temp Agency. They are not
+ * spent and they do not go on the card, so they are there to be used at
+ * whatever they now show, for better or worse.
+ */
+function rerollDice(
+  state: GameState,
+  playerIndex: number,
+  targets: readonly Die[],
+): GameState {
+  const player = state.players[playerIndex];
+  let rng = state.rng;
+  const thrown = new Map<string, DieFace>();
+  for (const die of targets) {
+    const [value, next] = nextInt(rng, 6);
+    rng = next;
+    thrown.set(die.id, (value + 1) as DieFace);
+  }
+
+  const rolled = updatePlayer({ ...state, rng }, playerIndex, (p) => ({
+    ...p,
+    dice: p.dice.map((die) => {
+      const face = thrown.get(die.id);
+      return face === undefined ? die : { ...die, face };
+    }),
+  }));
+  const before = targets.map((die) => die.face).join(", ");
+  const after = targets.map((die) => thrown.get(die.id)).join(", ");
+  return log(rolled, `${player.name} re-rolled ${before} into ${after}`);
 }
 
 /**
@@ -928,8 +1033,11 @@ type EffectChoice = {
   readonly eaten?: readonly BlueprintCard[];
   /** Which of the perk's alternatives was taken, already resolved. */
   readonly chosen?: Effect;
-  /** The die a perk acts on without spending — the Dojo turns it over. */
-  readonly target?: Die;
+  /**
+   * The dice a perk acts on without spending — the Dojo turns one over, the
+   * Temp Agency throws several again. One for everything but a re-roll.
+   */
+  readonly targets?: readonly Die[];
   /** The face of a die the perk hands over — the Golem, the Mega Factory. */
   readonly face?: DieFace;
   /** The faces placed on the perk, for a payout that reads one. */
@@ -954,20 +1062,31 @@ function activationChoice(
     if (given) throw new Error(`${cardName} does not ${what}`);
   };
 
-  // A perk that changes a die on the table settles nothing else.
+  // A perk that changes dice on the table settles nothing else.
+  const named = move.targetDieIds ?? [];
   if (changesDie(effect)) {
     refuse(move.paymentCardIds !== undefined, "take a blueprint");
     refuse(move.face !== undefined, "hand over a die");
     refuse(move.option !== undefined, "pay more than one way");
-    if (!move.targetDieId) throw new Error(`${cardName} needs a die to change`);
-    // Unspent, because a die already on a card or a section is done with.
-    const target = requireUnspentDie(player, move.targetDieId);
-    if (changedFace(effect, target.face) === null) {
-      throw new Error(`${cardName} cannot change a ${target.face}`);
+    if (named.length === 0) throw new Error(`${cardName} needs a die to change`);
+    if (new Set(named).size !== named.length) {
+      throw new Error(`${cardName} cannot change the same die twice`);
     }
-    return { target };
+    // Unspent, because a die already on a card or a section is done with.
+    const targets = named.map((id) => requireUnspentDie(player, id));
+    // A re-roll takes any number; everything else works one die at a time,
+    // and only a face it can actually reach.
+    if (effect.kind !== "rerollDice") {
+      if (targets.length !== 1) {
+        throw new Error(`${cardName} changes one die, not ${targets.length}`);
+      }
+      if (changedFace(effect, targets[0].face) === null) {
+        throw new Error(`${cardName} cannot change a ${targets[0].face}`);
+      }
+    }
+    return { targets };
   }
-  refuse(move.targetDieId !== undefined, "change a die");
+  refuse(named.length > 0, "change a die");
 
   // The face of a die it hands over.
   let face: DieFace | undefined;
@@ -1061,13 +1180,18 @@ function applyEffect(
     }
     case "flipDie":
     case "stepDie": {
-      const { target } = choice;
+      const target = choice.targets?.[0];
       // Both were checked by the activation that got here.
       const face = target && changedFace(effect, target.face);
       if (!target || face === null || face === undefined) {
         throw new Error("No die chosen to change");
       }
       return setDieFace(state, playerIndex, target, face);
+    }
+    case "rerollDice": {
+      const { targets } = choice;
+      if (!targets || targets.length === 0) throw new Error("No dice chosen to re-roll");
+      return rerollDice(state, playerIndex, targets);
     }
     case "gainDie": {
       const { face } = choice;
@@ -1160,6 +1284,8 @@ function describeEffectForLog(effect: Effect): string {
       return "turning a die over";
     case "stepDie":
       return `taking ${Math.abs(effect.by)} off a die`;
+    case "rerollDice":
+      return "throwing dice again";
     case "gainByFace":
       return `gaining ${effect.resource} equal to the die`;
     // Both log the face they handed over themselves.
@@ -1655,6 +1781,11 @@ export function applyMove(state: GameState, move: Move): GameState {
       const faces = dice.map((die) => die.face);
       if (!fitsPattern(perk.pattern, faces)) {
         throw new Error(`${building.card.name} needs ${perk.pattern} dice`);
+      }
+      if (!meetsTotal(perk, faces)) {
+        throw new Error(
+          `${building.card.name} needs dice adding up to ${perk.minTotal}, not ${total(faces)}`,
+        );
       }
       // A perk that eats a card, changes a die, sells one or pays more than
       // one way says so on the move, and is checked before anything is paid.

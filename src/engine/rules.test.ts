@@ -564,10 +564,17 @@ describe("blueprint types", () => {
   });
 
   it("has no card the scaffold made up", () => {
-    const invented = ["Generator", "Mine", "Warehouse", "Research Lab", "Depot"];
+    // "Warehouse" was on this list until a real card turned up wearing the
+    // name. It is the printed one now — hammer, Production, three dice adding
+    // to fourteen — and nothing of the invented card survives.
+    const invented = ["Generator", "Mine", "Research Lab", "Depot"];
     for (const name of invented) {
       expect(deck.map((card) => card.name)).not.toContain(name);
     }
+
+    const warehouse = cardNamed(deck, "Warehouse");
+    expect(warehouse.type).toBe("production");
+    expect(warehouse.perk?.minTotal).toBe(14);
   });
 
   it("keeps the type apart from the tool — a card carries both", () => {
@@ -1349,8 +1356,8 @@ describe("the Dojo", () => {
     return legalMoves(state)
       .filter((move) => move.type === "activate")
       .map((move) =>
-        move.type === "activate" && move.targetDieId
-          ? state.players[0].dice.find((d) => d.id === move.targetDieId)!.face
+        move.type === "activate" && move.targetDieIds?.[0]
+          ? state.players[0].dice.find((d) => d.id === move.targetDieIds?.[0])!.face
           : null,
       );
   }
@@ -1375,7 +1382,7 @@ describe("the Dojo", () => {
       type: "activate",
       cardId: dojo.id,
       dieIds: [],
-      targetDieId: "d0",
+      targetDieIds: ["d0"],
     });
 
     const die = next.players[0].dice.find((d) => d.id === "d0")!;
@@ -1400,7 +1407,7 @@ describe("the Dojo", () => {
 
     expect(flips(used)).toEqual([1, 3, 4]);
     expect(() =>
-      applyMove(used, { type: "activate", cardId: dojo.id, dieIds: [], targetDieId: "d0" }),
+      applyMove(used, { type: "activate", cardId: dojo.id, dieIds: [], targetDieIds: ["d0"] }),
     ).toThrow(/was already spent/);
   });
 
@@ -1411,7 +1418,7 @@ describe("the Dojo", () => {
       type: "activate",
       cardId: dojo.id,
       dieIds: [],
-      targetDieId: "d0",
+      targetDieIds: ["d0"],
     });
     expect(flips(once)).toEqual([]);
     expect(once.players[0].compound[0].worked).toBe(true);
@@ -1432,7 +1439,7 @@ describe("the Dojo", () => {
         type: "activate",
         cardId: battery.id,
         dieIds: [],
-        targetDieId: "d0",
+        targetDieIds: ["d0"],
       }),
     ).toThrow(/does not change a die/);
   });
@@ -1452,7 +1459,7 @@ describe("the Dojo", () => {
       type: "activate",
       cardId: dojo.id,
       dieIds: [],
-      targetDieId: "d0",
+      targetDieIds: ["d0"],
     });
     expect(flipped.players[0].dice.find((d) => d.id === "d0")!.face).toBe(1);
 
@@ -1483,8 +1490,8 @@ describe("the Fitness Center", () => {
     return legalMoves(state)
       .filter((move) => move.type === "activate")
       .map((move) =>
-        move.type === "activate" && move.targetDieId
-          ? state.players[0].dice.find((d) => d.id === move.targetDieId)!.face
+        move.type === "activate" && move.targetDieIds?.[0]
+          ? state.players[0].dice.find((d) => d.id === move.targetDieIds?.[0])!.face
           : null,
       );
   }
@@ -1504,7 +1511,7 @@ describe("the Fitness Center", () => {
       type: "activate",
       cardId: gym.id,
       dieIds: [],
-      targetDieId: "d0",
+      targetDieIds: ["d0"],
     });
 
     const die = next.players[0].dice.find((d) => d.id === "d0")!;
@@ -1524,7 +1531,7 @@ describe("the Fitness Center", () => {
         type: "activate",
         cardId: gym.id,
         dieIds: [],
-        targetDieId: "d0",
+        targetDieIds: ["d0"],
       }),
     ).toThrow(/Fitness Center cannot change a 1/);
   });
@@ -1536,7 +1543,7 @@ describe("the Fitness Center", () => {
       type: "activate",
       cardId: gym.id,
       dieIds: [],
-      targetDieId: "d0",
+      targetDieIds: ["d0"],
     });
     expect(targets(once)).toEqual([]);
   });
@@ -1775,8 +1782,8 @@ describe("the Gymnasium", () => {
     return legalMoves(state)
       .filter((move) => move.type === "activate")
       .map((move) =>
-        move.type === "activate" && move.targetDieId
-          ? state.players[0].dice.find((d) => d.id === move.targetDieId)!.face
+        move.type === "activate" && move.targetDieIds?.[0]
+          ? state.players[0].dice.find((d) => d.id === move.targetDieIds?.[0])!.face
           : null,
       );
   }
@@ -1795,7 +1802,7 @@ describe("the Gymnasium", () => {
       type: "activate",
       cardId: gym.id,
       dieIds: [],
-      targetDieId: "d0",
+      targetDieIds: ["d0"],
     });
 
     const die = next.players[0].dice.find((d) => d.id === "d0")!;
@@ -1814,7 +1821,7 @@ describe("the Gymnasium", () => {
         type: "activate",
         cardId: gym.id,
         dieIds: [],
-        targetDieId: "d0",
+        targetDieIds: ["d0"],
       }),
     ).toThrow(/Gymnasium cannot change a 6/);
   });
@@ -2739,7 +2746,7 @@ describe("the Replicator", () => {
     });
     const [move] = activations(state);
 
-    expect(move.type === "activate" && move.targetDieId).toBe("d0");
+    expect(move.type === "activate" && move.targetDieIds).toEqual(["d0"]);
 
     const next = applyMove(state, move);
     // Turned over, not spent: it is back on the table showing a 2.
@@ -3095,6 +3102,268 @@ describe("the Scrap Yard and the Solar Array", () => {
     expect(automaton.isAi).toBe(true);
     expect(automaton.resources).toEqual({ metal: 0, energy: 0, goods: 0 });
     expect(legalMoves(state).every((move) => move.type !== "build")).toBe(true);
+  });
+});
+
+describe("the Temp Agency", () => {
+  const agency = cardNamed(createBlueprintDeck(), "Temp Agency");
+
+  function withAgency(faces: readonly DieFace[], energy = 1): GameState {
+    const state = createInitialState({ seed: 3 });
+    const { color } = state.players[0];
+    return patchPlayer({ ...state, phase: "work" }, 0, {
+      compound: [{ card: agency, dice: [], worked: false }],
+      dice: faces.map((face, i) => ({
+        id: `d${i}`,
+        face,
+        color,
+        extra: false,
+        spent: false,
+      })),
+      rolled: true,
+      hand: [],
+      resources: { metal: 0, energy, goods: 0 },
+    });
+  }
+
+  /** The sets of faces each offered re-roll would throw again. */
+  function throws(state: GameState): string[] {
+    return legalMoves(state)
+      .filter((move) => move.type === "activate")
+      .map((move) =>
+        move.type === "activate"
+          ? (move.targetDieIds ?? [])
+              .map((id) => state.players[0].dice.find((d) => d.id === id)!.face)
+              .join(",")
+          : "",
+      );
+  }
+
+  it("is a Training hammer costing 1 metal, worth no prestige", () => {
+    expect(agency.type).toBe("training");
+    expect(agency.tool).toBe("hammer");
+    expect(agency.buildCost).toEqual({ metal: 1, energy: 0, goods: 0 });
+    expect(agency.prestige).toBeUndefined();
+    // Takes no dice of its own — it throws the ones already on the table.
+    expect(agency.perk?.dice).toBe(0);
+    expect(agency.perk?.cost).toEqual({ metal: 0, energy: 1, goods: 0 });
+    expect(agency.perk?.effect).toEqual({ kind: "rerollDice" });
+  });
+
+  it("offers every set of unspent dice, and counts them by face", () => {
+    // Three distinct faces make seven sets: 1, 2, 3, 12, 13, 23, 123.
+    expect(throws(withAgency([1, 2, 3]))).toEqual(["1", "2", "3", "1,2", "1,3", "2,3", "1,2,3"]);
+
+    // Two 5s are one choice at a time, not two: five sets, not seven.
+    expect(throws(withAgency([5, 5, 2]))).toEqual(["2", "5", "2,5", "5,5", "2,5,5"]);
+  });
+
+  it("passes over a die already spent", () => {
+    const state = withAgency([4, 6]);
+    const used = patchPlayer(state, 0, {
+      dice: state.players[0].dice.map((die) => (die.id === "d0" ? { ...die, spent: true } : die)),
+    });
+
+    expect(throws(used)).toEqual(["6"]);
+  });
+
+  it("throws them again and leaves them on the table, unspent", () => {
+    const state = withAgency([1, 1, 1]);
+    const move: Move = {
+      type: "activate",
+      cardId: agency.id,
+      dieIds: [],
+      targetDieIds: ["d0", "d1"],
+    };
+
+    const next = applyMove(state, move);
+    const dice = next.players[0].dice;
+
+    expect(next.players[0].resources.energy).toBe(0);
+    // The two named are thrown; the third is untouched.
+    expect(dice).toHaveLength(3);
+    expect(dice[2].face).toBe(1);
+    for (const die of dice) expect(die.spent).toBe(false);
+    // A throw is a throw: all this can say is that they are legal faces.
+    for (const die of dice) expect(DIE_FACES).toContain(die.face);
+    expect(logged(next, /re-rolled 1, 1 into \d, \d/)).toBe(true);
+  });
+
+  it("throws from the game's own rng, so a seed still replays", () => {
+    const state = withAgency([1, 1, 1]);
+    const move: Move = { type: "activate", cardId: agency.id, dieIds: [], targetDieIds: ["d0"] };
+
+    const once = applyMove(state, move);
+    const twice = applyMove(state, move);
+
+    expect(once.players[0].dice[0].face).toBe(twice.players[0].dice[0].face);
+    expect(once.rng).not.toEqual(state.rng);
+  });
+
+  it("refuses no dice, a repeat, or a die that is spent", () => {
+    const state = withAgency([4, 6]);
+    const reroll = (...targetDieIds: string[]): Move => ({
+      type: "activate",
+      cardId: agency.id,
+      dieIds: [],
+      targetDieIds,
+    });
+
+    expect(() => applyMove(state, reroll())).toThrow(/needs a die to change/);
+    expect(() => applyMove(state, reroll("d0", "d0"))).toThrow(/cannot change the same die twice/);
+    expect(() => applyMove(state, reroll("d9"))).toThrow(/has no die d9/);
+  });
+
+  it("is not offered without the energy, and works once a round", () => {
+    expect(throws(withAgency([4, 6], 0))).toEqual([]);
+
+    const state = withAgency([4, 6], 2);
+    const next = applyMove(state, {
+      type: "activate",
+      cardId: agency.id,
+      dieIds: [],
+      targetDieIds: ["d0"],
+    });
+    expect(throws(next)).toEqual([]);
+  });
+});
+
+describe("the Trash Compactor", () => {
+  const deck = createBlueprintDeck();
+  const compactor = cardNamed(deck, "Trash Compactor");
+
+  function withCompactor(faces: readonly DieFace[], hand: readonly BlueprintCard[]): GameState {
+    const state = createInitialState({ seed: 3 });
+    const { color } = state.players[0];
+    return patchPlayer({ ...state, phase: "work" }, 0, {
+      compound: [{ card: compactor, dice: [], worked: false }],
+      dice: faces.map((face, i) => ({
+        id: `d${i}`,
+        face,
+        color,
+        extra: false,
+        spent: false,
+      })),
+      rolled: true,
+      hand: [...hand],
+      resources: { metal: 0, energy: 0, goods: 0 },
+    });
+  }
+
+  const activations = (state: GameState) =>
+    legalMoves(state).filter((move) => move.type === "activate");
+
+  it("is a Production shovel costing 2 metal and 1 energy, worth a prestige", () => {
+    expect(compactor.type).toBe("production");
+    expect(compactor.tool).toBe("shovel");
+    expect(compactor.buildCost).toEqual({ metal: 2, energy: 1, goods: 0 });
+    expect(compactor.prestige).toBe(1);
+    // Two matching dice and two cards, and no resources at all.
+    expect(compactor.perk?.dice).toBe(2);
+    expect(compactor.perk?.pattern).toBe("matching");
+    expect(compactor.perk?.discardsCards).toBe(2);
+    expect(compactor.perk?.cost).toEqual({ metal: 0, energy: 0, goods: 0 });
+  });
+
+  it("takes a pair and two blueprints for 2 goods", () => {
+    const pair = copiesOf("Beacon").slice(0, 2);
+    const state = withCompactor([4, 4], pair);
+
+    const next = applyMove(state, activations(state)[0]);
+
+    expect(next.players[0].resources).toEqual({ metal: 0, energy: 0, goods: 2 });
+    expect(next.players[0].hand).toEqual([]);
+    for (const card of pair) expect(next.blueprints.discard).toContain(card);
+    expect(next.players[0].compound[0].dice).toEqual([4, 4]);
+  });
+
+  it("wants a matching pair, and two cards to go with it", () => {
+    const pair = copiesOf("Beacon").slice(0, 2);
+
+    // A pair, but only one card in hand.
+    expect(activations(withCompactor([4, 4], pair.slice(0, 1)))).toEqual([]);
+    // Two cards, but no pair.
+    expect(activations(withCompactor([4, 5], pair))).toEqual([]);
+  });
+});
+
+describe("the Warehouse", () => {
+  const warehouse = cardNamed(createBlueprintDeck(), "Warehouse");
+
+  function withWarehouse(faces: readonly DieFace[]): GameState {
+    const state = createInitialState({ seed: 3 });
+    const { color } = state.players[0];
+    return patchPlayer({ ...state, phase: "work" }, 0, {
+      compound: [{ card: warehouse, dice: [], worked: false }],
+      dice: faces.map((face, i) => ({
+        id: `d${i}`,
+        face,
+        color,
+        extra: false,
+        spent: false,
+      })),
+      rolled: true,
+      hand: [],
+      resources: { metal: 0, energy: 0, goods: 0 },
+    });
+  }
+
+  /** The sets of faces each offered activation would place. */
+  function sets(state: GameState): string[] {
+    return legalMoves(state)
+      .filter((move) => move.type === "activate")
+      .map((move) =>
+        move.type === "activate"
+          ? move.dieIds.map((id) => state.players[0].dice.find((d) => d.id === id)!.face).join(",")
+          : "",
+      );
+  }
+
+  it("is a Production hammer costing 2 metal and 2 energy, worth a prestige", () => {
+    expect(warehouse.type).toBe("production");
+    expect(warehouse.tool).toBe("hammer");
+    expect(warehouse.buildCost).toEqual({ metal: 2, energy: 2, goods: 0 });
+    expect(warehouse.prestige).toBe(1);
+    // Three dice of any shape, so long as they are big enough together.
+    expect(warehouse.perk?.dice).toBe(3);
+    expect(warehouse.perk?.pattern).toBe("any");
+    expect(warehouse.perk?.minTotal).toBe(14);
+    expect(warehouse.perk?.cost).toEqual({ metal: 0, energy: 0, goods: 0 });
+  });
+
+  it("pays 2 goods and 2 energy for three dice making fourteen", () => {
+    const state = withWarehouse([6, 5, 3]);
+
+    const next = applyMove(state, legalMoves(state).find((m) => m.type === "activate")!);
+
+    expect(next.players[0].resources).toEqual({ metal: 0, energy: 2, goods: 2 });
+    expect(next.players[0].compound[0].dice).toEqual([6, 5, 3]);
+    expect(next.players[0].dice.every((die) => die.spent)).toBe(true);
+  });
+
+  it("counts the total, not the shape — any three that reach it will do", () => {
+    // 6+6+2 and 6+5+3 both make fourteen; 6+5+2 makes thirteen and does not.
+    expect(sets(withWarehouse([6, 6, 2]))).toEqual(["6,6,2"]);
+    expect(sets(withWarehouse([6, 5, 3]))).toEqual(["6,5,3"]);
+    expect(sets(withWarehouse([6, 5, 2]))).toEqual([]);
+    expect(sets(withWarehouse([4, 5, 5]))).toEqual(["4,5,5"]);
+  });
+
+  it("refuses a set that falls short, however it is named", () => {
+    const state = withWarehouse([6, 5, 2]);
+
+    expect(() =>
+      applyMove(state, {
+        type: "activate",
+        cardId: warehouse.id,
+        dieIds: ["d0", "d1", "d2"],
+      }),
+    ).toThrow(/needs dice adding up to 14, not 13/);
+  });
+
+  it("picks the sets that reach it out of a bigger roll", () => {
+    // Of the ten sets of three from these five, only some make fourteen.
+    expect(sets(withWarehouse([1, 3, 5, 6, 6]))).toEqual(["3,5,6", "3,6,6", "5,6,6"]);
   });
 });
 

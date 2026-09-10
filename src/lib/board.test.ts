@@ -160,7 +160,7 @@ describe("indexMoves", () => {
   it("points a perk that turns a die over at the die it names", () => {
     // The Dojo spends no dice, but the one it acts on is what gets dropped on
     // it — so it is a drag target, not a click-only card.
-    const move: Move = { type: "activate", cardId: "dojo", dieIds: [], targetDieId: "d1" };
+    const move: Move = { type: "activate", cardId: "dojo", dieIds: [], targetDieIds: ["d1"] };
 
     const board = indexMoves([move], dice([3, 5, 2]));
 

@@ -109,9 +109,10 @@ export function indexMoves(moves: readonly Move[], rolled: readonly Die[] = []):
         (targetsFor(dice, move.dieId).sections as Map<HqSectionId, Move>).set(move.section, move);
         break;
       case "activate": {
-        // A perk that turns a die over names it without spending it, so that
-        // die — not the empty `dieIds` — is what gets dropped on the card.
-        const involved = move.targetDieId ? [move.targetDieId] : move.dieIds;
+        // A perk that changes dice names them without spending them, so those
+        // — not the empty `dieIds` — are what get dropped on the card.
+        const named = move.targetDieIds ?? [];
+        const involved = named.length > 0 ? named : move.dieIds;
         // Copying is always a click first: the card to copy has to be named
         // before there is anything to say about dice.
         if (move.borrowCardId !== undefined) push(copies, move.cardId, move);
