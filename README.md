@@ -36,9 +36,43 @@ src/
     random.ts   uniform over legal moves — the baseline to beat
   hooks/      useGame — React state plus the AI turn loop
   components/ board UI
-  lib/        display formatting
+  lib/        display formatting, and the saved game
   dev/        debug tools, compiled out of production
 ```
+
+## Saving
+
+The game in progress is written to `localStorage` after every move, so a
+refresh — or closing the tab and coming back — picks up where you left off.
+**New game** replaces it; there is no second slot. A save is around 27 KB and
+takes a tenth of a millisecond to write, so it is written outright rather than
+debounced.
+
+`GameState` is plain data all the way down, including an rng that is a single
+number, so `JSON.stringify` round-trips it exactly and `lib/storage.ts` needs
+to know nothing about the rules. The seed is saved beside the state, because a
+state restored next to the wrong seed would deal a different game the moment
+anything reached for the deck.
+
+Two things it has to survive. A save written by an older shape of the code:
+`SAVE_VERSION` is bumped by hand whenever `GameState` changes in a way an old
+save would not survive, and a mismatch is dropped rather than half-read.
+And a browser that will not play along: private modes throw outright on
+`localStorage` rather than coming back empty, so every access is wrapped and a
+game that cannot be saved is still a game worth playing.
+
+The board holds itself back for one render — the `Dealing…` placeholder — and
+that is not cosmetic. The HTML in `out/` is prerendered at build time, where
+there is no `localStorage` to read, so a board drawn straight from a save would
+not match the HTML the browser is hydrating. `useMounted` is what keeps the two
+renders agreeing; `useGame` may then read the save during its first render
+rather than in an effect. One consequence worth knowing: the prerendered page
+is now the placeholder and nothing else, which is why `out/index.html` is 6 KB.
+
+The AI's own RNG is *not* saved — it lives in a closure, not in `GameState`.
+That costs nothing today, because the automaton is offered exactly one legal
+move at each of its decision points, so there is nothing for it to choose
+between. A real AI with something to decide would need its state saved too.
 
 ## Debug tools
 

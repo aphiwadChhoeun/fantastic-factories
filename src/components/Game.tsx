@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { PHASE_LABELS, type Move } from "@/engine";
 import { DEV_TOOLS } from "@/dev/flag";
 import { useGame } from "@/hooks/useGame";
+import { useMounted } from "@/hooks/useMounted";
 import {
   borrowOf,
   borrowsFor,
@@ -20,10 +21,7 @@ import { MoveList } from "./MoveList";
 import { PlayerPanel, type PanelInteraction } from "./PlayerPanel";
 import styles from "./game.module.css";
 
-/**
- * Fixed so the server-rendered HTML and the first client render agree. A new
- * seed only ever comes from a click, which happens after hydration.
- */
+/** What a first-time visitor is dealt. Every later seed comes from a click. */
 const DEFAULT_SEED = 1;
 
 /**
@@ -51,14 +49,27 @@ type Pending = {
 };
 
 export function Game() {
-  const [seed, setSeed] = useState(DEFAULT_SEED);
-  const { state, moves, active, isAiTurn, play, reset, debug } = useGame(seed);
+  const { seed, state, moves, active, isAiTurn, play, reset, debug } = useGame(DEFAULT_SEED);
 
   const [pending, setPending] = useState<Pending | null>(null);
   const [dragged, setDragged] = useState<string | null>(null);
 
   const board = useMemo(() => indexMoves(moves, active.dice), [moves, active.dice]);
+  const mounted = useMounted();
   const playable = !state.gameOver && !isAiTurn;
+
+  // The board a refresh restores is not the board the build prerendered, so
+  // nothing of it is drawn until the two can no longer disagree.
+  if (!mounted) {
+    return (
+      <main className={styles.page}>
+        <header className={styles.header}>
+          <h1 className={styles.title}>Fantastic Factories</h1>
+          <span className={styles.status}>Dealing…</span>
+        </header>
+      </main>
+    );
+  }
 
   /** Every move that still fits a choice: taking a card, building, working. */
   function optionsFor(choice: Pending): readonly Move[] {
@@ -126,9 +137,7 @@ export function Game() {
     : `Round ${state.round} · ${PHASE_LABELS[state.phase]} · ${active.name} to act`;
 
   function newGame() {
-    const next = seed + 1;
-    setSeed(next);
-    reset(next);
+    reset(seed + 1);
   }
 
   /** Plays a choice the moment only one move fits it, and otherwise asks on. */
