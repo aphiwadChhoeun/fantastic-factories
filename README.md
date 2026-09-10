@@ -335,12 +335,17 @@ Replicator. It reads the row as it stands when you work it, so a card swept
 away is a card you can no longer copy. A Monument or a Laboratory has nothing
 to lend, and a Replicator cannot copy another Replicator.
 
-On the board it is two clicks: click the Replicator, and the blueprints it
-could work light up in the row — click one and it happens. Anything that card
-still leaves open is asked afterwards, in the usual place: which blueprint to
-burn, which dice to use, which payout to take. Nothing is spent until the move
-resolves, as everywhere else. Dragging a die onto the Replicator works too, and
-narrows the row to the cards that die could work.
+On the board it is two clicks: click the Replicator, and the blueprints you
+could afford to work light up in the row — click one and it happens. Anything
+that card still leaves open is asked afterwards, in the usual place: which
+blueprint to burn, which dice to use, which payout to take. Nothing is spent
+until the move resolves, as everywhere else. Dragging a die onto the Replicator
+works too, and narrows the row to the cards that die could work.
+
+The row is shown even when only one card on it could be worked. Everywhere
+else the board settles a lone option without asking — but which card is being
+worked is the whole of the Replicator, and firing it off a single click leaves
+the player with no idea what just happened.
 
 "As if it were in your compound" is held to as an equivalence, and tested as
 one: for every blueprint in the deck with a perk to lend, copying it offers

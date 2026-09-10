@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { Die, DieFace, Move } from "@/engine";
-import { borrowOf, borrowsFor, indexMoves, paymentsFor, paymentsOf } from "./board";
+import {
+  borrowOf,
+  borrowsFor,
+  indexMoves,
+  needsBorrow,
+  paymentsFor,
+  paymentsOf,
+} from "./board";
 
 function dice(faces: readonly DieFace[]): Die[] {
   return faces.map((face, i) => ({
@@ -133,6 +140,21 @@ describe("indexMoves", () => {
     // Two ways to work "b" — it still has to be told which payout to take.
     expect(borrows.get("b")).toHaveLength(2);
     expect(borrowOf(moves[3])).toBeUndefined();
+  });
+
+  it("asks the row for a copy even when one card is the only answer", () => {
+    // The board settles a lone option without asking, everywhere but here: a
+    // Replicator that fired off a single click would leave the player with no
+    // idea which card had just been worked.
+    const lone: Move[] = [
+      { type: "activate", cardId: "replicator", dieIds: [], borrowCardId: "incinerator" },
+    ];
+
+    expect(needsBorrow(lone)).toBe(true);
+    expect([...borrowsFor(lone).keys()]).toEqual(["incinerator"]);
+    // Nothing else asks it.
+    expect(needsBorrow([{ type: "activate", cardId: "factory", dieIds: ["d0"] }])).toBe(false);
+    expect(needsBorrow([])).toBe(false);
   });
 
   it("points a perk that turns a die over at the die it names", () => {

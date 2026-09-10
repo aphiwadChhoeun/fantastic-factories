@@ -152,6 +152,14 @@ export function borrowOf(move: Move): string | undefined {
 }
 
 /**
+ * Whether any of these moves works a card in the row — the question the board
+ * has to put to the player before it puts any other.
+ */
+export function needsBorrow(options: readonly Move[]): boolean {
+  return options.some((move) => borrowOf(move) !== undefined);
+}
+
+/**
  * The face-up blueprints that could answer a pending choice, by card id —
  * which card the Replicator copies. Shaped like `paymentsFor`, because it is
  * the same question asked of the row instead of the hand.

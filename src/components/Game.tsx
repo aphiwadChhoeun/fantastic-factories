@@ -4,7 +4,14 @@ import { useMemo, useState } from "react";
 import { PHASE_LABELS, type Move } from "@/engine";
 import { DEV_TOOLS } from "@/dev/flag";
 import { useGame } from "@/hooks/useGame";
-import { borrowOf, borrowsFor, indexMoves, paymentsFor, paymentsOf } from "@/lib/board";
+import {
+  borrowOf,
+  borrowsFor,
+  indexMoves,
+  needsBorrow,
+  paymentsFor,
+  paymentsOf,
+} from "@/lib/board";
 import { describeMove } from "@/lib/format";
 import { DevPanel } from "./DevPanel";
 import { GameLog } from "./GameLog";
@@ -78,16 +85,22 @@ export function Game() {
   }
 
   const options = pending ? optionsFor(pending) : [];
-  // A choice stands only while more than one move still fits it, so one that
-  // has been settled — or overtaken — needs no clearing.
-  const choice = options.length > 1 ? pending : null;
+  // Which card to copy comes first: until the Replicator has been told, there
+  // is nothing to say about the dice or the price, since both are that card's.
+  //
+  // Asked even when only one card could answer it. Everywhere else a lone
+  // option settles itself, but working a card in the row is the whole of the
+  // Replicator, and firing it off without showing which card would leave the
+  // player with no idea what just happened.
+  const asksRow = pending !== null && !pending.borrowCardId && needsBorrow(options);
+  // A choice otherwise stands only while more than one move still fits it, so
+  // one that has been settled — or overtaken — needs no clearing.
+  const choice = options.length > 1 || (asksRow && options.length > 0) ? pending : null;
   const dragging = dragged && board.dice.has(dragged) ? dragged : null;
 
   const settled = pending?.paying ?? [];
-  // Which card to copy comes first: until the Replicator has been told, there
-  // is nothing to say about the dice or the price, since both are that card's.
   const borrowers = borrowsFor(options);
-  const borrowing = choice && !pending?.borrowCardId && borrowers.size > 1 ? borrowers : null;
+  const borrowing = choice && asksRow ? borrowers : null;
   const payers = paymentsFor(options, settled);
   // With several blueprints in hand that could pay, the hand is the next
   // question. Anything still open after that is spelled out as buttons —
@@ -123,8 +136,10 @@ export function Game() {
     const fitting = optionsFor(next);
     if (fitting.length === 0) return;
 
-    setPending(fitting.length === 1 ? null : next);
-    if (fitting.length === 1) play(fitting[0]);
+    // Except a copy, which shows the row first however few cards are on it.
+    const done = fitting.length === 1 && !(!next.borrowCardId && needsBorrow(fitting));
+    setPending(done ? null : next);
+    if (done) play(fitting[0]);
   }
 
   /**
