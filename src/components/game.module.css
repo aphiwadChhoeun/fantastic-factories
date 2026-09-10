@@ -126,6 +126,94 @@
   color: inherit;
 }
 
+/*
+ * The result, over the board. A native dialog brings its own centring and its
+ * own top layer, so this only has to undo the browser's chrome and dress it.
+ */
+.modal {
+  /*
+   * A modal dialog centres itself with `margin: auto`, which the global
+   * `* { margin: 0 }` reset takes away again. Putting it back is the whole of
+   * the positioning.
+   */
+  margin: auto;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-radius: 12px;
+  padding: 22px 24px;
+  /* Sized by the table and the buttons, so neither has to wrap. */
+  width: max-content;
+  min-width: 320px;
+  max-width: min(460px, calc(100vw - 32px));
+  color: inherit;
+  background: var(--background);
+  box-shadow: 0 18px 50px rgb(0 0 0 / 35%);
+}
+
+.modal::backdrop {
+  background: rgb(0 0 0 / 45%);
+  backdrop-filter: blur(2px);
+}
+
+.modalTitle {
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.modalReason {
+  margin-top: 4px;
+  font-size: 13px;
+  opacity: 0.7;
+}
+
+.scores {
+  margin-top: 16px;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.scores th,
+.scores td {
+  padding: 7px 8px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The name column reads as a label, not as a number. */
+.scores th:first-child,
+.scores tbody th {
+  text-align: left;
+  font-weight: 600;
+}
+
+.scores thead th {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.55;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+}
+
+/* Said in the heading too — this only has to make it findable in the table. */
+.scoreWon {
+  background: color-mix(in srgb, #4fb37c 16%, transparent);
+}
+
+.modalActions {
+  display: flex;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.modalActions button {
+  flex: 1;
+  text-align: center;
+  /* Both labels are short. Wrapping one over two lines only looks broken. */
+  white-space: nowrap;
+}
+
 /* The automaton's compound, counted by type — the whole of its Work Phase. */
 .automaTypes {
   display: flex;

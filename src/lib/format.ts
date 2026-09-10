@@ -2,7 +2,10 @@
 
 import {
   activationOptions,
+  END_COMPOUND_SIZE,
+  END_GOODS,
   hqSection,
+  MAX_ROUNDS,
   oppositeFace,
   perkFor,
   type ActivationRequirement,
@@ -168,6 +171,40 @@ export function describeHqReward(reward: HqReward): string {
         goods: reward.resources.goods ?? 0,
       })}`;
   }
+}
+
+/**
+ * Who won, in as many words. The human player is addressed rather than talked
+ * about — "You win", not "You wins" — which is the whole reason this is a
+ * function and not a template.
+ */
+export function describeWinner(state: GameState): string {
+  if (state.winner === null) return "A draw";
+  const winner = state.players[state.winner];
+  return winner.isAi ? `${winner.name} wins` : `${winner.name} win`;
+}
+
+/**
+ * Why the game stopped, worked back out of the final state. The engine logs
+ * the reason as it happens; this reads it off the board so the result can be
+ * shown without trawling the log.
+ */
+export function describeEnding(state: GameState): string {
+  const reached = state.players.filter((player) => player.resources.goods >= END_GOODS);
+  if (reached.length > 0) {
+    const who = reached.map((player) => player.name).join(" and ");
+    return `${who} reached ${END_GOODS} goods`;
+  }
+
+  const filled = state.players.filter(
+    (player) => player.compound.length >= END_COMPOUND_SIZE,
+  );
+  if (filled.length > 0) {
+    const who = filled.map((player) => player.name).join(" and ");
+    return `${who} built a compound of ${END_COMPOUND_SIZE}`;
+  }
+  // Nothing else ends a game, so the safety valve is all that is left.
+  return `The round cap of ${MAX_ROUNDS} was reached`;
 }
 
 function findCardName(state: GameState, cardId: string): string {

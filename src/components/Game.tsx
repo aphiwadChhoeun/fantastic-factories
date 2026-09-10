@@ -13,9 +13,10 @@ import {
   paymentsFor,
   paymentsOf,
 } from "@/lib/board";
-import { describeMove } from "@/lib/format";
+import { describeMove, describeWinner } from "@/lib/format";
 import { DevPanel } from "./DevPanel";
 import { GameLog } from "./GameLog";
+import { GameOver } from "./GameOver";
 import { Marketplace, type MarketInteraction } from "./Marketplace";
 import { MoveList } from "./MoveList";
 import { PlayerPanel, type PanelInteraction } from "./PlayerPanel";
@@ -53,6 +54,12 @@ export function Game() {
 
   const [pending, setPending] = useState<Pending | null>(null);
   const [dragged, setDragged] = useState<string | null>(null);
+  /**
+   * The result, once it has been read and waved away. Not saved with the game:
+   * coming back to a finished one should show how it went, not assume you
+   * remember.
+   */
+  const [resultSeen, setResultSeen] = useState(false);
 
   const board = useMemo(() => indexMoves(moves, active.dice), [moves, active.dice]);
   const mounted = useMounted();
@@ -131,12 +138,12 @@ export function Game() {
   const choices = open.map((move) => ({ move, label: describeMove(state, move) }));
 
   const status = state.gameOver
-    ? state.winner === null
-      ? "Game over — a draw"
-      : `Game over — ${state.players[state.winner].name} wins`
+    ? `Game over · ${describeWinner(state)}`
     : `Round ${state.round} · ${PHASE_LABELS[state.phase]} · ${active.name} to act`;
 
   function newGame() {
+    setPending(null);
+    setResultSeen(false);
     reset(seed + 1);
   }
 
@@ -252,6 +259,15 @@ export function Game() {
           <GameLog entries={state.log} />
         </div>
       </div>
+
+      {state.gameOver && !resultSeen && (
+        <GameOver
+          state={state}
+          nextSeed={seed + 1}
+          onNewGame={newGame}
+          onDismiss={() => setResultSeen(true)}
+        />
+      )}
     </main>
   );
 }

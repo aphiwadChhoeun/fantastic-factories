@@ -318,6 +318,13 @@ The Dojo, the Fitness Center and the Gymnasium are worth nothing but what they
 do to your dice, which is the closest thing the deck has to a trade-off between
 scoring and playing well.
 
+When the game ends, a dialog gives the result: who won, what ended it, and both
+scores split into goods and prestige — which half someone won on says more
+about the game than the total does. It offers another game, or it can be waved
+away with Escape, the backdrop, or the second button, since the final board is
+worth a look. Being waved away is not saved with the game: coming back to a
+finished one shows the result again rather than assuming you remember it.
+
 ### The real blueprints so far
 
 Seventy-four cards, thirty-two of them distinct — every one a real card.
