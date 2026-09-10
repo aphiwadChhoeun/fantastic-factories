@@ -55,11 +55,10 @@ export function Game() {
   const [pending, setPending] = useState<Pending | null>(null);
   const [dragged, setDragged] = useState<string | null>(null);
   /**
-   * The result, once it has been read and waved away. Not saved with the game:
-   * coming back to a finished one should show how it went, not assume you
-   * remember.
+   * Whether the result has been waved away. Not saved with the game: coming
+   * back to a finished one should show how it went, not assume you remember.
    */
-  const [resultSeen, setResultSeen] = useState(false);
+  const [resultHidden, setResultHidden] = useState(false);
 
   const board = useMemo(() => indexMoves(moves, active.dice), [moves, active.dice]);
   const mounted = useMounted();
@@ -143,7 +142,7 @@ export function Game() {
 
   function newGame() {
     setPending(null);
-    setResultSeen(false);
+    setResultHidden(false);
     reset(seed + 1);
   }
 
@@ -251,6 +250,20 @@ export function Game() {
 
         <div className={styles.stack}>
           <MoveList state={state} moves={moves} waiting={isAiTurn} onPlay={play} />
+          {/*
+            * The way back to a result that has been waved away. Only there
+            * once there is one, and only while it is hidden — the dialog is
+            * modal, so while it is up this button could not be clicked anyway.
+            */}
+          {state.gameOver && resultHidden && (
+            <button
+              type="button"
+              className={styles.resetButton}
+              onClick={() => setResultHidden(false)}
+            >
+              Show result
+            </button>
+          )}
           <button type="button" className={styles.resetButton} onClick={newGame}>
             New game (seed {seed + 1})
           </button>
@@ -260,12 +273,12 @@ export function Game() {
         </div>
       </div>
 
-      {state.gameOver && !resultSeen && (
+      {state.gameOver && !resultHidden && (
         <GameOver
           state={state}
           nextSeed={seed + 1}
           onNewGame={newGame}
-          onDismiss={() => setResultSeen(true)}
+          onDismiss={() => setResultHidden(true)}
         />
       )}
     </main>

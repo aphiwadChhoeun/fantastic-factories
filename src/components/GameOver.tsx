@@ -96,8 +96,10 @@ export function GameOver({ state, nextSeed, onNewGame, onDismiss }: Props) {
         <button type="button" className={styles.moveButton} onClick={onNewGame}>
           New game (seed {nextSeed})
         </button>
+        {/* Named to pair with the "Show result" button it leaves behind, so
+            putting it away plainly reads as something you can undo. */}
         <button type="button" className={styles.moveButton} onClick={onDismiss}>
-          Look at the board
+          Hide result
         </button>
       </div>
     </dialog>

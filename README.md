@@ -320,10 +320,13 @@ scoring and playing well.
 
 When the game ends, a dialog gives the result: who won, what ended it, and both
 scores split into goods and prestige — which half someone won on says more
-about the game than the total does. It offers another game, or it can be waved
-away with Escape, the backdrop, or the second button, since the final board is
-worth a look. Being waved away is not saved with the game: coming back to a
-finished one shows the result again rather than assuming you remember it.
+about the game than the total does. It offers another game.
+
+**Hide result** puts it away so the final board can be looked over, as do
+Escape and a click on the backdrop; **Show result** appears beside *New game*
+to bring it back, and is only there while the result is hidden. Hiding is not
+saved with the game: coming back to a finished one shows the result again
+rather than assuming you remember it.
 
 ### The real blueprints so far
 
