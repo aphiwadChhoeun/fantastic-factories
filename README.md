@@ -523,8 +523,26 @@ keeps its token and gets a new card.
 Work: roll your dice, then spend them to build blueprints from hand, activate
 your compound, and fill your Headquarters.
 
-Cleanup: dice clear, Headquarters empty, buildings refresh. The game ends when
-someone reaches 12 goods or 10 cards in their compound.
+Cleanup: dice clear, Headquarters empty, buildings refresh — and the end is
+checked for.
+
+### Calling the end
+
+**You call the end by reaching 12 goods, or by standing 10 blueprints in your
+compound. The automaton can only call it on goods.** Its compound is not a
+trigger, because it takes a card into it every single turn and would otherwise
+call time around round seven of every game, whatever either side had actually
+done.
+
+Calling it does not stop the game where it stands. The round it happened in is
+finished, and then **one last round is played** — so a call in round 6 means
+rounds 6 and 7 are both played out in full, by both sides. The status line says
+`(last)` while that round runs, because what is worth doing changes completely
+once there is only one round left to do it in.
+
+Whoever calls it first sets the date; a second player reaching a threshold
+afterwards does not buy another round. In practice games run eight to twelve
+rounds, well inside the `MAX_ROUNDS` safety valve.
 
 ## Playing it
 
@@ -608,8 +626,10 @@ compound and work your Headquarters, end the round. Known stubs:
   spelled out on the card
 - an equal score is a draw. No tiebreak is defined
 - 32 distinct blueprints, plus three Monuments that stack, put the 10-card
-  `END_COMPOUND_SIZE` only just in reach for a human — the automaton, dealt
-  three and taking one a turn, gets there in seven rounds
+  `END_COMPOUND_SIZE` in reach for a human. The automaton sails past it — dealt
+  three and taking one a turn — which is exactly why its compound is not a
+  trigger; it routinely finishes on thirteen or fifteen cards having called
+  nothing
 - the Headquarters is the same for every player. The published game hands out
   one of several starting tiles
 - `Effect` — the real game needs many more variants than the seventeen here, one
@@ -641,8 +661,12 @@ compound and work your Headquarters, end the round. Known stubs:
 - no contractor *dice* — white is currently just another player colour
 - dragging is HTML5 drag-and-drop, so it does not work by keyboard or on
   touch. The move list is the fallback on both
-- the game still *ends* on 12 goods or 10 buildings, which are not the same
-  thresholds as the score — a player can win on prestige without either
+- the game is *called* on 12 goods or 10 buildings, which are not the same
+  thresholds as the score — a player can win on prestige having called neither
+- a call is spotted at cleanup rather than the instant it happens. That is only
+  equivalent because goods are never spent and a compound never shrinks, so
+  neither threshold can be crossed and then uncrossed within a round. A card
+  that spent goods would break it
 - the end-of-phase limits are 12 and 10, which read like `END_GOODS` and
   `END_COMPOUND_SIZE` but are unrelated numbers on unrelated things. They are
   separate constants so that changing one cannot quietly move the other

@@ -17,6 +17,13 @@ function patch(state: GameState, index: number, player: Partial<Player>): GameSt
   };
 }
 
+/** A compound big enough to call the end, for whoever is allowed to. */
+function fullCompound() {
+  return createBlueprintDeck()
+    .slice(0, END_COMPOUND_SIZE)
+    .map((card) => ({ card, dice: [], worked: false }));
+}
+
 describe("describing how a game ended", () => {
   const state = createInitialState({ seed: 3 });
 
@@ -27,12 +34,16 @@ describe("describing how a game ended", () => {
   });
 
   it("names the player who filled a compound", () => {
-    const standing = createBlueprintDeck()
-      .slice(0, END_COMPOUND_SIZE)
-      .map((card) => ({ card, dice: [], worked: false }));
-    const over = patch(state, 1, { compound: standing });
+    const over = patch(state, 0, { compound: fullCompound() });
 
-    expect(describeEnding(over)).toBe(`AI built a compound of ${END_COMPOUND_SIZE}`);
+    expect(describeEnding(over)).toBe(`You built a compound of ${END_COMPOUND_SIZE}`);
+  });
+
+  it("does not credit the automaton for a compound, which is no trigger of its", () => {
+    // It takes a card every turn and would otherwise call time every game.
+    const over = patch(state, 1, { compound: fullCompound() });
+
+    expect(describeEnding(over)).toBe(`The round cap of ${MAX_ROUNDS} was reached`);
   });
 
   it("names both when both got there in the same round", () => {
@@ -43,12 +54,9 @@ describe("describing how a game ended", () => {
   });
 
   it("reads goods first, since a player can trip both at once", () => {
-    const standing = createBlueprintDeck()
-      .slice(0, END_COMPOUND_SIZE)
-      .map((card) => ({ card, dice: [], worked: false }));
     const over = patch(state, 0, {
       resources: { metal: 0, energy: 0, goods: END_GOODS },
-      compound: standing,
+      compound: fullCompound(),
     });
 
     expect(describeEnding(over)).toBe(`You reached ${END_GOODS} goods`);

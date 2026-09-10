@@ -144,6 +144,8 @@ export function createInitialState(options: SetupOptions = {}): GameState {
     blueprints,
     contractors,
     log: ["Round 1", `${players[0].name} — ${PHASE_LABELS.market}`],
+    // Nobody has called the end yet, so there is no last round in sight.
+    finalRound: null,
     gameOver: false,
     winner: null,
   };

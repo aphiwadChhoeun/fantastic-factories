@@ -136,9 +136,13 @@ export function Game() {
     : [];
   const choices = open.map((move) => ({ move, label: describeMove(state, move) }));
 
+  // Worth saying loudly: what is worth doing changes completely once there is
+  // only one round left to do it in.
+  const lastRound = !state.gameOver && state.finalRound === state.round;
   const status = state.gameOver
     ? `Game over · ${describeWinner(state)}`
-    : `Round ${state.round} · ${PHASE_LABELS[state.phase]} · ${active.name} to act`;
+    : `Round ${state.round}${lastRound ? " (last)" : ""} · ${PHASE_LABELS[state.phase]} · ` +
+      `${active.name} to act`;
 
   function newGame() {
     setPending(null);

@@ -8,6 +8,7 @@ import {
   MAX_ROUNDS,
   oppositeFace,
   perkFor,
+  triggersEnd,
   type ActivationRequirement,
   type BlueprintPerk,
   type Card,
@@ -190,21 +191,16 @@ export function describeWinner(state: GameState): string {
  * shown without trawling the log.
  */
 export function describeEnding(state: GameState): string {
-  const reached = state.players.filter((player) => player.resources.goods >= END_GOODS);
-  if (reached.length > 0) {
-    const who = reached.map((player) => player.name).join(" and ");
-    return `${who} reached ${END_GOODS} goods`;
-  }
+  // Only what could actually have called it: a full compound is a human
+  // trigger, so an automaton sitting on ten cards did not end anything.
+  const callers = state.players.filter(triggersEnd);
+  if (callers.length === 0) return `The round cap of ${MAX_ROUNDS} was reached`;
 
-  const filled = state.players.filter(
-    (player) => player.compound.length >= END_COMPOUND_SIZE,
-  );
-  if (filled.length > 0) {
-    const who = filled.map((player) => player.name).join(" and ");
-    return `${who} built a compound of ${END_COMPOUND_SIZE}`;
-  }
-  // Nothing else ends a game, so the safety valve is all that is left.
-  return `The round cap of ${MAX_ROUNDS} was reached`;
+  const who = callers.map((player) => player.name).join(" and ");
+  const onGoods = callers.some((player) => player.resources.goods >= END_GOODS);
+  return onGoods
+    ? `${who} reached ${END_GOODS} goods`
+    : `${who} built a compound of ${END_COMPOUND_SIZE}`;
 }
 
 function findCardName(state: GameState, cardId: string): string {

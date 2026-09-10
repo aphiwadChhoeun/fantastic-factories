@@ -44,9 +44,28 @@ import {
   type WorkPerks,
 } from "./types";
 
-/** A player who reaches either threshold ends the game. */
+/**
+ * The two thresholds that start the end of the game.
+ *
+ * Reaching one does not stop play: the round it happened in is finished, and
+ * then one last round is played. See `triggersEnd` for who may trigger on
+ * what, and `endRound` for how the date is set.
+ */
 export const END_GOODS = 12;
 export const END_COMPOUND_SIZE = 10;
+
+/**
+ * Whether this player's position starts the end of the game.
+ *
+ * Goods do it for anyone. A full compound is a human trigger only: the
+ * automaton takes a card into its compound every single turn and would
+ * otherwise call time around round seven, every game, whatever either side
+ * had actually done.
+ */
+export function triggersEnd(player: Player): boolean {
+  if (player.resources.goods >= END_GOODS) return true;
+  return !player.isAi && player.compound.length >= END_COMPOUND_SIZE;
+}
 
 /**
  * What may be carried out of a Work Phase. Anything over comes off before the
@@ -1426,22 +1445,42 @@ function endRound(state: GameState): GameState {
     rng: contractors.rng,
   };
 
-  const triggered = players.some(
-    (player) =>
-      player.resources.goods >= END_GOODS || player.compound.length >= END_COMPOUND_SIZE,
-  );
-  const round = refilled.round + 1;
+  const played = refilled.round;
+  const next = played + 1;
 
-  if (triggered || round > MAX_ROUNDS) {
-    const reason = triggered ? "End condition met" : `Round cap (${MAX_ROUNDS}) reached`;
+  // Reaching a threshold sets a date rather than stopping the game where it
+  // stands: this round is over, and one more is played after it. Whoever got
+  // there first has already set the date, so a second trigger changes nothing.
+  const callers = players.filter(triggersEnd);
+  const finalRound = refilled.finalRound ?? (callers.length > 0 ? next : null);
+  const called =
+    refilled.finalRound === null && finalRound !== null
+      ? log(
+          { ...refilled, finalRound },
+          `${callers.map((player) => player.name).join(" and ")} called the end — ` +
+            `round ${finalRound} is the last`,
+        )
+      : { ...refilled, finalRound };
+
+  // The last round is over once it has been played, and the cap is the only
+  // other way out.
+  if ((finalRound !== null && played >= finalRound) || next > MAX_ROUNDS) {
+    const reason =
+      finalRound !== null && played >= finalRound
+        ? "Last round played"
+        : `Round cap (${MAX_ROUNDS}) reached`;
     return log(
-      { ...refilled, gameOver: true, winner: decideWinner(refilled), round },
+      { ...called, gameOver: true, winner: decideWinner(called), round: played },
       `${reason} — game over`,
     );
   }
 
   // The new round opens with the first player's turn, market phase first.
-  return beginTurn(log({ ...refilled, round }, `Round ${round}`), 0);
+  const opened = log({ ...called, round: next }, `Round ${next}`);
+  return beginTurn(
+    finalRound === next ? log(opened, "Last round") : opened,
+    0,
+  );
 }
 
 /**

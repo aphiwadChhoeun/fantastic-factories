@@ -18,7 +18,9 @@ import {
   currentPlayer,
   DIE_COLORS,
   DIE_FACES,
+  END_COMPOUND_SIZE,
   END_GOODS,
+  triggersEnd,
   EXTRA_DIE_COLOR,
   HAND_LIMIT,
   HQ_SECTIONS,
@@ -1150,7 +1152,9 @@ describe("prestige", () => {
     const factory = cardNamed(createBlueprintDeck(), "Aluminum Factory");
     const state = createInitialState({ seed: 3 });
     const scored = patchPlayer(
-      patchPlayer({ ...state, phase: "cleanup" }, 0, {
+      // The end has already been called and this is the last round, so this
+      // cleanup is the one that finishes it. Who wins is the point here.
+      patchPlayer({ ...state, phase: "cleanup", finalRound: state.round }, 0, {
         compound: [{ card: factory, dice: [], worked: false }],
         // One prestige and enough goods to end it: 13 all told.
         resources: { metal: 0, energy: 0, goods: END_GOODS },
@@ -1168,7 +1172,7 @@ describe("prestige", () => {
   it("calls an equal score a draw", () => {
     const state = createInitialState({ seed: 3 });
     const drawn = patchPlayer(
-      patchPlayer({ ...state, phase: "cleanup" }, 0, {
+      patchPlayer({ ...state, phase: "cleanup", finalRound: state.round }, 0, {
         resources: { metal: 0, energy: 0, goods: END_GOODS },
       }),
       1,
@@ -1176,7 +1180,121 @@ describe("prestige", () => {
       { compound: [], resources: { metal: 0, energy: 0, goods: END_GOODS } },
     );
 
-    expect(applyMove(drawn, { type: "endPhase" }).winner).toBeNull();
+    const finished = applyMove(drawn, { type: "endPhase" });
+    expect(finished.gameOver).toBe(true);
+    expect(finished.winner).toBeNull();
+  });
+});
+
+describe("the end of the game", () => {
+  /** Parked at cleanup, so the next `endPhase` is the round's end. */
+  function atCleanup(you: Partial<Player> = {}, ai: Partial<Player> = {}): GameState {
+    const state = createInitialState({ seed: 3 });
+    return patchPlayer(patchPlayer({ ...state, phase: "cleanup" }, 0, you), 1, ai);
+  }
+
+  const rich: Resources = { metal: 0, energy: 0, goods: END_GOODS };
+  const fullCompound = () =>
+    createBlueprintDeck()
+      .slice(0, END_COMPOUND_SIZE)
+      .map((card) => ({ card, dice: [], worked: false }));
+
+  it("is called by 12 goods, and does not stop the game where it stands", () => {
+    const called = applyMove(atCleanup({ resources: rich }), { type: "endPhase" });
+
+    // The round it happened in is finished; the next one is the last.
+    expect(called.gameOver).toBe(false);
+    expect(called.finalRound).toBe(2);
+    expect(called.round).toBe(2);
+    expect(logged(called, /You called the end — round 2 is the last/)).toBe(true);
+    expect(logged(called, /^Last round$/)).toBe(true);
+  });
+
+  it("is called by a compound of ten, when it is a player's", () => {
+    const called = applyMove(atCleanup({ compound: fullCompound() }), { type: "endPhase" });
+
+    expect(called.finalRound).toBe(2);
+    expect(logged(called, /You called the end/)).toBe(true);
+  });
+
+  it("is not called by the automaton's compound, however big it grows", () => {
+    // It takes a card into its compound every turn, so this would otherwise
+    // call time around round seven of every game, whatever anyone had done.
+    const quiet = applyMove(atCleanup({}, { compound: fullCompound() }), { type: "endPhase" });
+
+    expect(quiet.finalRound).toBeNull();
+    expect(quiet.gameOver).toBe(false);
+  });
+
+  it("is called by the automaton's goods, which are its only way to call it", () => {
+    const called = applyMove(atCleanup({}, { resources: rich }), { type: "endPhase" });
+
+    expect(called.finalRound).toBe(2);
+    expect(logged(called, /AI called the end — round 2 is the last/)).toBe(true);
+  });
+
+  it("names both when two of them got there in the same round", () => {
+    const called = applyMove(atCleanup({ resources: rich }, { resources: rich }), {
+      type: "endPhase",
+    });
+
+    expect(logged(called, /You and AI called the end/)).toBe(true);
+  });
+
+  it("ends once the last round has been played", () => {
+    // Round 1 called it, round 2 is the last, and this is round 2's cleanup.
+    const last: GameState = { ...atCleanup({ resources: rich }), round: 2, finalRound: 2 };
+
+    const over = applyMove(last, { type: "endPhase" });
+
+    expect(over.gameOver).toBe(true);
+    // The round it reports is the one actually played, not the one never was.
+    expect(over.round).toBe(2);
+    expect(logged(over, /Last round played — game over/)).toBe(true);
+  });
+
+  it("keeps the date the first caller set", () => {
+    // Reaching a threshold during the last round does not buy another one.
+    const last: GameState = {
+      ...atCleanup({ resources: rich }, { resources: rich }),
+      round: 2,
+      finalRound: 2,
+    };
+
+    expect(applyMove(last, { type: "endPhase" }).gameOver).toBe(true);
+  });
+
+  it("plays exactly one round after the one it was called in", () => {
+    const finished = playToEnd(createInitialState({ seed: 5 }), greedy);
+
+    expect(finished.gameOver).toBe(true);
+    expect(finished.finalRound).toBe(finished.round);
+    expect(logged(finished, new RegExp(`round ${finished.round} is the last`))).toBe(true);
+    // Called in the round before, so there was a whole round left to play.
+    expect(logged(finished, /called the end/)).toBe(true);
+  });
+
+  describe("who may call it", () => {
+    const state = createInitialState({ seed: 3 });
+    const [you, ai] = state.players;
+
+    it("lets goods call it for anyone", () => {
+      expect(triggersEnd({ ...you, resources: rich })).toBe(true);
+      expect(triggersEnd({ ...ai, resources: rich })).toBe(true);
+    });
+
+    it("lets a compound call it only for a player", () => {
+      expect(triggersEnd({ ...you, compound: fullCompound() })).toBe(true);
+      expect(triggersEnd({ ...ai, compound: fullCompound() })).toBe(false);
+    });
+
+    it("says no to anyone short of both", () => {
+      const nearly = { metal: 9, energy: 9, goods: END_GOODS - 1 };
+      expect(triggersEnd({ ...you, resources: nearly })).toBe(false);
+      expect(
+        triggersEnd({ ...you, compound: fullCompound().slice(0, END_COMPOUND_SIZE - 1) }),
+      ).toBe(false);
+    });
   });
 });
 

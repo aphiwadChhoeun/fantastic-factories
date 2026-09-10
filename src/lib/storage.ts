@@ -25,8 +25,10 @@ const KEY = "fantastic-factories.game";
  * would not survive — a new required field, a renamed one, a moved one. A save
  * that does not match is dropped rather than half-read, which is the
  * difference between losing a game and playing a broken one.
+ *
+ * 2: `finalRound`, which a version 1 save has no answer for.
  */
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 
 type Envelope = {
   readonly version: number;

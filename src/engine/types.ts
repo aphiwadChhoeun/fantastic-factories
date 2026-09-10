@@ -633,6 +633,16 @@ export type GameState = {
   readonly blueprints: CardPool<BlueprintCard>;
   readonly contractors: ContractorMarket;
   readonly log: readonly string[];
+  /**
+   * The last round that will be played, once someone has triggered the end.
+   * Null until then.
+   *
+   * Reaching a threshold does not stop the game where it stands: the round it
+   * happened in is finished, and then one more is played, so this is set to
+   * the round *after* the one the trigger was spotted in. A second trigger
+   * changes nothing — the first one to land decides the date.
+   */
+  readonly finalRound: number | null;
   readonly gameOver: boolean;
   /** Index into `players`, or null while the game is running or on a draw. */
   readonly winner: number | null;
