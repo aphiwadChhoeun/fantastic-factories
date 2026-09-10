@@ -2785,6 +2785,109 @@ describe("the Replicator", () => {
     ).toThrow(/has no perk of its own to copy/);
   });
 
+  /**
+   * "Use that card as if it were in player compound" read as an equivalence:
+   * whatever the card would do standing in the compound, it does copied — and
+   * the only difference is the Replicator's own energy.
+   *
+   * Runs over every blueprint that has a perk to lend, so a card added later
+   * that the Replicator cannot faithfully copy fails here rather than in play.
+   */
+  describe("copying is the same as owning, for 1 energy more", () => {
+    const lendable = deck.filter(
+      (card, index) =>
+        card.perk &&
+        card.perk.effect.kind !== "borrowFromMarket" &&
+        deck.findIndex((other) => other.name === card.name) === index,
+    );
+
+    /** Faces enough to work anything printed: pairs, a triple, and a run. */
+    const POOL: readonly DieFace[] = [1, 1, 2, 3, 4, 6, 6, 6];
+    const purse: Resources = { metal: 20, energy: 20, goods: 0 };
+
+    /** The same player twice over: once owning `card`, once copying it. */
+    function stage(card: BlueprintCard, owning: boolean): GameState {
+      const state = createInitialState({ seed: 3 });
+      const { color } = state.players[0];
+      const staged: GameState = {
+        ...state,
+        phase: "work",
+        blueprints: { ...state.blueprints, row: [card] },
+      };
+      return patchPlayer(staged, 0, {
+        compound: [{ card: owning ? card : replicator, dice: [], worked: false }],
+        dice: POOL.map((face, i) => ({ id: `d${i}`, face, color, extra: false, spent: false })),
+        rolled: true,
+        // Two cards, so a perk that eats one or two has something to eat.
+        hand: copiesOf("Beacon").slice(0, 2),
+        resources: purse,
+      });
+    }
+
+    /** What the move left behind, ignoring which card it was played on. */
+    function outcome(state: GameState) {
+      const player = state.players[0];
+      return {
+        resources: player.resources,
+        hand: player.hand.map((card) => card.name),
+        dice: player.dice.map((die) => `${die.face}${die.spent ? " spent" : ""}`),
+      };
+    }
+
+    for (const card of lendable) {
+      it(`copies the ${card.name}`, () => {
+        const owned = stage(card, true);
+        const copying = stage(card, false);
+
+        const directly = activations(owned);
+        const borrowed = activations(copying);
+
+        // Move for move, the same offers — the copy only says where it came
+        // from. Anything the Replicator could not reproduce shows up here.
+        expect(
+          borrowed.map((move) =>
+            move.type === "activate" ? { ...move, cardId: "", borrowCardId: undefined } : move,
+          ),
+        ).toEqual(
+          directly.map((move) => (move.type === "activate" ? { ...move, cardId: "" } : move)),
+        );
+        expect(borrowed.length).toBeGreaterThan(0);
+
+        // And playing the first of them lands in the same place, bar the energy.
+        const after = outcome(applyMove(owned, directly[0]));
+        const copied = outcome(applyMove(copying, borrowed[0]));
+
+        expect(copied).toEqual({
+          ...after,
+          resources: { ...after.resources, energy: after.resources.energy - 1 },
+        });
+      });
+    }
+  });
+
+  it("copies a card already standing and already worked — it is a second use", () => {
+    // The no-duplicates rule governs building, not copying: the market card is
+    // never built, so a spent Power Plant in the compound does not stop the
+    // Replicator working the one in the row.
+    const plant = named("Power Plant");
+    const state = withReplicator(["Power Plant"], [4], {
+      resources: { metal: 0, energy: 1, goods: 0 },
+    });
+    const staged = patchPlayer(state, 0, {
+      compound: [
+        { card: plant, dice: [3], worked: true },
+        { card: replicator, dice: [], worked: false },
+      ],
+    });
+
+    const offered = activations(staged);
+    expect(offered).toHaveLength(1);
+    expect(offered[0].type === "activate" && offered[0].cardId).toBe(replicator.id);
+
+    // 4 energy off the copied die, less the Replicator's 1.
+    expect(applyMove(staged, offered[0]).players[0].resources.energy).toBe(4);
+  });
+
   it("leaves every other perk alone — nothing else copies", () => {
     const battery = named("Battery Factory");
     const state = patchPlayer(withReplicator(["Foundry"]), 0, {

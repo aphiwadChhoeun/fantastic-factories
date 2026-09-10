@@ -335,6 +335,18 @@ Replicator. It reads the row as it stands when you work it, so a card swept
 away is a card you can no longer copy. A Monument or a Laboratory has nothing
 to lend, and a Replicator cannot copy another Replicator.
 
+"As if it were in your compound" is held to as an equivalence, and tested as
+one: for every blueprint in the deck with a perk to lend, copying it offers
+move for move what owning it offers, and leaves the player in the same place
+bar the 1 energy. A card added later that the Replicator cannot faithfully
+copy fails that test rather than surprising someone in play.
+
+Two readings worth knowing, since neither is spelled out on the card. The
+no-duplicates rule governs *building*, so a card already standing and already
+worked can still be copied out of the row — the copy is a second use of that
+perk in a round. And a Replicator cannot copy another Replicator, which would
+only ask the question again.
+
 **Four perks are priced in cards rather than resources.** The Black Market
 sells one out of hand, the Incinerator burns one, the Refinery melts one down,
 and the Recycling Plant is the one card that swallows *two*. What goes in makes
