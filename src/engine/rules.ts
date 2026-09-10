@@ -721,7 +721,9 @@ function buildFromDeck(state: GameState, playerIndex: number): GameState {
     ...p,
     compound: [...p.compound, { card, dice: [], worked: false }],
   }));
-  return log(built, `${player.name} built ${card.name} for free${aside}`);
+  // Free of dice and resources, but still a build: what pays for one, pays.
+  const announced = log(built, `${player.name} built ${card.name} for free${aside}`);
+  return gainOnBuild(announced, playerIndex, card);
 }
 
 /**
@@ -770,6 +772,30 @@ function drawOnGoods(state: GameState, playerIndex: number): GameState {
     drawBlueprints(spent, playerIndex, 1),
     `${player.name} drew a blueprint from ${lab.card.name}`,
   );
+}
+
+/**
+ * The Scrap Yard and the Solar Array: standing a card up pays whatever they
+ * print. `built` is the card that just went up, and is passed over — neither
+ * sets itself off, so the first card either pays for is the next one.
+ *
+ * Spends no `worked` flag, so they fire on every build of a round rather than
+ * on the first. Called from every route a card reaches a compound by, which is
+ * building one from hand and the Engineer building one off the deck.
+ */
+function gainOnBuild(state: GameState, playerIndex: number, built: BlueprintCard): GameState {
+  const player = state.players[playerIndex];
+  // The automaton pays for nothing and holds no metal, so it collects none.
+  if (player.isAi) return state;
+
+  return player.compound.reduce((current, building) => {
+    const { passive, id, name } = building.card;
+    if (passive?.kind !== "gainOnBuild" || id === built.id) return current;
+    return log(
+      gainResources(current, playerIndex, passive.resources),
+      `${player.name} gained ${describeResourcesForLog(passive.resources)} from ${name}`,
+    );
+  }, state);
 }
 
 /**
@@ -858,6 +884,26 @@ function grantDie(state: GameState, playerIndex: number, face: DieFace): GameSta
   return log(
     updatePlayer(state, playerIndex, (p) => ({ ...p, dice: [...p.dice, die] })),
     `${player.name} bought an extra white die showing ${face}`,
+  );
+}
+
+/**
+ * The same, but the face is rolled rather than bought — the Robot. Goes
+ * through the state's own rng, so a game still replays from its seed.
+ */
+function rollExtraDie(state: GameState, playerIndex: number): GameState {
+  const player = state.players[playerIndex];
+  const [value, rng] = nextInt(state.rng, 6);
+  const die: Die = {
+    id: dieId(player, state.round),
+    face: (value + 1) as DieFace,
+    color: EXTRA_DIE_COLOR,
+    extra: true,
+    spent: false,
+  };
+  return log(
+    updatePlayer({ ...state, rng }, playerIndex, (p) => ({ ...p, dice: [...p.dice, die] })),
+    `${player.name} rolled an extra white die: ${die.face}`,
   );
 }
 
@@ -1028,6 +1074,9 @@ function applyEffect(
       if (face === undefined) throw new Error("No face chosen for the die");
       return grantDie(state, playerIndex, face);
     }
+    // Nothing to settle: the die decides its own face.
+    case "rollDie":
+      return rollExtraDie(state, playerIndex);
     case "byFace": {
       const face = choice.faces?.[0];
       if (face === undefined) throw new Error("No die placed to read");
@@ -1113,9 +1162,11 @@ function describeEffectForLog(effect: Effect): string {
       return `taking ${Math.abs(effect.by)} off a die`;
     case "gainByFace":
       return `gaining ${effect.resource} equal to the die`;
-    // Logs the face it handed over itself.
+    // Both log the face they handed over themselves.
     case "gainDie":
       return "buying a die";
+    case "rollDie":
+      return "rolling a die";
     // The activation names the card it copied; by the time anything is logged
     // the effect is that card's, never this marker.
     case "borrowFromMarket":
@@ -1567,7 +1618,10 @@ export function applyMove(state: GameState, move: Move): GameState {
       const price = costsNothing(buildCost)
         ? payment.name
         : `${payment.name} and ${describeResourcesForLog(buildCost)}`;
-      return log(built, `${player.name} built ${card.name} for ${price}`);
+      const announced = log(built, `${player.name} built ${card.name} for ${price}`);
+      // Whatever was already standing and pays for building — but not the card
+      // that just went up, even when that is one of them.
+      return gainOnBuild(announced, index, card);
     }
 
     case "activate": {

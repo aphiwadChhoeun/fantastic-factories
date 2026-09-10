@@ -161,6 +161,12 @@ export type Effect =
    */
   | { readonly kind: "gainDie" }
   /**
+   * An extra die at whatever it rolls — the Robot. The Golem's twin: that one
+   * names its face and pays for it, this one pays a flat price and takes what
+   * comes. White and lent for the round, the same way.
+   */
+  | { readonly kind: "rollDie" }
+  /**
    * Not an effect so much as a stand-in for one: the perk has none of its own
    * and works a face-up blueprint's instead — the Replicator. Which card is
    * on the move, and everything about the activation is read off that card:
@@ -325,6 +331,14 @@ export type BlueprintPerk = {
 export type Passive =
   /** Draw a blueprint the first time goods are gained this round. */
   | { readonly kind: "drawOnGoods" }
+  /**
+   * Pay out every time its owner builds — the Scrap Yard and the Solar Array.
+   *
+   * Never for its own build: standing it up does not set it off, so the first
+   * card it pays for is the next one. Every build after that, though, however
+   * many in a round — unlike the Laboratory, which is held to one draw.
+   */
+  | { readonly kind: "gainOnBuild"; readonly resources: Partial<Resources> }
   /**
    * This card costs a metal less to build for every card of `per` type already
    * standing — the Megalith, which gets cheaper the more Monuments are up.

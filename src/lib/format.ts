@@ -88,6 +88,8 @@ export function describeEffect(effect: Effect): string {
     // the face and the Mega Factory throws it in.
     case "gainDie":
       return "Take an extra white die at any face";
+    case "rollDie":
+      return "Roll an extra white die, and keep it for the round";
     // The Work line says only what this card charges; whatever it copies asks
     // for its own dice and its own price on top, so that is said here.
     case "borrowFromMarket":
@@ -108,6 +110,13 @@ export function describePassive(passive: Passive): string {
       return "Draw a blueprint the first time you gain goods each round";
     case "cheaperPerCard":
       return `Costs 1 metal less to build per ${passive.per} card standing`;
+    // "Another" is the whole of it: standing this one up pays nothing.
+    case "gainOnBuild":
+      return `Gain ${describeResources({
+        metal: passive.resources.metal ?? 0,
+        energy: passive.resources.energy ?? 0,
+        goods: passive.resources.goods ?? 0,
+      })} each time you build another card`;
   }
 }
 

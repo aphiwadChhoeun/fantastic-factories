@@ -286,7 +286,7 @@ scoring and playing well.
 
 ### The real blueprints so far
 
-Sixty-two cards, twenty-six of them distinct — every one a real card.
+Sixty-nine cards, twenty-nine of them distinct — every one a real card.
 
 | Blueprint        | Copies | Type       | Tool   | Build cost         | Perk                                     | Prestige      |
 | ---------------- | -----: | ---------- | ------ | ------------------ | ---------------------------------------- | ------------- |
@@ -316,6 +316,9 @@ Sixty-two cards, twenty-six of them distinct — every one a real card.
 | Recycling Plant  |      3 | Production | gear   | 2 metal            | 2 blueprints from hand + 2 energy → 1 good, draw 1 | 1     |
 | Refinery         |      2 | Utility    | wrench | 1 metal + 3 energy | a blueprint from hand + 3 energy → 3 metal | 1             |
 | Replicator       |      2 | Special    | shovel | 2 metal + 2 energy | 1 energy → work a face-up blueprint's perk (see below) | 1 |
+| Robot            |      3 | Special    | hammer | 1 metal + 1 energy | 1 metal → roll an extra white die          | —             |
+| Scrap Yard       |      2 | Special    | wrench | 1 metal + 2 energy | none — it pays on every build (see below)  | —             |
+| Solar Array      |      2 | Special    | gear   | 1 metal + 2 energy | none — it pays on every build (see below)  | —             |
 
 Every build cost is on top of discarding a blueprint of the same tool.
 
@@ -326,6 +329,17 @@ not matter, so a roll of 4, 2, 3 works the Assembly Line.
 pays out whole; one that cost more pays four, and the player says which four —
 a Beacon, at 2 metal and 4 energy, can be sold for any of 4 energy, 1 metal and
 3 energy, or 2 metal and 2 energy.
+
+**The Scrap Yard and the Solar Array pay for building, not for working.**
+Every card you stand up hands you 1 metal or 2 energy while they are up — but
+never the build that stood *them* there, so the first card either pays for is
+the next one. Unlike the Laboratory they are not held to once a round: build
+four cards and they pay four times. That covers a card the Engineer builds off
+the deck too, which costs nothing and is still a build.
+
+**The Robot is the Golem in reverse.** The Golem names the face it wants and
+pays energy equal to it; the Robot pays a flat metal and takes whatever comes
+up. Both hand over a white die that goes back at cleanup.
 
 **The Replicator has no perk of its own.** It works a face-up blueprint's
 instead, for 1 energy on top of whatever that card charges — its dice, its
@@ -514,12 +528,16 @@ compound and work your Headquarters, end the round. Known stubs:
   it resolves when taken and is discarded — so there would be nothing for the
   dice to go on. If contractors were meant, this needs a different mechanic,
   not a wider filter
-- **62 cards, and the tools have evened out** — 19 gears to 11 hammers, where
-  hammers were once 2 of 26. Special is the thinnest type at 4, so the
-  automaton's purple die still has little to count
-- **62 cards is a comfortable deck.** Setup deals eleven — four to hand, four
+- **69 cards, and the tools have evened out** — 21 gears to 14 hammers, where
+  hammers were once 2 of 26. Training is now the thinnest type at 10, and
+  Special has gone from the runt to 11, so the automaton's purple die finally
+  has something to count
+- **69 cards is a comfortable deck.** Setup deals eleven — four to hand, four
   to the row, three to the automaton — so the draw pile no longer turns over in
   a couple of rounds
+- **`gainOnBuild` fires on every build, not the first of a round.** Nothing on
+  the Scrap Yard or the Solar Array says otherwise, where the Laboratory says
+  so outright — so they spend no `worked` flag
 - **the Recycling Plant is the first perk to eat two cards**, which is why
   `discardsCards` is a count and `Move.activate.paymentCardIds` a list. Nothing
   yet needs a perk that eats *different* cards — the same tool, say — and the
@@ -530,12 +548,12 @@ compound and work your Headquarters, end the round. Known stubs:
   the Specialist's extra die is white like the Hired Hands dice — neither is
   spelled out on the card
 - an equal score is a draw. No tiebreak is defined
-- 26 distinct blueprints, plus three Monuments that stack, put the 10-card
+- 29 distinct blueprints, plus three Monuments that stack, put the 10-card
   `END_COMPOUND_SIZE` only just in reach for a human — the automaton, dealt
   three and taking one a turn, gets there in seven rounds
 - the Headquarters is the same for every player. The published game hands out
   one of several starting tiles
-- `Effect` — the real game needs many more variants than the fifteen here, one
+- `Effect` — the real game needs many more variants than the sixteen here, one
   of which (`borrowFromMarket`) is a marker rather than an effect: it is
   swapped for the copied card's before anything runs
 - a `draw` effect always pulls blueprints; no card lets you choose a deck yet

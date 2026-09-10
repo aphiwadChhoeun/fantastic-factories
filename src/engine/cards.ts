@@ -524,6 +524,47 @@ const BLUEPRINTS: readonly { template: BlueprintTemplate; copies: number }[] = [
       },
     },
   },
+  {
+    copies: 3,
+    template: {
+      name: "Robot",
+      type: "special",
+      tool: "hammer",
+      buildCost: { metal: 1, energy: 1, goods: 0 },
+      // The Golem's twin: that one names the face and pays for it, this one
+      // pays a flat metal and takes whatever the die shows.
+      perk: {
+        dice: 0,
+        pattern: "any",
+        accepts: { kind: "any" },
+        cost: { metal: 1, energy: 0, goods: 0 },
+        effect: { kind: "rollDie" },
+      },
+    },
+  },
+  {
+    copies: 2,
+    template: {
+      name: "Scrap Yard",
+      type: "special",
+      tool: "wrench",
+      buildCost: { metal: 1, energy: 2, goods: 0 },
+      // Nothing to work: it pays every time another card goes up, and not for
+      // the build that stood it there.
+      passive: { kind: "gainOnBuild", resources: { metal: 1 } },
+    },
+  },
+  {
+    copies: 2,
+    template: {
+      name: "Solar Array",
+      type: "special",
+      tool: "gear",
+      buildCost: { metal: 1, energy: 2, goods: 0 },
+      // The Scrap Yard in energy.
+      passive: { kind: "gainOnBuild", resources: { energy: 2 } },
+    },
+  },
 ];
 
 /**

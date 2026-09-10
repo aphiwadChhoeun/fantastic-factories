@@ -2906,6 +2906,198 @@ describe("the Replicator", () => {
   });
 });
 
+describe("the Robot", () => {
+  const robot = cardNamed(createBlueprintDeck(), "Robot");
+
+  function withRobot(metal = 1): GameState {
+    const state = createInitialState({ seed: 3 });
+    const { color } = state.players[0];
+    return patchPlayer({ ...state, phase: "work" }, 0, {
+      compound: [{ card: robot, dice: [], worked: false }],
+      dice: [{ id: "d0", face: 2, color, extra: false, spent: false }],
+      rolled: true,
+      hand: [],
+      resources: { metal, energy: 0, goods: 0 },
+    });
+  }
+
+  const activations = (state: GameState) =>
+    legalMoves(state).filter((move) => move.type === "activate");
+
+  it("is a Special hammer costing 1 metal and 1 energy, and scores nothing", () => {
+    expect(robot.type).toBe("special");
+    expect(robot.tool).toBe("hammer");
+    expect(robot.buildCost).toEqual({ metal: 1, energy: 1, goods: 0 });
+    expect(robot.prestige).toBeUndefined();
+    // No dice of its own, and no face to name — 1 metal is the whole price.
+    expect(robot.perk?.dice).toBe(0);
+    expect(robot.perk?.cost).toEqual({ metal: 1, energy: 0, goods: 0 });
+    expect(robot.perk?.costByFace).toBeUndefined();
+    expect(robot.perk?.effect).toEqual({ kind: "rollDie" });
+  });
+
+  it("spends a metal for a white die at whatever it rolls", () => {
+    const state = withRobot();
+    const next = applyMove(state, activations(state)[0]);
+    const gained = next.players[0].dice.at(-1)!;
+
+    expect(next.players[0].resources).toEqual({ metal: 0, energy: 0, goods: 0 });
+    expect(next.players[0].dice).toHaveLength(2);
+    expect(gained.color).toBe(EXTRA_DIE_COLOR);
+    expect(gained.extra).toBe(true);
+    expect(gained.spent).toBe(false);
+    expect(DIE_FACES).toContain(gained.face);
+    expect(logged(next, /rolled an extra white die: \d/)).toBe(true);
+  });
+
+  it("names no face, unlike the Golem — the die decides", () => {
+    // The Golem is one move per face it could buy; this is one move, full stop.
+    const offered = activations(withRobot());
+    expect(offered).toHaveLength(1);
+    expect(offered[0].type === "activate" && offered[0].face).toBeUndefined();
+  });
+
+  it("rolls from the game's own rng, so a seed still replays", () => {
+    const state = withRobot();
+    const once = applyMove(state, activations(state)[0]);
+    const twice = applyMove(state, activations(state)[0]);
+
+    expect(once.players[0].dice.at(-1)?.face).toBe(twice.players[0].dice.at(-1)?.face);
+    // And the rng moved on, so a second roll is its own.
+    expect(once.rng).not.toEqual(state.rng);
+  });
+
+  it("is not offered without the metal, or twice in a round", () => {
+    expect(activations(withRobot(0))).toEqual([]);
+
+    const state = withRobot(2);
+    const next = applyMove(state, activations(state)[0]);
+    expect(activations(next)).toEqual([]);
+  });
+
+  it("hands the die back at cleanup, like any other extra", () => {
+    const state = withRobot();
+    const worked = applyMove(state, activations(state)[0]);
+    const cleaned = applyMove({ ...worked, phase: "cleanup" }, { type: "endPhase" });
+
+    expect(cleaned.players[0].dice).toEqual([]);
+  });
+});
+
+describe("the Scrap Yard and the Solar Array", () => {
+  const deck = createBlueprintDeck();
+  const scrapYard = cardNamed(deck, "Scrap Yard");
+  const solarArray = cardNamed(deck, "Solar Array");
+
+  /** A player able to build `hand`, with `standing` already up. */
+  function ready(standing: readonly BlueprintCard[], hand: readonly BlueprintCard[]): GameState {
+    const state = createInitialState({ seed: 3 });
+    return patchPlayer({ ...state, phase: "work" }, 0, {
+      compound: standing.map((card) => ({ card, dice: [], worked: false })),
+      rolled: true,
+      hand: [...hand],
+      resources: { metal: 12, energy: 12, goods: 0 },
+    });
+  }
+
+  /**
+   * Builds `card` for `payment`. Named rather than found, so one build does
+   * not eat the card the next one meant to stand up.
+   */
+  function build(state: GameState, card: BlueprintCard, payment: BlueprintCard): GameState {
+    return applyMove(state, { type: "build", cardId: card.id, paymentCardId: payment.id });
+  }
+
+  it("are Special, score nothing, and have no perk to work", () => {
+    for (const card of [scrapYard, solarArray]) {
+      expect(card.type).toBe("special");
+      expect(card.buildCost).toEqual({ metal: 1, energy: 2, goods: 0 });
+      expect(card.prestige).toBeUndefined();
+      // Nothing is placed on them and nothing paid.
+      expect(card.perk).toBeUndefined();
+    }
+    expect(scrapYard.tool).toBe("wrench");
+    expect(solarArray.tool).toBe("gear");
+    expect(scrapYard.passive).toEqual({ kind: "gainOnBuild", resources: { metal: 1 } });
+    expect(solarArray.passive).toEqual({ kind: "gainOnBuild", resources: { energy: 2 } });
+  });
+
+  it("does not set itself off when it is the card being built", () => {
+    // Two wrenches in hand, so the Scrap Yard has something to pay with.
+    const payment = cardNamed(deck, "Manufactory");
+    const state = ready([], [scrapYard, payment]);
+
+    const next = build(state, scrapYard, payment);
+
+    // 1 metal and 2 energy out, and nothing back.
+    expect(next.players[0].resources).toEqual({ metal: 11, energy: 10, goods: 0 });
+    expect(logged(next, /from Scrap Yard/)).toBe(false);
+  });
+
+  it("pays for the next card built, and for every one after it", () => {
+    const biolab = cardNamed(deck, "Biolab");
+    const foundry = cardNamed(deck, "Foundry");
+    const line = cardNamed(deck, "Assembly Line");
+    const mega = cardNamed(deck, "Mega Factory");
+    const state = ready([scrapYard], [biolab, foundry, line, mega]);
+
+    // The Biolab costs 1 metal and 3 energy; the Scrap Yard hands one back.
+    const first = build(state, biolab, line);
+    expect(first.players[0].resources).toEqual({ metal: 12, energy: 9, goods: 0 });
+    expect(logged(first, /gained 1 metal from Scrap Yard/)).toBe(true);
+
+    // And again — it is not held to once a round the way the Laboratory is.
+    const second = build(first, foundry, mega);
+    expect(second.players[0].resources.metal).toBe(11);
+    expect(second.players[0].compound.find((b) => b.card.id === scrapYard.id)?.worked).toBe(false);
+  });
+
+  it("stack, and neither pays for the other's arrival more than once", () => {
+    const biolab = cardNamed(deck, "Biolab");
+    const mega = cardNamed(deck, "Mega Factory");
+    const nuclear = cardNamed(deck, "Nuclear Plant");
+    const state = ready([scrapYard], [solarArray, biolab, mega, nuclear]);
+
+    // Standing the Solar Array up: the Scrap Yard pays, the Array does not.
+    const up = build(state, solarArray, mega);
+    expect(up.players[0].resources).toEqual({ metal: 12, energy: 10, goods: 0 });
+
+    // Now both pay for the Biolab: 1 metal and 3 energy out, 1 metal and 2 back.
+    const next = build(up, biolab, nuclear);
+    expect(next.players[0].resources).toEqual({ metal: 12, energy: 9, goods: 0 });
+    expect(logged(next, /gained 1 metal from Scrap Yard/)).toBe(true);
+    expect(logged(next, /gained 2 energy from Solar Array/)).toBe(true);
+  });
+
+  it("pays for a card the Engineer builds off the deck", () => {
+    // The Engineer's card is free of dice and resources, but still a build.
+    const engineer = cardNamed(createContractorDeck(), "Engineer");
+    const payment = cardNamed(deck, "Biolab");
+    const state = stageContractor(
+      { ...ready([solarArray], [payment]), phase: "market" },
+      engineer,
+    );
+    const before = state.players[0].resources.energy;
+
+    const next = takeStaged(state);
+
+    // 4 energy for the Engineer, 2 of them back from the Solar Array.
+    expect(next.players[0].resources.energy).toBe(before - 4 + 2);
+    expect(logged(next, /gained 2 energy from Solar Array/)).toBe(true);
+  });
+
+  it("is not collected by the automaton, which holds no metal at all", () => {
+    // It is dealt its compound face up rather than building, so this never
+    // arises in play — but a card it cannot spend is one it should not gain.
+    const state = createInitialState({ seed: 3 });
+    const automaton = state.players[1];
+
+    expect(automaton.isAi).toBe(true);
+    expect(automaton.resources).toEqual({ metal: 0, energy: 0, goods: 0 });
+    expect(legalMoves(state).every((move) => move.type !== "build")).toBe(true);
+  });
+});
+
 describe("the end-of-phase limits", () => {
   /** A rolled player in their Work Phase, holding whatever is passed in. */
   function holding(patch: Partial<Player>): GameState {
