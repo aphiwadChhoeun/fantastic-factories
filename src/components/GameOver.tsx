@@ -10,8 +10,6 @@ import styles from "./game.module.css";
 type Props = {
   /** A finished game. Rendered only when `gameOver` is set. */
   readonly state: GameState;
-  /** The seed the next game would be dealt from, for the button to name. */
-  readonly nextSeed: number;
   readonly onNewGame: () => void;
   /** Closed without starting another — the board is still worth looking at. */
   readonly onDismiss: () => void;
@@ -25,7 +23,7 @@ type Props = {
  * focus is trapped inside it, and it sits above everything without the rest of
  * the board having to know it exists.
  */
-export function GameOver({ state, nextSeed, onNewGame, onDismiss }: Props) {
+export function GameOver({ state, onNewGame, onDismiss }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
 
   // Mounted only when the game is over, so opening on mount is the whole of it.
@@ -95,7 +93,7 @@ export function GameOver({ state, nextSeed, onNewGame, onDismiss }: Props) {
       </table>
 
       <div className={styles.modalActions}>
-        <PlateButton onClick={onNewGame}>New game (seed {nextSeed})</PlateButton>
+        <PlateButton onClick={onNewGame}>New game</PlateButton>
         {/* Named to pair with the "Show result" button it leaves behind, so
             putting it away plainly reads as something you can undo. */}
         <PlateButton onClick={onDismiss}>Hide result</PlateButton>

@@ -20,6 +20,7 @@ import {
   paymentsOf,
 } from "@/lib/board";
 import { describeMove, describeWinner } from "@/lib/format";
+import { Confirm } from "./Confirm";
 import { DevPanel } from "./DevPanel";
 import { GameLog } from "./GameLog";
 import { GameOver } from "./GameOver";
@@ -75,6 +76,8 @@ export function Game() {
    * back to a finished one should show how it went, not assume you remember.
    */
   const [resultHidden, setResultHidden] = useState(false);
+  /** Whether a new game has been asked for but not yet confirmed. */
+  const [confirming, setConfirming] = useState(false);
 
   const board = useMemo(() => indexMoves(moves, active.dice), [moves, active.dice]);
   const mounted = useMounted();
@@ -190,9 +193,24 @@ export function Game() {
       `${active.name} to act`;
 
   function newGame() {
+    setConfirming(false);
     setPending(null);
     setResultHidden(false);
     reset(seed + 1);
+  }
+
+  /**
+   * The way in to a new game, from either button that offers one.
+   *
+   * `reset` replaces the save outright, so a game in progress is gone the
+   * instant it is called — worth a question first. A *finished* game is not:
+   * the result is already settled, the dialog showing it is offering another
+   * deal as the obvious next thing to do, and asking there would only be a
+   * second click between the player and the game they have just asked for.
+   */
+  function askNewGame() {
+    if (state.gameOver) newGame();
+    else setConfirming(true);
   }
 
   /** Plays a choice the moment only one move fits it, and otherwise asks on. */
@@ -327,8 +345,15 @@ export function Game() {
                   Show result
                 </PlateButton>
               )}
-              <PlateButton full onClick={newGame}>
-                New game (seed {seed + 1})
+              {/*
+                * The seed is not printed. It is the one number on the board
+                * that is about the software rather than the game, and it was
+                * changing under a button whose label is a promise about what
+                * clicking it does. Kept as a tooltip, because it is still what
+                * makes a deal reproducible and nothing else on screen says it.
+                */}
+              <PlateButton full onClick={askNewGame} title={`Next deal: seed ${seed + 1}`}>
+                New game
               </PlateButton>
               {/* Folds to `false` in a production build, and the panel goes with it. */}
               {DEV_TOOLS && <DevPanel debug={debug} />}
@@ -339,9 +364,28 @@ export function Game() {
           {state.gameOver && !resultHidden && (
             <GameOver
               state={state}
-              nextSeed={seed + 1}
-              onNewGame={newGame}
+              onNewGame={askNewGame}
               onDismiss={() => setResultHidden(true)}
+            />
+          )}
+
+          {/*
+            * Asked before a game in progress is thrown away, and only then —
+            * `askNewGame` lets a finished one straight through. Named by round
+            * and phase rather than "your progress", because what is actually
+            * being weighed is how far in this game is.
+            */}
+          {confirming && (
+            <Confirm
+              title="Start a new game?"
+              body={
+                `This one — round ${state.round}, ${PHASE_LABELS[state.phase]} — ` +
+                `will be gone for good.`
+              }
+              confirmLabel="New game"
+              cancelLabel="Keep playing"
+              onConfirm={newGame}
+              onCancel={() => setConfirming(false)}
             />
           )}
 
