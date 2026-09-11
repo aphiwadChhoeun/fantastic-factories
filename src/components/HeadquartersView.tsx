@@ -1,4 +1,3 @@
-import type { DragEvent } from "react";
 import { HQ_SECTIONS, type DieColor, type HqPlacements, type HqSectionId, type Move } from "@/engine";
 import { DIE_SWATCHES } from "@/lib/colors";
 import { describeHqReward, describeRequirement } from "@/lib/format";
@@ -9,16 +8,19 @@ type Props = {
   placements: HqPlacements;
   /** Placed dice are drawn in the player's colour. */
   color: DieColor;
-  /** Sections that will take the die being dragged, and the move that does it. */
+  /**
+   * Sections that will take the die being held, and the move that does it.
+   * Used to light them and to mark them as somewhere the die may land — the
+   * drop itself is resolved by PlayerPanel, which owns the gesture.
+   */
   targets?: ReadonlyMap<HqSectionId, Move> | null;
-  onPlay?: (move: Move) => void;
 };
 
 /**
  * The Headquarters tile: three sections, each showing the dice standing on it
  * and the slots still open. Not a card, so it does not go through `CardView`.
  */
-export function HeadquartersView({ placements, color, targets, onPlay }: Props) {
+export function HeadquartersView({ placements, color, targets }: Props) {
   return (
     <div>
       <div className={styles.sectionTitle}>Headquarters</div>
@@ -34,22 +36,28 @@ export function HeadquartersView({ placements, color, targets, onPlay }: Props) 
               className={[styles.card, styles.hqSection, move && styles.cardDropTarget]
                 .filter(Boolean)
                 .join(" ")}
-              onDragOver={move ? (event: DragEvent) => event.preventDefault() : undefined}
-              onDrop={
-                move
-                  ? (event: DragEvent) => {
-                      event.preventDefault();
-                      onPlay?.(move);
-                    }
-                  : undefined
-              }
+              /*
+               * Only a section that would actually take the die being held
+               * carries this, so a die let go anywhere else finds nothing and
+               * springs back. PlayerPanel hit-tests for it — the die is
+               * dragged by Motion, so there is no drop event to listen for.
+               */
+              data-drop={move ? `hq:${section.id}` : undefined}
             >
               <span className={styles.hqName}>{section.name}</span>
               <span className={styles.cardMeta}>
                 Takes {describeRequirement(section.accepts)} —{" "}
                 <ResourceText>{describeHqReward(section.reward)}</ResourceText>
               </span>
-              <div className={styles.dice}>
+              {/*
+               * Where sparks come from when a die lands here. On the row of
+               * dice rather than the section, because that is the point of
+               * contact — and unprefixed by a player because only one
+               * Headquarters is ever on screen: the automaton never places a
+               * die on its own, and its panel shows a production summary in
+               * place of this whole component.
+               */}
+              <div className={styles.dice} data-hq-id={section.id}>
                 {Array.from({ length: section.slots }, (_, index) => {
                   const face = placed[index];
                   if (face === undefined) {

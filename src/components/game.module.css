@@ -87,7 +87,49 @@
  * The price of that is that the longest rules text has to go somewhere, so the
  * middle band scrolls. Nothing is ever clipped away.
  */
+/*
+ * What a card sits in. The plate clips its own contents, so anything that has
+ * to spill — the glow, the ring a firing perk throws off — lives out here
+ * instead, and the plate is left free to tilt inside it.
+ */
+.cardSlot {
+  position: relative;
+  flex: none;
+}
+
+/* A card being pointed at comes up over its neighbours rather than under. */
+.cardSlot:hover {
+  z-index: 5;
+}
+
+/*
+ * The focus pull. With a choice open, every card that could not answer it
+ * goes quiet, which does more for comprehension than it sounds like: the
+ * board stops being a dozen cards and becomes the two you are choosing
+ * between. This is Dota's ability-targeting mode.
+ *
+ * Drained and darkened rather than blurred. Blur on a dozen cards is a dozen
+ * filter layers, and the player may still want to read one of them to decide.
+ * The move list is deliberately untouched — it is a legitimate way to resolve
+ * the very choice being asked, so blurring it would be taking away the answer.
+ */
+.page[data-choosing="true"] .cardSlot:not([data-live="true"]) {
+  filter: saturate(0.4) brightness(0.68);
+  transition: filter 180ms ease-out;
+}
+
+.page[data-choosing="true"] .cardSlot[data-live="true"] {
+  transition: filter 180ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page[data-choosing="true"] .cardSlot:not([data-live="true"]) {
+    transition: none;
+  }
+}
+
 .card {
+  position: relative;
   border: 1px solid var(--color-edge);
   border-radius: 8px;
   width: 164px;
@@ -100,6 +142,67 @@
   line-height: 1.35;
   background: var(--color-surface-1);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 5%);
+}
+
+/*
+ * The light moving across the plate as it tilts. Positioned by the pointer,
+ * so it rakes the other way to the tilt — which is the whole reason a tilted
+ * card reads as a physical thing rather than as a skewed rectangle.
+ */
+.sheen {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  /* Light only rakes across a card the player is actually holding up to it. */
+  opacity: 0;
+  transition: opacity 140ms ease-out;
+}
+
+.cardSlot:hover .sheen {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheen {
+    transition: none;
+  }
+}
+
+/*
+ * Glow as its own layer, so what animates is an opacity rather than a shadow.
+ * Animating box-shadow re-rasterises the whole plate every frame; animating
+ * the opacity of one that is already drawn is work the compositor does.
+ */
+.glow {
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+  pointer-events: none;
+}
+
+.glowSpice {
+  box-shadow: var(--shadow-glow-spice);
+}
+
+.cardSlot:hover .glowSpice {
+  box-shadow: var(--shadow-glow-spice-hi);
+}
+
+.glowChosen {
+  box-shadow: var(--shadow-glow-chosen);
+}
+
+.glowAether {
+  box-shadow: var(--shadow-glow-aether);
+}
+
+/* Thrown off by a perk that has just fired. Expands once, and is gone. */
+.flashRing {
+  position: absolute;
+  inset: 0;
+  border: 1px solid var(--color-spice-400);
+  border-radius: 8px;
+  pointer-events: none;
 }
 
 /* The name, in the colour of what the card is. The band is the type. */
@@ -326,12 +429,33 @@
  * without reading one.
  */
 .chip {
+  position: relative;
   display: inline-flex;
   align-items: baseline;
   gap: 3px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+/* What just changed, rising out of the chip and fading. */
+.delta {
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.deltaUp {
+  color: var(--color-legal);
+}
+
+.deltaDown {
+  color: var(--color-danger);
 }
 
 .chipGlyph {
@@ -410,37 +534,25 @@ button.cardContractor {
 }
 
 /*
- * You can act on this card right now — take it, or pay with it. Spice, and
- * spice is never used for anything else: a rim and a short falloff, so the
- * card reads as lit rather than as outlined.
+ * The three states, as borders only — the light that goes with each of them is
+ * on its own layer above, so that it can be faded in and out without the plate
+ * being redrawn.
  */
+
+/* You can act on this card right now — take it, or pay with it. */
 .cardHighlight {
   border-color: color-mix(in srgb, var(--color-spice-500) 60%, transparent);
-  box-shadow: var(--shadow-glow-spice);
-  transition: box-shadow 200ms ease-out;
-}
-
-.cardHighlight:hover {
-  box-shadow: var(--shadow-glow-spice-hi);
 }
 
 /* The card being paid for, while its payment is being chosen. */
 .cardSelected {
   border-color: var(--color-chosen);
-  box-shadow: var(--shadow-glow-chosen);
 }
 
 /* The die being dragged can be dropped here. */
 .cardDropTarget {
   border-color: var(--color-aether-500);
   border-style: solid;
-  box-shadow: var(--shadow-glow-aether);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .cardHighlight {
-    transition: none;
-  }
 }
 
 /* A contractor slot: its tool token, then the card sitting on it. */
@@ -496,6 +608,13 @@ button.cardContractor {
 
 /* Fill, text and border colour come from the die's own colour, inline. */
 .die {
+  /*
+   * Positioned so `z-index` is unconditional. A die is a flex item, which is
+   * enough for `z-index` to apply today, but that is a property of the tray
+   * rather than of the die — and a die being carried over the compound has to
+   * stay on top of it whatever the tray is doing.
+   */
+  position: relative;
   width: 34px;
   height: 34px;
   border-radius: 7px;
@@ -543,10 +662,19 @@ button.cardContractor {
 /* A die with somewhere to go. Anything else is not worth picking up. */
 .dieMovable {
   cursor: grab;
+  /* The gesture is Motion's, so the browser must not try to scroll with it. */
+  touch-action: none;
 }
 
-.dieDragging {
-  opacity: 0.4;
+/*
+ * The die actually in the player's hand. It used to be faded to 40%, which was
+ * right when the browser was dragging a ghost copy of it around and this was
+ * the thing left behind — now it *is* the thing being moved, so it lights up
+ * instead.
+ */
+.dieHeld {
+  box-shadow: var(--shadow-glow-aether);
+  cursor: grabbing;
 }
 
 /* A one-line instruction, shown only while it applies. */
@@ -612,8 +740,12 @@ button.cardContractor {
   filter: brightness(1.15);
 }
 
+/*
+ * Lighting only. The plate's downward travel belongs to Motion — see
+ * PlateButton — because an inline transform written per frame would win over
+ * anything declared here anyway.
+ */
 .moveButton:active:not(:disabled) {
-  transform: translateY(1px);
   box-shadow: inset 0 2px 6px rgb(0 0 0 / 70%);
 }
 

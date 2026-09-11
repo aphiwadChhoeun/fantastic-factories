@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import type { GameState } from "@/engine";
 import { grantableBlueprints, grantBlueprint, type GrantTarget } from "@/dev/grant";
+import { PlateButton } from "./PlateButton";
 import styles from "./game.module.css";
 
 type Props = {
@@ -48,12 +49,8 @@ export function DevPanel({ debug }: Props) {
       </label>
 
       <div className={styles.choices}>
-        <button type="button" className={styles.moveButton} onClick={() => grant("hand")}>
-          Give to hand
-        </button>
-        <button type="button" className={styles.moveButton} onClick={() => grant("compound")}>
-          Stand it up built
-        </button>
+        <PlateButton onClick={() => grant("hand")}>Give to hand</PlateButton>
+        <PlateButton onClick={() => grant("compound")}>Stand it up built</PlateButton>
       </div>
 
       <p className={styles.prompt}>

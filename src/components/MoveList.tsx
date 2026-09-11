@@ -2,6 +2,7 @@
 
 import type { GameState, Move } from "@/engine";
 import { describeMove, moveKey } from "@/lib/format";
+import { PlateButton } from "./PlateButton";
 import styles from "./game.module.css";
 
 type Props = {
@@ -31,14 +32,9 @@ export function MoveList({ state, moves, waiting, onPlay }: Props) {
       ) : (
         <div className={styles.moves}>
           {moves.map((move) => (
-            <button
-              key={moveKey(move)}
-              type="button"
-              className={styles.moveButton}
-              onClick={() => onPlay(move)}
-            >
+            <PlateButton key={moveKey(move)} onClick={() => onPlay(move)}>
               {describeMove(state, move)}
-            </button>
+            </PlateButton>
           ))}
         </div>
       )}

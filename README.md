@@ -36,7 +36,8 @@ src/
     random.ts   uniform over legal moves — the baseline to beat
   hooks/      useGame — React state plus the AI turn loop
   components/ board UI
-  lib/        display formatting, and the saved game
+  lib/        display formatting, the saved game, and what just happened
+  effects/    the particle layer — the only place three.js is reachable from
   dev/        debug tools, compiled out of production
 ```
 
@@ -59,6 +60,25 @@ any styling:
 Colour carries one meaning each and never two at once: spice for *you can act
 here*, aether for *the die you are holding lands here*, gilt for *this is the
 card being paid for*.
+
+## Motion
+
+How the board moves is pitched in [docs/motion.md](docs/motion.md), and the
+dice in [docs/dice.md](docs/dice.md). The shape of it:
+
+- **`lib/events.ts` works out the verb.** The engine hands back a new board and
+  says nothing about what happened to it, so the two boards are diffed on the
+  way past — a card that *moved* looks nothing like a card that is merely
+  somewhere new. Animation reads events; the engine still does not know an
+  animation exists.
+- **`src/effects` is the only door to `three`.** One canvas, fixed over the
+  board, `frameloop="demand"`, lazily imported and not fetched at all under
+  reduced motion. It is 232 kB gzipped against 235 kB for everything else in
+  the game, which is why it is walled off behind one directory and one flag
+  (`NEXT_PUBLIC_EMBERS=0`) rather than sprinkled through the components.
+- **Nothing that animates decides anything.** Faces are rolled by the engine
+  inside `applyMove`; a die's flight is cosmetic, and a dropped spark is a
+  missed spark rather than a missed move.
 
 ## Saving
 

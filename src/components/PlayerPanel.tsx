@@ -1,10 +1,11 @@
-import type { DragEvent } from "react";
+import { useRef } from "react";
 import {
   AUTOMA_PRODUCTION,
   buildCostFor,
   canAfford,
   countByCategory,
   HAND_LIMIT,
+  HQ_SECTION_IDS,
   overLimits,
   perkCost,
   prestigeOf,
@@ -16,11 +17,13 @@ import {
   type Player,
 } from "@/engine";
 import type { DieTargets } from "@/lib/board";
-import { colorSwatch, DIE_SWATCHES } from "@/lib/colors";
+import { colorSwatch } from "@/lib/colors";
 import { describeResources, moveKey } from "@/lib/format";
 import { CardView } from "./CardView";
+import { DraggableDie, type DropPoint } from "./DraggableDie";
 import { HeadquartersView } from "./HeadquartersView";
-import { ResourceChip, ResourceText } from "./Resource";
+import { PlateButton } from "./PlateButton";
+import { ResourceChip, ResourceText, Rolling } from "./Resource";
 import styles from "./game.module.css";
 
 /**
@@ -152,14 +155,9 @@ function Choices({ interaction }: { interaction?: PanelInteraction }) {
   return (
     <div className={styles.choices}>
       {interaction.choices.map(({ move, label }) => (
-        <button
-          key={moveKey(move)}
-          type="button"
-          className={styles.moveButton}
-          onClick={() => interaction.onPlay(move)}
-        >
+        <PlateButton key={moveKey(move)} onClick={() => interaction.onPlay(move)}>
           {label}
-        </button>
+        </PlateButton>
       ))}
     </div>
   );
@@ -170,11 +168,30 @@ type Props = {
   active: boolean;
   /** The face-up blueprint row — what a Replicator standing here could copy. */
   market: readonly BlueprintCard[];
+  /**
+   * Cards lit by the last move. Not part of `interaction`: the automaton's
+   * compound is read-only and its buildings still go up and still fire.
+   */
+  flashing?: ReadonlySet<string>;
+  /**
+   * Cards that have just arrived in this panel — drafted into the hand, or
+   * stood up in the compound. They lean into the travel; nothing else does.
+   */
+  arriving?: ReadonlySet<string>;
   interaction?: PanelInteraction;
 };
 
-export function PlayerPanel({ player, active, market, interaction }: Props) {
+export function PlayerPanel({
+  player,
+  active,
+  market,
+  flashing,
+  arriving,
+  interaction,
+}: Props) {
   const targets = interaction?.targets ?? null;
+  /** How far a die may be dragged: its own panel, and no further. */
+  const panel = useRef<HTMLElement | null>(null);
   // The automaton holds no cards and never places a die on its Headquarters,
   // so both sections would be permanently empty furniture.
   const automaton = player.isAi;
@@ -182,15 +199,44 @@ export function PlayerPanel({ player, active, market, interaction }: Props) {
   // A choice about a card in hand is asked beside the hand, not the compound.
   const choosingInHand = player.hand.some((card) => card.id === interaction?.pending);
 
-  function startDrag(event: DragEvent, dieId: string) {
-    event.dataTransfer.effectAllowed = "move";
-    // Some browsers refuse to start a drag without payload, even unused.
-    event.dataTransfer.setData("text/plain", dieId);
-    interaction?.onDragChange(dieId);
+  /**
+   * What a die was dropped on, and what that means.
+   *
+   * Hit-tested rather than handled by the target, because the die is dragged
+   * by Motion rather than by the browser: there is no drop event to listen
+   * for, only a pointer that stopped somewhere. Every place a die may land
+   * carries a `data-drop` saying what it is, and only valid targets carry one
+   * — so a die let go over a card it cannot work finds nothing and springs
+   * home.
+   *
+   * `elementsFromPoint` rather than `elementFromPoint`: the die itself is
+   * under the pointer, and the plural form lets us look straight past it.
+   */
+  function release(at: DropPoint | null) {
+    const zone = at
+      ? document.elementsFromPoint(at.x, at.y).find((el) => el.hasAttribute("data-drop"))
+      : undefined;
+    const drop = zone?.getAttribute("data-drop");
+
+    if (drop && interaction) {
+      const section = HQ_SECTION_IDS.find((id) => drop === `hq:${id}`);
+      if (section) {
+        const move = targets?.sections.get(section);
+        if (move) interaction.onPlay(move);
+      } else if (drop.startsWith("card:")) {
+        interaction.onDropDie(drop.slice("card:".length));
+      }
+    }
+
+    // Last, because the move above is resolved against the die still in hand.
+    interaction?.onDragChange(null);
   }
 
   return (
-    <section className={`${styles.section} ${active ? styles.playerActive : ""}`}>
+    <section
+      ref={panel}
+      className={`${styles.section} ${active ? styles.playerActive : ""}`}
+    >
       <header className={styles.playerHeader}>
         <span className={styles.playerName}>
           <span
@@ -205,15 +251,15 @@ export function PlayerPanel({ player, active, market, interaction }: Props) {
           {/* The automaton buys nothing, so it is never dealt anything to buy with. */}
           {!automaton && (
             <>
-              <ResourceChip kind="metal" amount={player.resources.metal} />
-              <ResourceChip kind="energy" amount={player.resources.energy} />
+              <ResourceChip kind="metal" amount={player.resources.metal} track />
+              <ResourceChip kind="energy" amount={player.resources.energy} track />
             </>
           )}
-          <ResourceChip kind="goods" amount={player.resources.goods} />
-          <ResourceChip kind="prestige" amount={prestigeOf(player.compound)} />
+          <ResourceChip kind="goods" amount={player.resources.goods} track />
+          <ResourceChip kind="prestige" amount={prestigeOf(player.compound)} track />
           <span className={styles.chipFree}>{player.compound.length} built</span>
           <strong className={styles.score} title="Goods plus prestige standing">
-            {scoreOf(player)}
+            <Rolling value={scoreOf(player)} />
           </strong>
         </span>
       </header>
@@ -237,14 +283,9 @@ export function PlayerPanel({ player, active, market, interaction }: Props) {
           {interaction.discards.length > 0 && (
             <div className={styles.choices}>
               {interaction.discards.map(({ move, label }) => (
-                <button
-                  key={moveKey(move)}
-                  type="button"
-                  className={styles.moveButton}
-                  onClick={() => interaction.onPlay(move)}
-                >
+                <PlateButton key={moveKey(move)} onClick={() => interaction.onPlay(move)}>
                   {label}
-                </button>
+                </PlateButton>
               ))}
             </div>
           )}
@@ -260,24 +301,15 @@ export function PlayerPanel({ player, active, market, interaction }: Props) {
             {player.dice.map((die) => {
               const movable = interaction?.movableDice.has(die.id) ?? false;
               return (
-                <span
+                <DraggableDie
                   key={die.id}
-                  className={[
-                    styles.die,
-                    die.spent && styles.dieSpent,
-                    movable && styles.dieMovable,
-                    interaction?.dragging === die.id && styles.dieDragging,
-                  ]
-                    .filter(Boolean)
-                    .join(" ")}
-                  style={DIE_SWATCHES[die.color]}
-                  title={`${die.color} ${die.face} — ${die.spent ? "spent" : "available"}`}
-                  draggable={movable}
-                  onDragStart={movable ? (event) => startDrag(event, die.id) : undefined}
-                  onDragEnd={() => interaction?.onDragChange(null)}
-                >
-                  {die.face}
-                </span>
+                  die={die}
+                  movable={movable}
+                  held={interaction?.dragging === die.id}
+                  bounds={panel}
+                  onPick={() => interaction?.onDragChange(die.id)}
+                  onRelease={release}
+                />
               );
             })}
           </div>
@@ -294,7 +326,6 @@ export function PlayerPanel({ player, active, market, interaction }: Props) {
           placements={player.headquarters}
           color={player.color}
           targets={targets?.sections ?? null}
-          onPlay={interaction?.onPlay}
         />
       )}
 
@@ -317,6 +348,7 @@ export function PlayerPanel({ player, active, market, interaction }: Props) {
                 <CardView
                   key={cardId}
                   card={building.card}
+                  arriving={arriving?.has(cardId)}
                   built
                   // The automaton never works a perk, so "needs 2 energy"
                   // would be reporting a failure it is not having.
@@ -325,6 +357,7 @@ export function PlayerPanel({ player, active, market, interaction }: Props) {
                   spent={building.worked}
                   highlight={free}
                   selected={choosing}
+                  flash={flashing?.has(cardId)}
                   // Both cases go through the same click: working a perk that
                   // offers a choice asks it, and clicking again backs out.
                   onSelect={
@@ -334,7 +367,6 @@ export function PlayerPanel({ player, active, market, interaction }: Props) {
                     choosing ? `Cancel ${building.card.name}` : `Work ${building.card.name}`
                   }
                   dropTarget={droppable}
-                  onDropDie={droppable ? () => interaction?.onDropDie(cardId) : undefined}
                 />
               );
             })}
@@ -375,6 +407,7 @@ export function PlayerPanel({ player, active, market, interaction }: Props) {
                 <CardView
                   key={card.id}
                   card={card}
+                  arriving={arriving?.has(card.id)}
                   buildCost={buildCostFor(player, card)}
                   highlight={paying || buildable || droppable}
                   selected={pending || promised}

@@ -1,10 +1,16 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { domMax, LazyMotion, MotionConfig } from "motion/react";
 import { PHASE_LABELS, type Move } from "@/engine";
 import { DEV_TOOLS } from "@/dev/flag";
+import { burstFromCard, burstFromHq } from "@/effects/cardBurst";
+import { EmbersLayer } from "@/effects/EmbersLayer";
+import { useFlashes } from "@/hooks/useFlashes";
 import { useGame } from "@/hooks/useGame";
+import { useGameEvents } from "@/hooks/useGameEvents";
 import { useMounted } from "@/hooks/useMounted";
+import type { GameEvent } from "@/lib/events";
 import {
   borrowOf,
   borrowsFor,
@@ -19,11 +25,21 @@ import { GameLog } from "./GameLog";
 import { GameOver } from "./GameOver";
 import { Marketplace, type MarketInteraction } from "./Marketplace";
 import { MoveList } from "./MoveList";
+import { PlateButton } from "./PlateButton";
 import { PlayerPanel, type PanelInteraction } from "./PlayerPanel";
 import styles from "./game.module.css";
 
 /** What a first-time visitor is dealt. Every later seed comes from a click. */
 const DEFAULT_SEED = 1;
+
+/** How long a card stays lit after it is built, or after its perk fires. */
+const FLASH_MS = 500;
+
+/**
+ * How long a card counts as having just arrived somewhere. Roughly as long as
+ * the travel itself takes, so the lean unwinds as the card settles.
+ */
+const ARRIVE_MS = 440;
 
 /**
  * A choice in progress, as the parts of it settled so far. Held as ids rather
@@ -63,6 +79,35 @@ export function Game() {
   const board = useMemo(() => indexMoves(moves, active.dice), [moves, active.dice]);
   const mounted = useMounted();
   const playable = !state.gameOver && !isAiTurn;
+
+  /**
+   * Cards lit by whatever the last move did. The engine says only what the
+   * board *is*; `useGameEvents` works out what happened to it, which is the
+   * difference between a card that is standing and a card that just went up.
+   */
+  const [flashing, flash] = useFlashes(FLASH_MS);
+  /**
+   * Cards that have just changed hands, which is the one thing a card cannot
+   * work out for itself: crossing from the market to a hand unmounts it and
+   * mounts a new one, so the arriving component has no memory of the journey.
+   * Held here, where it outlives both.
+   */
+  const [arriving, arrive] = useFlashes(ARRIVE_MS);
+
+  const onEvent = useCallback(
+    (event: GameEvent) => {
+      if (event.kind === "built" || event.kind === "produced") flash(event.cardId);
+      if (event.kind === "built" || event.kind === "drafted") arrive(event.cardId);
+      // Sparks off a factory that has just paid out, and off a slot a die has
+      // just been struck into. Fire-and-forget: with the canvas switched off,
+      // still loading, or gone for reduced motion, the burst is dropped and
+      // nothing here has to know.
+      if (event.kind === "produced") burstFromCard(event.cardId, event.goods);
+      if (event.kind === "placed") burstFromHq(event.section);
+    },
+    [flash, arrive],
+  );
+  useGameEvents(state, seed, onEvent);
 
   // The board a refresh restores is not the board the build prerendered, so
   // nothing of it is drawn until the two can no longer disagree.
@@ -228,63 +273,86 @@ export function Game() {
   }
 
   return (
-    <main className={styles.page}>
-      <header className={styles.header}>
-        <h1 className={styles.title}>Fantastic Factories</h1>
-        <span className={styles.status}>{status}</span>
-      </header>
+    /*
+     * `domMax` rather than `domAnimation` because the board needs layout
+     * animation and gestures, not just tweens; `strict` turns reaching for the
+     * eagerly-loaded `motion` components into a build error rather than a
+     * silent few kilobytes.
+     *
+     * `reducedMotion="user"` is the whole accessibility story for every
+     * animation below this point, in one attribute.
+     */
+    <LazyMotion features={domMax} strict>
+      <MotionConfig reducedMotion="user">
+        {/*
+          * While a choice is open, the board narrows to the cards that could
+          * answer it — see the focus pull in game.module.css. The state is
+          * already here; this only has to say so out loud.
+          */}
+        <main className={styles.page} data-choosing={choice ? "true" : undefined}>
+          <header className={styles.header}>
+            <h1 className={styles.title}>Fantastic Factories</h1>
+            <span className={styles.status}>{status}</span>
+          </header>
 
-      <div className={styles.columns}>
-        <div className={styles.stack}>
-          <Marketplace
-            contractors={state.contractors}
-            blueprints={state.blueprints}
-            interaction={marketInteraction}
-          />
-          {state.players.map((player, index) => (
-            <PlayerPanel
-              key={player.id}
-              player={player}
-              active={!state.gameOver && index === state.currentPlayerIndex}
-              market={state.blueprints.row}
-              interaction={panelFor(index)}
+          <div className={styles.columns}>
+            <div className={styles.stack}>
+              <Marketplace
+                contractors={state.contractors}
+                blueprints={state.blueprints}
+                interaction={marketInteraction}
+              />
+              {state.players.map((player, index) => (
+                <PlayerPanel
+                  key={player.id}
+                  player={player}
+                  active={!state.gameOver && index === state.currentPlayerIndex}
+                  market={state.blueprints.row}
+                  flashing={flashing}
+                  arriving={arriving}
+                  interaction={panelFor(index)}
+                />
+              ))}
+            </div>
+
+            <div className={styles.stack}>
+              <MoveList state={state} moves={moves} waiting={isAiTurn} onPlay={play} />
+              {/*
+                * The way back to a result that has been waved away. Only there
+                * once there is one, and only while it is hidden — the dialog is
+                * modal, so while it is up this button could not be clicked anyway.
+                */}
+              {state.gameOver && resultHidden && (
+                <PlateButton full onClick={() => setResultHidden(false)}>
+                  Show result
+                </PlateButton>
+              )}
+              <PlateButton full onClick={newGame}>
+                New game (seed {seed + 1})
+              </PlateButton>
+              {/* Folds to `false` in a production build, and the panel goes with it. */}
+              {DEV_TOOLS && <DevPanel debug={debug} />}
+              <GameLog entries={state.log} />
+            </div>
+          </div>
+
+          {state.gameOver && !resultHidden && (
+            <GameOver
+              state={state}
+              nextSeed={seed + 1}
+              onNewGame={newGame}
+              onDismiss={() => setResultHidden(true)}
             />
-          ))}
-        </div>
-
-        <div className={styles.stack}>
-          <MoveList state={state} moves={moves} waiting={isAiTurn} onPlay={play} />
-          {/*
-            * The way back to a result that has been waved away. Only there
-            * once there is one, and only while it is hidden — the dialog is
-            * modal, so while it is up this button could not be clicked anyway.
-            */}
-          {state.gameOver && resultHidden && (
-            <button
-              type="button"
-              className={styles.resetButton}
-              onClick={() => setResultHidden(false)}
-            >
-              Show result
-            </button>
           )}
-          <button type="button" className={styles.resetButton} onClick={newGame}>
-            New game (seed {seed + 1})
-          </button>
-          {/* Folds to `false` in a production build, and the panel goes with it. */}
-          {DEV_TOOLS && <DevPanel debug={debug} />}
-          <GameLog entries={state.log} />
-        </div>
-      </div>
 
-      {state.gameOver && !resultHidden && (
-        <GameOver
-          state={state}
-          nextSeed={seed + 1}
-          onNewGame={newGame}
-          onDismiss={() => setResultHidden(true)}
-        />
-      )}
-    </main>
+          {/*
+            * Last, and `position: fixed`, so it covers the board rather than
+            * taking a place in it. Nothing above it in this tree can see that
+            * it is a WebGL canvas, and with the flag off it is not one.
+            */}
+          <EmbersLayer />
+        </main>
+      </MotionConfig>
+    </LazyMotion>
   );
 }

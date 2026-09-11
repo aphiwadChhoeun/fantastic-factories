@@ -12,8 +12,15 @@ import {
 } from "@/engine";
 import { loadGame, saveGame, type SavedGame } from "@/lib/storage";
 
-/** Pause before the AI acts, so a human can follow what happened. */
-const AI_THINK_MS = 450;
+/**
+ * Pause before the AI acts, so a human can follow what happened.
+ *
+ * Long enough to outlast the board's own animations — a card drafted out of
+ * the market is still travelling at 450ms, and playing over the top of it
+ * re-renders the board out from under a move the player has not finished
+ * watching. See docs/motion.md.
+ */
+const AI_THINK_MS = 720;
 
 function freshGame(seed: number): SavedGame {
   return { seed, state: createInitialState({ seed }) };

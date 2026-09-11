@@ -1,4 +1,13 @@
-import type { DragEvent } from "react";
+import { useRef, type PointerEvent } from "react";
+import {
+  AnimatePresence,
+  m,
+  useMotionTemplate,
+  useMotionValue,
+  useReducedMotion,
+  useSpring,
+  useTransform,
+} from "motion/react";
 import type { Card, DieFace, Resources } from "@/engine";
 import {
   BLUEPRINT_CATEGORY_SWATCHES,
@@ -18,8 +27,44 @@ function costsResources(cost: Resources): boolean {
   return cost.metal > 0 || cost.energy > 0 || cost.goods > 0;
 }
 
+/**
+ * How a card crosses the board when it changes hands.
+ *
+ * A spring rather than a curve, because the overshoot is the point: a card
+ * that arrives and settles reads as having mass, and one that eases to a stop
+ * reads as a div. Damping below about 28 and it wobbles like rubber.
+ */
+const TRAVEL = { type: "spring", stiffness: 420, damping: 32, mass: 0.9 } as const;
+
+/**
+ * How far a card leans into its own travel.
+ *
+ * Which cards lean is decided by the board, not here, and that took three
+ * goes to get right. `onLayoutAnimationStart` is useless for it: a layout
+ * animation fires for *any* change of screen position, and almost none of
+ * them are a card going anywhere — drafting re-wraps the market row, a taller
+ * hand pushes the opponent's panel down, a scrollbar arrives and the whole
+ * board steps sideways. Keyed off that, every card leans whenever anything
+ * happens anywhere. Nor can the distance be measured inside the callback: the
+ * projection transform has not been written by the time it runs.
+ *
+ * A prop on the way in does not work either, because a card that crosses
+ * lists *unmounts and remounts* — the arriving component has no memory of
+ * having been in the market.
+ *
+ * So the answer comes from the one place that outlives the move: the engine.
+ * `lib/events.ts` already says which card was drafted or built, and Game
+ * holds that for as long as the travel lasts.
+ */
+const LEAN_DEGREES = -4;
+
 type Props = {
   card: Card;
+  /**
+   * This card has just arrived here out of somewhere else — drafted into a
+   * hand, or stood up in a compound. The one card that leans into its travel.
+   */
+  arriving?: boolean;
   /**
    * What this card costs *this* player, when that is not what is printed on
    * it — a Megalith is discounted by the Monuments already standing.
@@ -43,11 +88,13 @@ type Props = {
   selected?: boolean;
   /** The die being dragged can be dropped here. */
   dropTarget?: boolean;
-  onDropDie?: () => void;
+  /** This card just did something — it was built, or its perk fired. */
+  flash?: boolean;
 };
 
 export function CardView({
   card,
+  arriving = false,
   buildCost,
   built = false,
   note,
@@ -58,8 +105,42 @@ export function CardView({
   highlight = false,
   selected = false,
   dropTarget = false,
-  onDropDie,
+  flash = false,
 }: Props) {
+  const faceEl = useRef<HTMLElement | null>(null);
+  const reduced = useReducedMotion();
+  /** How hard this card is leaning into its travel. Zero unless it is moving. */
+  const lean = arriving && !reduced ? LEAN_DEGREES : 0;
+
+  // Where the pointer is over the plate, as -0.5 … 0.5 on each axis.
+  const px = useMotionValue(0);
+  const py = useMotionValue(0);
+  // Sprung, so the plate goes on tilting for a beat after the pointer stops.
+  // That lag is the whole difference between a card with mass and a card glued
+  // to the cursor.
+  const sx = useSpring(px, { stiffness: 300, damping: 22, mass: 0.4 });
+  const sy = useSpring(py, { stiffness: 300, damping: 22, mass: 0.4 });
+
+  const rotateY = useTransform(sx, [-0.5, 0.5], [-9, 9]);
+  const rotateX = useTransform(sy, [-0.5, 0.5], [7, -7]);
+  // The highlight travels against the tilt, the way light does.
+  const glareX = useTransform(sx, [-0.5, 0.5], [18, 82]);
+  const glareY = useTransform(sy, [-0.5, 0.5], [12, 88]);
+  const sheen = useMotionTemplate`radial-gradient(150px 150px at ${glareX}% ${glareY}%, rgb(255 233 200 / 18%), transparent 72%)`;
+
+  function track(event: PointerEvent) {
+    if (reduced) return;
+    const rect = faceEl.current?.getBoundingClientRect();
+    if (!rect) return;
+    px.set((event.clientX - rect.left) / rect.width - 0.5);
+    py.set((event.clientY - rect.top) / rect.height - 0.5);
+  }
+
+  function level() {
+    px.set(0);
+    py.set(0);
+  }
+
   const className = [
     styles.card,
     card.kind === "contractor" && styles.cardContractor,
@@ -193,36 +274,143 @@ export function CardView({
     </>
   );
 
-  // Only a target for the die being dragged; anything else keeps the default
-  // "not allowed" cursor, which is the honest answer.
-  const dropProps = dropTarget
-    ? {
-        onDragOver: (event: DragEvent) => event.preventDefault(),
-        onDrop: (event: DragEvent) => {
-          event.preventDefault();
-          onDropDie?.();
-        },
-      }
-    : {};
+  /**
+   * Which light the card is wearing. One at a time and in this order, because
+   * a card can be several of these at once and the most specific thing the
+   * player is being asked is always the one worth saying.
+   */
+  const glow = selected
+    ? styles.glowChosen
+    : dropTarget
+      ? styles.glowAether
+      : highlight
+        ? styles.glowSpice
+        : null;
 
-  if (onSelect) {
-    return (
-      <button
-        type="button"
-        className={className}
-        onClick={onSelect}
-        aria-label={selectLabel}
-        {...dropProps}
-      >
-        {body}
-      </button>
-    );
-  }
+  const plate = {
+    // A callback ref, so the same one serves a button and a div without
+    // either of them having to know which it is.
+    ref: (node: HTMLElement | null) => {
+      faceEl.current = node;
+    },
+    className,
+    onPointerMove: track,
+    onPointerLeave: level,
+    // Perspective on the plate itself rather than on the row: a shared
+    // vanishing point would make a hand of cards fan like a pop-up book.
+    style: { rotateX, rotateY, transformPerspective: 900 },
+    /*
+     * The smear: the card tips while in flight and unwinds as it settles, on
+     * the same spring that is carrying it. Real velocity is not available —
+     * Motion writes the layout transform to the slot directly rather than
+     * through a MotionValue this could read — so the lean is a flag rather
+     * than a measurement. It rides the plate rather than the slot, so it
+     * cannot disturb the travel itself.
+     *
+     * One value, not a keyframe list: a spring only interpolates between a
+     * pair, and asking for three throws at animation time — where no
+     * typecheck or test will see it.
+     *
+     * `rotate` is the Z axis and free; the tilt only ever uses X and Y, and
+     * `scale` is left alone because hover and tap already own it.
+     */
+    animate: { rotate: lean },
+    whileHover: reduced ? undefined : { scale: 1.03 },
+    whileTap: onSelect && !reduced ? { scale: 0.985 } : undefined,
+    transition: arriving ? TRAVEL : { duration: 0.08, ease: "easeOut" as const },
+  };
+
+  const contents = (
+    <>
+      {body}
+      {!reduced && <m.div className={styles.sheen} style={{ background: sheen }} aria-hidden />}
+    </>
+  );
 
   return (
-    <div className={className} {...dropProps}>
-      {body}
-    </div>
+    /*
+     * The slot owns the travel, and only the travel. When a card is drafted
+     * the engine moves it in one `applyMove` — out of the row, into a hand —
+     * which in the DOM is an unmount from one list and a mount in another. A
+     * shared `layoutId` is what turns those two events back into one object
+     * moving, and the ids the engine deals are unique per copy and stable for
+     * the whole game, so there is something honest to key on.
+     *
+     * Deliberately no `AnimatePresence` around the lists. An exiting copy left
+     * behind in the row would share a `layoutId` with the arriving one, and
+     * two elements claiming to be the same card is exactly how a shared-layout
+     * transition tears.
+     *
+     * Transform belongs to Motion on this element; the plate inside does its
+     * own tilting. That separation is the whole reason there are two.
+     */
+    <m.div
+      className={styles.cardSlot}
+      /*
+       * Where this card is on screen, for anything that has to point at it
+       * without holding a reference to it — sparks off a firing perk, a
+       * trajectory line. Fire-and-forget, so it must not keep a card alive or
+       * care that one has unmounted.
+       */
+      data-card-id={card.id}
+      /*
+       * Whether this card could answer the question currently being asked.
+       * Read by the focus pull, which dims everything that could not — the
+       * board stops being a dozen cards and becomes the two you are choosing
+       * between.
+       */
+      data-live={highlight || selected || dropTarget ? "true" : undefined}
+      /*
+       * Somewhere the die being held may land. Only on a card that would
+       * actually take it, so a die let go over anything else finds nothing
+       * and springs home. PlayerPanel hit-tests for this: the die is dragged
+       * by Motion, so there is no drop event for the card to listen for.
+       */
+      data-drop={dropTarget ? `card:${card.id}` : undefined}
+      layoutId={`card:${card.kind}:${card.id}`}
+      layout="position"
+      transition={TRAVEL}
+      // A card in flight has to clear the panels it passes over.
+      style={{ zIndex: arriving ? 40 : undefined }}
+    >
+      {onSelect ? (
+        <m.button type="button" onClick={onSelect} aria-label={selectLabel} {...plate}>
+          {contents}
+        </m.button>
+      ) : (
+        <m.div {...plate}>{contents}</m.div>
+      )}
+
+      {/* Keyed on the light itself, so going from spice to gilt cross-fades. */}
+      <AnimatePresence initial={false}>
+        {glow && (
+          <m.div
+            key={glow}
+            className={`${styles.glow} ${glow}`}
+            aria-hidden
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Thrown off once by a card that has just been built or just fired. */}
+      <AnimatePresence>
+        {flash && !reduced && (
+          <m.div
+            key="flash"
+            className={styles.flashRing}
+            aria-hidden
+            initial={{ opacity: 0.9, scale: 1 }}
+            animate={{ opacity: 0, scale: 1.14 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.45, ease: "easeOut" }}
+          />
+        )}
+      </AnimatePresence>
+    </m.div>
   );
 }
 
