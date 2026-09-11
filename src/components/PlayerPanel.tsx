@@ -8,7 +8,7 @@ import {
   HQ_SECTION_IDS,
   overLimits,
   perkCost,
-  prestigeOf,
+  prestigeFor,
   RESOURCE_LIMIT,
   scoreOf,
   type BlueprintCard,
@@ -256,9 +256,16 @@ export function PlayerPanel({
             </>
           )}
           <ResourceChip kind="goods" amount={player.resources.goods} track />
-          <ResourceChip kind="prestige" amount={prestigeOf(player.compound)} track />
+          <ResourceChip kind="prestige" amount={prestigeFor(player)} track />
           <span className={styles.chipFree}>{player.compound.length} built</span>
-          <strong className={styles.score} title="Goods plus prestige standing">
+          <strong
+            className={styles.score}
+            title={
+              automaton
+                ? "Goods, plus a point a card and another for each Monument"
+                : "Goods plus prestige standing"
+            }
+          >
             <Rolling value={scoreOf(player)} />
           </strong>
         </span>

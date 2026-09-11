@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, type MouseEvent } from "react";
-import { prestigeOf, scoreOf, type GameState } from "@/engine";
+import { prestigeFor, scoreOf, type GameState } from "@/engine";
 import { describeEnding, describeWinner } from "@/lib/format";
 import { colorSwatch } from "@/lib/colors";
 import { PlateButton } from "./PlateButton";
@@ -82,9 +82,10 @@ export function GameOver({ state, nextSeed, onNewGame, onDismiss }: Props) {
                 {player.name}
               </th>
               {/* Goods and prestige are the two halves of a score, and which
-                  half someone won on is the whole shape of the game. */}
+                  half someone won on is the whole shape of the game. The
+                  automaton's half is counted its own way — see `prestigeFor`. */}
               <td>{player.resources.goods}</td>
-              <td>{prestigeOf(player.compound)}</td>
+              <td>{prestigeFor(player)}</td>
               <td>
                 <strong>{scoreOf(player)}</strong>
               </td>

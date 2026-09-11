@@ -220,8 +220,9 @@ A blueprint's **type** is what the card is, printed as a coloured band:
 
 A blueprint's **tool** — hammer, wrench, gear or shovel — is what it is worth
 as payment, and nothing else. Building and contractor tokens both ask for a
-tool; nothing yet asks for a type. A Beacon is a Monument you buy with a
-shovel, and both facts are on the card.
+tool, never a type. Type is what the automaton's dice answer to, what the
+Megalith counts for its discount, and what its scoring pays a bonus on. A
+Beacon is a Monument you buy with a shovel, and both facts are on the card.
 
 Every blueprint carries both, and the type is required by the type system —
 a card without one would answer to no die of the automaton's and go quietly
@@ -357,6 +358,23 @@ Beacon scores as a set. The highest score wins, and an equal score is a draw.
 The Dojo, the Fitness Center and the Gymnasium are worth nothing but what they
 do to your dice, which is the closest thing the deck has to a trade-off between
 scoring and playing well.
+
+**The automaton is scored differently.** Its goods count the same, but its
+compound is counted by the shelf-load rather than read: **one point for every
+card standing, whatever that card prints, and one more for each Monument among
+them.** The Beacon set bonus does not apply to it, and a card worth no printed
+prestige is worth as much to it as a Megalith.
+
+It does not choose what it builds — it stands up whatever the market turns up,
+one a turn — so scoring it on printed prestige would hand the game to the deal
+rather than to either player. A point a card keeps the race even against a
+compound that grows every single turn; the Monument bonus keeps the cards a
+human most wants to stack worth racing for.
+
+Same compound, then, two totals: three cards including one Obelisk is 3 to a
+human (0 + 1 + 2 as printed) and 4 to the automaton (3 cards + 1 Monument).
+Only `prestigeFor` knows which rule to apply, and everything that shows or
+totals a score goes through it.
 
 When the game ends, a dialog gives the result: who won, what ended it, and both
 scores split into goods and prestige — which half someone won on says more
@@ -540,8 +558,11 @@ So a blue 2 pays a good against two or more Production cards, and nothing
 against one. Four dice, so at most four goods a turn.
 
 **Monument has no die**, which is why one is never dealt into its opening
-compound — it can still take one from the market, where it counts for prestige
-and produces nothing.
+compound — it can still take one from the market, where it produces nothing and
+scores double: a point as a card and a point as a Monument.
+
+**It is scored by the shelf-load**, not by what its cards print — a point each
+plus the Monument bonus, on top of its goods. See [Scoring](#scoring).
 
 The automaton is offered **exactly one legal move at each point of its turn**,
 so the automaton lives in the engine and any `Ai` implementation plays it
@@ -681,7 +702,8 @@ compound and work your Headquarters, end the round. Known stubs:
 - the automaton's dice are lopsided against the deck it draws from: 19
   Production copies to 14 Monument (which never pays), 10 Training, 8 Utility
   and 2 Special. Its blue die does most of the work and its purple one least
-- no rule reads a blueprint's type outside the automaton's Work Phase
+- a blueprint's type is read in the automaton's Work Phase, in its opening deal,
+  by the Megalith's discount, and now by the automaton's scoring
 - a Specialist die is set before anything is spent, but the Dojo and the
   Fitness Center now *do* change a die mid-phase. Whether a Specialist die
   should be settled that early is worth another look

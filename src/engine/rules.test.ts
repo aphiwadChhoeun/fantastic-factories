@@ -33,6 +33,8 @@ import {
   MAX_ROUNDS,
   NO_PLACEMENTS,
   oppositeFace,
+  automatonPrestigeOf,
+  prestigeFor,
   prestigeOf,
   scoreOf,
   STARTING_HAND,
@@ -1146,6 +1148,73 @@ describe("prestige", () => {
 
     // Four Beacons score five, on top of the three goods.
     expect(scoreOf(built)).toBe(8);
+  });
+
+  it("scores the automaton a point a card, and another for a Monument", () => {
+    const deck = createBlueprintDeck();
+    const plant = copiesOf("Concrete Plant")[0]; // worth no prestige
+    const factory = cardNamed(deck, "Aluminum Factory"); // worth 1
+    const obelisk = copiesOf("Obelisk")[0]; // a Monument, worth 2
+    const compound = [plant, factory, obelisk].map(standing);
+
+    // Three cards, one of them a Monument. What they print does not come into
+    // it: the human would score the same compound 3.
+    expect(automatonPrestigeOf(compound)).toBe(4);
+    expect(prestigeOf(compound)).toBe(3);
+  });
+
+  it("counts the Beacon set bonus for a human and not for the automaton", () => {
+    const beacons = copiesOf("Beacon").map(standing);
+
+    // Four Beacons: 1 each and 1 for the set to a human; 1 each and 1 each
+    // again as Monuments to the automaton.
+    expect(prestigeOf(beacons)).toBe(5);
+    expect(automatonPrestigeOf(beacons)).toBe(8);
+  });
+
+  it("picks the automaton's rule by who owns the compound", () => {
+    const compound = [copiesOf("Concrete Plant")[0], copiesOf("Obelisk")[0]].map(standing);
+    const state = createInitialState({ seed: 3 });
+    const [you, ai] = [
+      patchPlayer(state, 0, { compound, resources: { metal: 4, energy: 4, goods: 2 } }),
+      patchPlayer(state, 1, { compound, resources: { metal: 0, energy: 0, goods: 2 } }),
+    ];
+
+    expect(prestigeFor(you.players[0])).toBe(2);
+    expect(prestigeFor(ai.players[1])).toBe(3);
+
+    // Goods count the same for both. Metal and energy are not score either way.
+    expect(scoreOf(you.players[0])).toBe(4);
+    expect(scoreOf(ai.players[1])).toBe(5);
+  });
+
+  it("lets the automaton win on cards a human would have beaten on prestige", () => {
+    // Cards that print no prestige at all, so only the automaton's rule can
+    // make them worth anything.
+    const worthless = createBlueprintDeck().filter(
+      (card) => (card.prestige ?? 0) === 0 && card.type !== "monument",
+    );
+    const megalith = [copiesOf("Megalith")[0]].map(standing);
+    const goods: Resources = { metal: 0, energy: 0, goods: END_GOODS };
+    const state = createInitialState({ seed: 3 });
+    const scored = patchPlayer(
+      patchPlayer({ ...state, phase: "cleanup", finalRound: state.round }, 0, {
+        compound: megalith,
+        resources: goods,
+      }),
+      1,
+      { compound: worthless.slice(0, 3).map(standing), resources: goods },
+    );
+
+    // 12 + 3 against 12 + 3: printed prestige would have made it 15 to 12.
+    expect(applyMove(scored, { type: "endPhase" }).winner).toBeNull();
+
+    // One more card, still worth nothing printed, and the automaton is ahead.
+    const outbuilt = patchPlayer(scored, 1, {
+      compound: worthless.slice(0, 4).map(standing),
+      resources: goods,
+    });
+    expect(applyMove(outbuilt, { type: "endPhase" }).winner).toBe(1);
   });
 
   it("wins the game on the total, not on either half", () => {

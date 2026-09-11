@@ -178,7 +178,31 @@ function meetsTotal(perk: BlueprintPerk, faces: readonly DieFace[]): boolean {
  * compound. Blueprints still in hand are worth nothing — only what is built.
  */
 export function scoreOf(player: Player): number {
-  return player.resources.goods + prestigeOf(player.compound);
+  return player.resources.goods + prestigeFor(player);
+}
+
+/**
+ * The prestige a compound is worth *to its owner*. A human scores what the
+ * cards print; the automaton scores by the shelf-load instead.
+ */
+export function prestigeFor(player: Player): number {
+  return player.isAi
+    ? automatonPrestigeOf(player.compound)
+    : prestigeOf(player.compound);
+}
+
+/**
+ * The automaton's prestige: a flat point for every card standing, whatever
+ * that card prints, plus another for each Monument among them.
+ *
+ * It does not choose what it builds — it takes whatever the market turns up —
+ * so scoring it on printed prestige would make it a hostage to the deal. A
+ * point a card keeps the race even; the Monument bonus keeps the cards a human
+ * most wants worth racing for.
+ */
+export function automatonPrestigeOf(compound: readonly Building[]): number {
+  const monuments = compound.filter(({ card }) => card.type === "monument");
+  return compound.length + monuments.length;
 }
 
 /**
