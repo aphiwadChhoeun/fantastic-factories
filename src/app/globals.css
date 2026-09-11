@@ -42,11 +42,19 @@
   --color-blueprint: #16324f;
   --color-blueprint-line: #7fb3d9;
 
-  /* Resources. These have to survive being 12px tall beside a number. */
-  --color-res-metal: #9aa7b4;
-  --color-res-energy: #ffc53d;
+  /*
+   * Resources. These have to survive being 12px tall beside a number, and
+   * they have to agree with the emoji in `lib/colors.ts` — the glyph paints
+   * itself and these tint the count next to it, so a hue drifting apart from
+   * its own icon is the one failure mode. Pulled towards the desert rather
+   * than matched exactly: a token at full emoji saturation is a shout.
+   */
+  --color-res-metal: #6ba3dd;
+  --color-res-energy: #f2a23c;
   --color-res-goods: #5fbf8a;
   --color-res-standing: #d9b44a;
+  /* A blueprint plate: the one icon that is a card rather than a count. */
+  --color-res-card: #b9b6ad;
 
   /*
    * States. One meaning each, and never two at once on the same element —

@@ -458,8 +458,13 @@
   color: var(--color-danger);
 }
 
+/*
+ * A resource icon. Emoji, so a point larger than the text glyphs it replaced:
+ * a `▰` is two strokes and survives anything, while a crate has a lid and a
+ * seam to lose. Twelve is where they stop turning to porridge.
+ */
 .chipGlyph {
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1;
 }
 
@@ -598,6 +603,114 @@ button.cardContractor {
 
 .cardMeta {
   color: var(--color-steel-300);
+}
+
+/*
+ * What a card does, drawn instead of written: a price, an arrow, a payout.
+ *
+ * The whole thing is one wrapping row rather than a grid. A formula is read
+ * left to right and only breaks when it has to, and a card is narrow enough
+ * that most of them break once — pinning the two sides to fixed columns would
+ * leave a ragged gap on every short card to buy alignment nobody is checking.
+ */
+.formula {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 3px 5px;
+}
+
+.formulaGlyphs {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 3px 5px;
+}
+
+/* Symbols that belong to one term, kept tighter than the terms are to each other. */
+.group {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+/*
+ * Which way the trade runs. The one mark on the card that is not a noun.
+ *
+ * Bone rather than spice, and that is the emoji's doing: the energy glyph is
+ * an orange bolt, so a spice arrow put two oranges side by side on every card
+ * that charges energy. One hue, one meaning — orange on a plate is energy, and
+ * the arrow is structure, which is not a colour the eye should be counting.
+ */
+.arrow {
+  color: var(--color-parchment-dim);
+  font-size: 13px;
+  line-height: 1;
+}
+
+/*
+ * The relations: matching dice, a run, a sum, a choice, a change of face.
+ *
+ * Brighter than a note and dimmer than a chip, which is the whole job — an
+ * `=` between two dice is the difference between a pair and any two dice, so
+ * it cannot be decoration, and it is still not the thing being counted.
+ */
+.op {
+  font-family: var(--font-label);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--color-steel-300);
+}
+
+/*
+ * A die the card asks for or hands over, at a size that sits in a line of
+ * chips. Dashed when it will take anything, solid when it names a face —
+ * the same grammar the Headquarters slots already use.
+ */
+.pip {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 2px;
+  border: 1px solid var(--color-edge-bright);
+  border-radius: 4px;
+  background: rgb(0 0 0 / 25%);
+  font-family: var(--font-label);
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--color-parchment);
+}
+
+.pipAny {
+  border-style: dashed;
+  opacity: 0.85;
+}
+
+/*
+ * A blueprint, as the plate it is. Sized off `.chipGlyph` rather than set in
+ * it, because this one is a colour emoji sitting among four others and has to
+ * line up with them — the grey it paints itself is the point, so nothing here
+ * tries to tint it.
+ */
+.blueprintGlyph {
+  flex: none;
+  font-size: 12px;
+  line-height: 1;
+}
+
+/* A word, where no glyph says it honestly. Never the subject of the line. */
+.note {
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  line-height: 1.3;
+  color: var(--color-steel-500);
 }
 
 .dice {

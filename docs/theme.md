@@ -104,12 +104,25 @@ different theme, not a toggle.
 
 **Resources** — must survive being 12px tall next to a number.
 
-| Token | Hex | Resource |
-|---|---|---|
-| `--color-res-metal` | `#9AA7B4` | metal (cold sheet) |
-| `--color-res-energy` | `#FFC53D` | energy (arc) |
-| `--color-res-goods` | `#5FBF8A` | goods (crated) |
-| `--color-res-standing` | `#D9B44A` | prestige (gilt) |
+Each resource is an emoji that paints its own colour, so these tokens do not
+tint the icon: they tint the *count and the word beside it*, and exist to agree
+with the glyph. Change a glyph in `lib/colors.ts` and change its token here in
+the same breath, or every count on the board sits a shade off its own icon.
+Pulled towards the desert rather than matched exactly — a token at full emoji
+saturation is a shout.
+
+| Token | Hex | Resource | Glyph |
+|---|---|---|---|
+| `--color-res-metal` | `#6BA3DD` | metal (cold sheet) | 🔷 |
+| `--color-res-energy` | `#F2A23C` | energy (arc) | ⚡ |
+| `--color-res-goods` | `#5FBF8A` | goods (crated) | 🟩 |
+| `--color-res-standing` | `#D9B44A` | prestige (gilt) | ⭐ |
+| `--color-res-card` | `#B9B6AD` | a blueprint plate | 📄 |
+
+Four shapes as well as four colours — diamond, bolt, square, star — because a
+colour-blind player counting two greens has been given nothing. Orange is now
+spoken for: the arrow in a card formula is bone, not spice, so the only orange
+on a plate is energy.
 
 **Semantic states**
 
@@ -259,7 +272,7 @@ rails — the dock is always there, because it is *you*.
 │ collapse ◀│                                        │                  │
 ├──────────┴────────────────────────────────────────┴──────────────────┤
 │ YOUR DOCK — sticky, ~340px, collapsible                              │
-│  ⬡5 metal  ⚡3 energy  ▣7 goods  ✦4 standing        score 11        │
+│  🔷5 metal  ⚡3 energy  🟩7 goods  ⭐4 standing      score 11        │
 │  ┌ shifts ─┐ ┌ THE SEAT ────────┐ ┌ THE WORKS ──────────────────┐   │
 │  │ ⚄ ⚂ ⚅ ⚀ │ │ Survey Kiln Delve│ │ ▮ ▮▮ ▮▮▮  (sorted by tier)  │   │
 │  └─────────┘ └──────────────────┘ └─────────────────────────────┘   │
@@ -412,6 +425,48 @@ Two structural moves make the progression *felt* rather than merely visible:
   budget. Respect `prefers-reduced-motion` by keeping the inversion and dropping
   the movement.
 
+### 4.3 The text plate is a formula, not a sentence
+
+Built, in `src/components/Formula.tsx`. Anatomy item 6 above shows prose, which
+is what the card used to carry — *"Work: 2 matching dice + 5 energy — Gain 2
+goods, 1 metal"*. A card face is read at a glance a dozen times a round, and
+that is a price, an arrow and a payout wearing nine words. So it is drawn:
+
+```
+▢ = ▢  +  ⚡5   →   🟩2 🔷1       a pair, and five energy, for two goods and a metal
+▢+1▢+1▢        →   🟩2           a run of three
+▢ ▢ ▢  Σ14+    →   ⚡2 🟩2        three dice adding to fourteen
+📄2 + ⚡2       →   🟩1 + 📄1      two plates into the furnace
+▢              →  ≤3 🔷1 / 4+ 🔷2  what the die you placed is worth
+```
+
+The vocabulary, and it is deliberately small:
+
+| Mark | Means |
+|---|---|
+| `▢` (`.pip`) | one die — dashed and blank takes anything, solid and stamped names a face (`4`, `4+`, `≤3`) |
+| 📄 (`.blueprintGlyph`) | a blueprint: out of hand on the left of the arrow, into it on the right |
+| `→` (`.arrow`) | which way the trade runs. Bone, not spice — see §2.1: orange means energy now |
+| `=` `+1` `Σn+` | the rule *between* dice: matching, a run, a floor on the total |
+| `+` `/` | everything in turn, versus one of several. Mistaking these costs a player real resources |
+| `=` (after a chip) | a count read off a face rather than printed — `⚡ = ▢` |
+| `⇅` `⟳` `±1` | a die handed back to the table changed rather than spent |
+
+The dice are the one thing here still *drawn* rather than set in an emoji, and
+deliberately: a pip has to hold a stamped face (`4+`, `≤3`) and to match the
+real sockets in the card footer, which no die emoji does.
+
+Two rules hold it together. **The words are never thrown away**: every formula
+carries the `lib/format.ts` sentence as its `title` and again for a screen
+reader, so prose is one hover away and the symbols never have to carry someone
+who cannot read them — which is also why `format.ts` is untouched and the log
+and move list still speak English. And **a bad pictogram is worse than a short
+word**: an effect that resists a glyph (*whose* card's cost, *which* face is
+chosen) gets an uppercase `.note` instead of a rebus.
+
+The Headquarters tile is stamped the same way even though it is not a card and
+never goes through `CardView`. It is read off the same board in the same glance.
+
 ---
 
 ## 5. Next.js / React implementation
@@ -471,11 +526,12 @@ applies verbatim.
   --color-blueprint: #16324f;
   --color-blueprint-line: #7fb3d9;
 
-  /* resources */
-  --color-res-metal: #9aa7b4;
-  --color-res-energy: #ffc53d;
+  /* resources — tint the count beside the glyph, never the glyph itself */
+  --color-res-metal: #6ba3dd;
+  --color-res-energy: #f2a23c;
   --color-res-goods: #5fbf8a;
   --color-res-standing: #d9b44a;
+  --color-res-card: #b9b6ad;
 
   /* states */
   --color-legal: #46b37e;

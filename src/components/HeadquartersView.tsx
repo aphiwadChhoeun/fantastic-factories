@@ -1,7 +1,6 @@
 import { HQ_SECTIONS, type DieColor, type HqPlacements, type HqSectionId, type Move } from "@/engine";
 import { DIE_SWATCHES } from "@/lib/colors";
-import { describeHqReward, describeRequirement } from "@/lib/format";
-import { ResourceText } from "./Resource";
+import { SectionFormula } from "./Formula";
 import styles from "./game.module.css";
 
 type Props = {
@@ -45,9 +44,9 @@ export function HeadquartersView({ placements, color, targets }: Props) {
               data-drop={move ? `hq:${section.id}` : undefined}
             >
               <span className={styles.hqName}>{section.name}</span>
+              {/* The same die → payout formula the cards are stamped with. */}
               <span className={styles.cardMeta}>
-                Takes {describeRequirement(section.accepts)} —{" "}
-                <ResourceText>{describeHqReward(section.reward)}</ResourceText>
+                <SectionFormula section={section} />
               </span>
               {/*
                * Where sparks come from when a die lands here. On the row of

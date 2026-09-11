@@ -14,12 +14,8 @@ import {
   BLUEPRINT_TOOL_GLYPHS,
   BLUEPRINT_TOOL_SWATCHES,
 } from "@/lib/colors";
-import {
-  describeEffect,
-  describePassive,
-  describePerkCost,
-  describeResources,
-} from "@/lib/format";
+import { describeResources } from "@/lib/format";
+import { EffectFormula, PassiveFormula, PerkFormula } from "./Formula";
 import { ResourceChip, ResourceChips, ResourceText } from "./Resource";
 import styles from "./game.module.css";
 
@@ -203,27 +199,20 @@ export function CardView({
       {stats}
 
       <div className={styles.cardBody}>
-        {card.kind === "blueprint" && card.perk && (
-          <span className={styles.cardMeta}>
-            Work: <ResourceText>{describePerkCost(card.perk)}</ResourceText>
-          </span>
-        )}
+        {/*
+          * What the card does, as one formula: what it takes, an arrow, what it
+          * pays. The price and the payout used to be two sentences on two
+          * lines, which read as two separate facts rather than as the one trade
+          * they are. The words are still there — on hover, and for a reader.
+          */}
         {card.kind === "contractor" ? (
-          <span className={styles.cardMeta}>
-            <ResourceText>{describeEffect(card.effect)}</ResourceText>
-          </span>
+          <EffectFormula effect={card.effect} />
         ) : (
-          card.perk && (
-            <span className={styles.cardMeta}>
-              <ResourceText>{describeEffect(card.perk.effect)}</ResourceText>
-            </span>
-          )
+          card.perk && <PerkFormula perk={card.perk} />
         )}
-        {/* A passive is not worked, so it has no Work line — only what it does. */}
+        {/* A passive is not worked: what is left of the arrow is a trigger. */}
         {card.kind === "blueprint" && card.passive && (
-          <span className={styles.cardMeta}>
-            <ResourceText>{describePassive(card.passive)}</ResourceText>
-          </span>
+          <PassiveFormula passive={card.passive} />
         )}
         {note && (
           <span className={styles.cardTag}>

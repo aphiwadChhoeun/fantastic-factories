@@ -6,20 +6,45 @@ import type { BlueprintCategory, BlueprintTool, DieColor } from "@/engine";
  * to count without reading: the two you spend, the one you score, and the one
  * that outlasts the concession.
  *
- * Text glyphs rather than emoji, deliberately. An emoji brings its own colour
- * and ignores `color`, and the whole point of these is to be colour-coded.
+ * Emoji, and the colour coding now runs the other way round. These used to be
+ * text glyphs (`▰ ↯ ▣ ✦`) tinted by `RESOURCE_COLORS`, on the grounds that an
+ * emoji brings its own colour and ignores `color` — true, but it turned out to
+ * be the wrong thing to optimise. A `▰` tinted grey-blue still has to be
+ * *learned*; a blue diamond and a green crate are recognised. So the glyph is
+ * now the thing that carries the colour, and the tokens below exist to match
+ * the count and the word beside it to the glyph rather than the reverse.
+ *
+ * Which means: **these two tables have to be changed together.** A glyph whose
+ * emoji font paints it a different hue to its token leaves every count on the
+ * board a shade off its own icon.
+ *
+ * Four shapes as well as four colours, because a colour-blind player counting
+ * squares in two greens has been given nothing. Diamond, bolt, square, star.
  */
 export type ResourceKind = "metal" | "energy" | "goods" | "prestige";
 
 export const RESOURCE_GLYPHS: Record<ResourceKind, string> = {
-  /* An ingot on its side. A hexagon would be nicer and falls back to a circle
-   * in too many stacks, which puts it one glyph away from a player's colour. */
-  metal: "▰",
-  energy: "↯",
-  goods: "▣",
-  prestige: "✦",
+  /* Blue, and the one faceted shape — an ingot catching the light. */
+  metal: "🔷",
+  energy: "⚡",
+  /* A crate, square-on. The only square, so it cannot be read as an ingot. */
+  goods: "🟩",
+  /* Gilt, and the only shape with points. What the ledger counts at the end. */
+  prestige: "⭐",
 };
 
+/**
+ * A blueprint plate — a card out of hand on the paying side of a formula, or
+ * one drawn into it on the other. Grey and unfussy: it is the only icon that
+ * stands for *a card* rather than for something a card is worth, so it must
+ * not compete with the four above for attention.
+ */
+export const BLUEPRINT_GLYPH = "📄";
+
+/**
+ * The word and the count beside each glyph, matched to the colour the emoji
+ * font actually paints. See the note above: change these with the glyphs.
+ */
 export const RESOURCE_COLORS: Record<ResourceKind, string> = {
   metal: "var(--color-res-metal)",
   energy: "var(--color-res-energy)",
@@ -69,12 +94,18 @@ export const BLUEPRINT_TOOL_SWATCHES: Record<BlueprintTool, CSSProperties> = {
   shovel: { background: "#6b7a2b", color: "#e8dcc0" },
 };
 
-/** Unicode stand-ins until the real icons exist. */
+/**
+ * Unicode stand-ins until the real icons exist.
+ *
+ * The gear and the pick carry an explicit variation selector. Without one they
+ * are old dingbats with a text default, so half the platforms paint them as a
+ * thin outline beside a full-colour hammer and wrench.
+ */
 export const BLUEPRINT_TOOL_GLYPHS: Record<BlueprintTool, string> = {
   hammer: "🔨",
   wrench: "🔧",
-  gear: "⚙",
-  shovel: "⛏",
+  gear: "⚙️",
+  shovel: "⛏️",
 };
 
 /**
