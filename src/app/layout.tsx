@@ -35,6 +35,15 @@ const inter = Inter({
   display: "swap",
 });
 
+/**
+ * The tab icon is `icon.png` beside this file, not a `<link>` written here —
+ * that filename is an App Router convention, and Next hashes it, emits the
+ * tag and sets the type and size off the file itself.
+ *
+ * The name matters and is easy to get wrong: `favicon` is a convention only
+ * as `favicon.ico`. A `favicon.png` is not one, and sits in `app/` doing
+ * absolutely nothing. The source art it was cut from is `assets/`.
+ */
 export const metadata: Metadata = {
   title: "Fantastic Factories",
   description: "Solo play against an AI opponent",
