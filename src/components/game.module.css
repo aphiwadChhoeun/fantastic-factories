@@ -16,14 +16,20 @@
 }
 
 .title {
+  font-family: var(--font-display);
   font-size: 22px;
-  font-weight: 650;
-  letter-spacing: -0.01em;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-parchment);
 }
 
 .status {
-  font-size: 14px;
-  opacity: 0.75;
+  font-family: var(--font-label);
+  font-size: 13px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-steel-300);
 }
 
 .columns {
@@ -39,20 +45,25 @@
   }
 }
 
+/* A panel is a plate bolted to the frame: iron fill, a lit top edge. */
 .section {
-  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  border: 1px solid var(--color-edge);
   border-radius: 10px;
   padding: 14px;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  background: var(--color-deep);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 4%);
 }
 
 .sectionTitle {
-  font-size: 12px;
+  font-family: var(--font-label);
+  font-size: 11px;
+  font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.07em;
-  opacity: 0.6;
+  letter-spacing: 0.09em;
+  color: var(--color-steel-300);
 }
 
 .stack {
@@ -67,38 +78,101 @@
   gap: 10px;
 }
 
+/*
+ * Every card is the same plate: same width, same height, whatever is stamped
+ * on it. A row of cards of different heights reads as a row of different
+ * *kinds* of thing, which none of these are — and a hand that reflows as it
+ * changes is a hand you have to re-find every turn.
+ *
+ * The price of that is that the longest rules text has to go somewhere, so the
+ * middle band scrolls. Nothing is ever clipped away.
+ */
 .card {
-  border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+  border: 1px solid var(--color-edge);
   border-radius: 8px;
-  padding: 10px;
-  width: 148px;
+  width: 164px;
+  height: 228px;
+  padding: 0;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: 4px;
   font-size: 12px;
   line-height: 1.35;
+  background: var(--color-surface-1);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 5%);
 }
 
+/* The name, in the colour of what the card is. The band is the type. */
+.cardName {
+  flex: none;
+  padding: 6px 9px;
+  font-family: var(--font-label);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.25;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* The mark and the price: what comes out of hand, and what comes out of stock. */
+.cardStats {
+  flex: none;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  padding: 6px 9px;
+  border-bottom: 1px solid var(--color-edge);
+  background: rgb(0 0 0 / 18%);
+}
+
+/* Everything the card actually does. The one part allowed to overflow. */
+.cardBody {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-edge-bright) transparent;
+}
+
+.cardBody::-webkit-scrollbar {
+  width: 4px;
+}
+
+.cardBody::-webkit-scrollbar-thumb {
+  border-radius: 2px;
+  background: var(--color-edge-bright);
+}
+
+/* What the card is worth, and what is standing on it. Empty on most cards. */
+.cardFoot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  padding: 0 9px;
+}
+
+.cardFoot:not(:empty) {
+  padding: 7px 9px;
+  border-top: 1px solid var(--color-edge);
+}
+
+/* A plate that has been raised stands in its own light. */
 .cardBuilt {
-  background: color-mix(in srgb, currentColor 7%, transparent);
+  background: var(--color-surface-2);
+  border-color: var(--color-edge-bright);
 }
 
 /* Contractors are one-time cards; the dashed edge separates them at a glance. */
 .cardContractor {
   border-style: dashed;
-}
-
-/*
- * What the card is, in its printed colour — the band across the top of the
- * real card. Full width, so the colour reads before the word does.
- */
-.categoryBand {
-  align-self: stretch;
-  border-radius: 4px;
-  padding: 2px 6px;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  background: var(--color-deep);
 }
 
 /*
@@ -107,7 +181,7 @@
  */
 .devPanel {
   border-style: dashed;
-  border-color: color-mix(in srgb, #d4a017 45%, transparent);
+  border-color: color-mix(in srgb, var(--color-danger) 55%, transparent);
 }
 
 .devRow {
@@ -137,7 +211,7 @@
    * the positioning.
    */
   margin: auto;
-  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  border: 1px solid var(--color-edge-bright);
   border-radius: 12px;
   padding: 22px 24px;
   /* Sized by the table and the buttons, so neither has to wrap. */
@@ -145,8 +219,10 @@
   min-width: 320px;
   max-width: min(460px, calc(100vw - 32px));
   color: inherit;
-  background: var(--background);
-  box-shadow: 0 18px 50px rgb(0 0 0 / 35%);
+  background: var(--color-deep);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 6%),
+    0 18px 50px rgb(0 0 0 / 55%);
 }
 
 .modal::backdrop {
@@ -155,9 +231,12 @@
 }
 
 .modalTitle {
+  font-family: var(--font-display);
   font-size: 20px;
-  font-weight: 650;
-  letter-spacing: -0.01em;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-parchment);
 }
 
 .modalReason {
@@ -198,7 +277,7 @@
 
 /* Said in the heading too — this only has to make it findable in the table. */
 .scoreWon {
-  background: color-mix(in srgb, #4fb37c 16%, transparent);
+  background: color-mix(in srgb, var(--color-legal) 16%, transparent);
 }
 
 .modalActions {
@@ -225,7 +304,7 @@
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  opacity: 0.5;
+  color: var(--color-steel-500);
 }
 
 .cardSpent {
@@ -235,7 +314,75 @@
 .cardEmpty {
   border-style: dashed;
   opacity: 0.4;
+  padding: 10px;
+  align-items: center;
   justify-content: center;
+  text-align: center;
+}
+
+/*
+ * A resource, shown rather than spelled: the glyph in its own colour, then
+ * the count. Small enough to sit inside a sentence, loud enough to be counted
+ * without reading one.
+ */
+.chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.chipGlyph {
+  font-size: 11px;
+  line-height: 1;
+}
+
+.chipCount {
+  font-size: 12.5px;
+}
+
+/* The words around the chips: "also", "+2 set". Never the subject. */
+.chipFree {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-steel-500);
+}
+
+/* This build is cheaper than the one printed, because something else stands. */
+.discount {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-legal);
+}
+
+/* A resource named mid-sentence. Keeps the grammar, gains the colour. */
+.mention {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.prestige {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+/* Said for a screen reader, where the glyph says nothing. */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 /*
@@ -247,32 +394,53 @@ button.card {
   font-family: inherit;
   font-weight: inherit;
   color: inherit;
-  background: none;
+  /* Only the button's own chrome is dropped — the plate keeps its own fill. */
+  background: var(--color-surface-1);
   text-align: left;
   cursor: pointer;
 }
 
-/* You can act on this card right now — take it, or pay with it. */
+/* A built plate is still a plate when it is also a button. */
+button.cardBuilt {
+  background: var(--color-surface-2);
+}
+
+button.cardContractor {
+  background: var(--color-deep);
+}
+
+/*
+ * You can act on this card right now — take it, or pay with it. Spice, and
+ * spice is never used for anything else: a rim and a short falloff, so the
+ * card reads as lit rather than as outlined.
+ */
 .cardHighlight {
-  border-color: #4fb37c;
-  box-shadow: 0 0 0 1px #4fb37c;
+  border-color: color-mix(in srgb, var(--color-spice-500) 60%, transparent);
+  box-shadow: var(--shadow-glow-spice);
+  transition: box-shadow 200ms ease-out;
 }
 
 .cardHighlight:hover {
-  background: color-mix(in srgb, #4fb37c 12%, transparent);
+  box-shadow: var(--shadow-glow-spice-hi);
 }
 
-/* The contractor being paid for, while its payment is being chosen. */
+/* The card being paid for, while its payment is being chosen. */
 .cardSelected {
-  border-color: #ecbe45;
-  box-shadow: 0 0 0 2px #ecbe45;
+  border-color: var(--color-chosen);
+  box-shadow: var(--shadow-glow-chosen);
 }
 
 /* The die being dragged can be dropped here. */
 .cardDropTarget {
-  border-color: #5290e8;
+  border-color: var(--color-aether-500);
   border-style: solid;
-  box-shadow: 0 0 0 2px #5290e8;
+  box-shadow: var(--shadow-glow-aether);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cardHighlight {
+    transition: none;
+  }
 }
 
 /* A contractor slot: its tool token, then the card sitting on it. */
@@ -294,19 +462,17 @@ button.card {
   line-height: 1;
 }
 
-.cardHeader {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 6px;
-}
-
-.cardName {
+/* The name of a Headquarters section, which is a tile and not a card. */
+.hqName {
+  font-family: var(--font-label);
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-parchment);
 }
 
-/* Fill comes from the blueprint's tool type, inline. Icon only, no label. */
+/* Fill comes from the blueprint's guild mark, inline. Icon only, no label. */
 .typeBadge {
   flex: none;
   width: 20px;
@@ -319,7 +485,7 @@ button.card {
 }
 
 .cardMeta {
-  opacity: 0.7;
+  color: var(--color-steel-300);
 }
 
 .dice {
@@ -336,8 +502,11 @@ button.card {
   border: 1px solid transparent;
   display: grid;
   place-items: center;
+  font-family: var(--font-label);
   font-variant-numeric: tabular-nums;
-  font-weight: 600;
+  font-weight: 500;
+  font-size: 15px;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 18%);
 }
 
 .dieSpent {
@@ -345,9 +514,17 @@ button.card {
   text-decoration: line-through;
 }
 
-/* The Headquarters tile: three sections, sized like cards but never one. */
+/*
+ * The Headquarters tile: three sections, sized like cards but never one — so
+ * it opts back out of the fixed plate, which exists to keep a *row of cards*
+ * even.
+ */
 .hqSection {
+  height: auto;
+  align-self: stretch;
+  padding: 12px;
   gap: 6px;
+  overflow: visible;
 }
 
 /* An open slot on a section — a die-sized outline waiting to be filled. */
@@ -358,8 +535,8 @@ button.card {
 
 /* The slot a drop would actually fill: the next one open on the section. */
 .hqSlotActive {
-  border: 1px solid #5290e8;
-  background: color-mix(in srgb, #5290e8 25%, transparent);
+  border: 1px solid var(--color-aether-500);
+  background: color-mix(in srgb, var(--color-aether-500) 25%, transparent);
   opacity: 1;
 }
 
@@ -376,7 +553,7 @@ button.card {
 .prompt {
   margin: 6px 0 0;
   font-size: 11px;
-  opacity: 0.65;
+  color: var(--color-spice-400);
 }
 
 /*
@@ -407,20 +584,37 @@ button.card {
   gap: 8px;
 }
 
+/*
+ * Brushed brass: a vertical gradient for the form, a hairline repeat for the
+ * grain of the metal, and a bevel that pools shadow along the bottom edge.
+ * Pressing it moves the plate a pixel and puts the light out.
+ */
 .moveButton {
-  font: inherit;
-  font-size: 13px;
+  font-family: var(--font-label);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   text-align: left;
   padding: 8px 10px;
   border-radius: 7px;
-  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
-  background: transparent;
-  color: inherit;
+  border: 1px solid var(--color-edge);
+  color: var(--color-parchment);
   cursor: pointer;
+  background-color: transparent;
+  background-image:
+    repeating-linear-gradient(90deg, rgb(255 255 255 / 5%) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, #3a3128 0%, #241e18 55%, #171310 100%);
+  box-shadow: var(--shadow-plate);
 }
 
 .moveButton:hover:not(:disabled) {
-  background: color-mix(in srgb, currentColor 10%, transparent);
+  filter: brightness(1.15);
+}
+
+.moveButton:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: inset 0 2px 6px rgb(0 0 0 / 70%);
 }
 
 .moveButton:disabled {
@@ -443,11 +637,15 @@ button.card {
   font-size: 12px;
   max-height: 260px;
   overflow-y: auto;
-  opacity: 0.8;
+  color: var(--color-steel-300);
 }
 
+/* Whose concession is being worked right now. */
 .playerActive {
-  border-color: color-mix(in srgb, currentColor 55%, transparent);
+  border-color: color-mix(in srgb, var(--color-spice-500) 50%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 4%),
+    0 0 24px -10px rgb(255 138 61 / 70%);
 }
 
 .playerHeader {
@@ -457,11 +655,33 @@ button.card {
   gap: 10px;
 }
 
+/* What a player is holding, in one line of glyphs. */
+.resourceBar {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: 12px;
+}
+
+/* Goods plus standing — the only number that decides anything. */
+.score {
+  font-family: var(--font-label);
+  font-size: 15px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-parchment);
+}
+
 .playerName {
-  font-weight: 600;
+  font-family: var(--font-label);
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-parchment);
 }
 
 .empty {
   font-size: 12px;
-  opacity: 0.55;
+  color: var(--color-steel-500);
 }

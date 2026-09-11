@@ -2,6 +2,7 @@ import type { DragEvent } from "react";
 import { HQ_SECTIONS, type DieColor, type HqPlacements, type HqSectionId, type Move } from "@/engine";
 import { DIE_SWATCHES } from "@/lib/colors";
 import { describeHqReward, describeRequirement } from "@/lib/format";
+import { ResourceText } from "./Resource";
 import styles from "./game.module.css";
 
 type Props = {
@@ -43,11 +44,10 @@ export function HeadquartersView({ placements, color, targets, onPlay }: Props) 
                   : undefined
               }
             >
-              <span className={styles.cardHeader}>
-                <span className={styles.cardName}>{section.name}</span>
-              </span>
+              <span className={styles.hqName}>{section.name}</span>
               <span className={styles.cardMeta}>
-                Takes {describeRequirement(section.accepts)} — {describeHqReward(section.reward)}
+                Takes {describeRequirement(section.accepts)} —{" "}
+                <ResourceText>{describeHqReward(section.reward)}</ResourceText>
               </span>
               <div className={styles.dice}>
                 {Array.from({ length: section.slots }, (_, index) => {

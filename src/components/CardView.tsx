@@ -11,6 +11,7 @@ import {
   describePerkCost,
   describeResources,
 } from "@/lib/format";
+import { ResourceChip, ResourceChips, ResourceText } from "./Resource";
 import styles from "./game.module.css";
 
 function costsResources(cost: Resources): boolean {
@@ -71,86 +72,124 @@ export function CardView({
     .filter(Boolean)
     .join(" ");
 
+  /**
+   * What the card is, said in colour alone. The word used to be printed under
+   * the name; the band carries it now, and the name sits in it — one band
+   * instead of two, and the type still reads before the name does.
+   */
+  const band =
+    card.kind === "blueprint"
+      ? BLUEPRINT_CATEGORY_SWATCHES[card.type]
+      : { background: "var(--color-surface-3)", color: "var(--color-parchment-dim)" };
+
+  // Built, the build cost is history; in hand, it is the first thing asked.
+  const printed = card.kind === "blueprint" ? card.buildCost : undefined;
+  const price = printed && !built ? (buildCost ?? printed) : undefined;
+  const discounted = price !== undefined && printed !== undefined && price.metal < printed.metal;
+
+  /**
+   * The mark and the price, on one line. For a blueprint the mark *is* half
+   * the price — it says which card comes out of hand to pay for this one — so
+   * the two belong together rather than in a header and a sentence.
+   */
+  const stats =
+    card.kind === "blueprint" ? (
+      <div className={styles.cardStats}>
+        <span
+          className={styles.typeBadge}
+          style={BLUEPRINT_TOOL_SWATCHES[card.tool]}
+          title={built ? `${card.tool} blueprint` : `Build: discard a ${card.tool} blueprint`}
+          aria-label={built ? `${card.tool} blueprint` : `Build: discard a ${card.tool} blueprint`}
+          role="img"
+        >
+          {BLUEPRINT_TOOL_GLYPHS[card.tool]}
+        </span>
+        {price && costsResources(price) && <ResourceChips resources={price} />}
+        {discounted && <span className={styles.discount}>discounted</span>}
+      </div>
+    ) : card.extraCost && costsResources(card.extraCost) ? (
+      <div className={styles.cardStats}>
+        <span className={styles.chipFree}>also</span>
+        <ResourceChips resources={card.extraCost} />
+      </div>
+    ) : null;
+
   const body = (
     <>
-      <span className={styles.cardHeader}>
-        <span className={styles.cardName}>{card.name}</span>
-        {/* Icon and colour only — the tool name is on hover. */}
-        {card.kind === "blueprint" && (
-          <span
-            className={styles.typeBadge}
-            style={BLUEPRINT_TOOL_SWATCHES[card.tool]}
-            title={`${card.tool} blueprint`}
-            aria-label={`${card.tool} blueprint`}
-            role="img"
-          >
-            {BLUEPRINT_TOOL_GLYPHS[card.tool]}
+      <span className={styles.cardName} style={band} title={cardTitle(card)}>
+        {card.name}
+      </span>
+      {stats}
+
+      <div className={styles.cardBody}>
+        {card.kind === "blueprint" && card.perk && (
+          <span className={styles.cardMeta}>
+            Work: <ResourceText>{describePerkCost(card.perk)}</ResourceText>
           </span>
         )}
-      </span>
-      {/* What the card is, in its printed colour. */}
-      {card.kind === "blueprint" && (
-        <span className={styles.categoryBand} style={BLUEPRINT_CATEGORY_SWATCHES[card.type]}>
-          {card.type}
-        </span>
-      )}
-      {card.kind === "contractor" && card.extraCost && (
-        <span className={styles.cardMeta}>Also costs: {describeResources(card.extraCost)}</span>
-      )}
-      {/* Built, the build cost is history; in hand, both matter. */}
-      {card.kind === "blueprint" &&
-        !built &&
-        (() => {
-          const price = buildCost ?? card.buildCost;
-          const discounted = price.metal < card.buildCost.metal;
-          return (
+        {card.kind === "contractor" ? (
+          <span className={styles.cardMeta}>
+            <ResourceText>{describeEffect(card.effect)}</ResourceText>
+          </span>
+        ) : (
+          card.perk && (
             <span className={styles.cardMeta}>
-              Build: discard a {card.tool}
-              {costsResources(price) ? `, ${describeResources(price)}` : ""}
-              {discounted ? " (discounted)" : ""}
+              <ResourceText>{describeEffect(card.perk.effect)}</ResourceText>
             </span>
-          );
-        })()}
-      {card.kind === "blueprint" && card.perk && (
-        <span className={styles.cardMeta}>Work: {describePerkCost(card.perk)}</span>
-      )}
-      {card.kind === "contractor" ? (
-        <span className={styles.cardMeta}>{describeEffect(card.effect)}</span>
-      ) : (
-        card.perk && <span className={styles.cardMeta}>{describeEffect(card.perk.effect)}</span>
-      )}
-      {/* A passive is not worked, so it has no Work line — only what it does. */}
-      {card.kind === "blueprint" && card.passive && (
-        <span className={styles.cardMeta}>{describePassive(card.passive)}</span>
-      )}
-      {card.kind === "blueprint" && card.prestige ? (
-        <span className={styles.cardMeta}>
-          {card.prestige} prestige{card.prestigeBonus ? `, +${card.prestigeBonus} for the set` : ""}
-        </span>
-      ) : null}
-      {/*
-        * How many slots the perk has, except for a card that borrows one: the
-        * Replicator prints no dice of its own and holds however many the perk
-        * it copied asked for.
-        */}
-      {card.kind === "blueprint" && built && card.perk && (card.perk.dice > 0 || dice.length > 0) && (
-        <div className={styles.dice}>
-          {Array.from({ length: Math.max(card.perk.dice, dice.length) }, (_, index) => {
-            const face = dice[index];
-            return face === undefined ? (
-              <span key={index} className={`${styles.die} ${styles.hqSlot}`} />
-            ) : (
-              <span key={index} className={`${styles.die} ${styles.dieSpent}`}>
-                {face}
-              </span>
-            );
-          })}
-        </div>
-      )}
-      {card.kind === "contractor" && (
-        <span className={styles.cardTag}>resolves on take, then discarded</span>
-      )}
-      {note && <span className={styles.cardTag}>{note}</span>}
+          )
+        )}
+        {/* A passive is not worked, so it has no Work line — only what it does. */}
+        {card.kind === "blueprint" && card.passive && (
+          <span className={styles.cardMeta}>
+            <ResourceText>{describePassive(card.passive)}</ResourceText>
+          </span>
+        )}
+        {note && (
+          <span className={styles.cardTag}>
+            <ResourceText>{note}</ResourceText>
+          </span>
+        )}
+      </div>
+
+      <div className={styles.cardFoot}>
+        {card.kind === "blueprint" && card.prestige ? (
+          <span className={styles.prestige}>
+            <ResourceChip
+              kind="prestige"
+              amount={card.prestige}
+              title={`${card.prestige} prestige`}
+            />
+            {card.prestigeBonus ? (
+              <span className={styles.chipFree}>+{card.prestigeBonus} set</span>
+            ) : null}
+          </span>
+        ) : null}
+        {/*
+          * How many slots the perk has, except for a card that borrows one: the
+          * Replicator prints no dice of its own and holds however many the perk
+          * it copied asked for.
+          */}
+        {card.kind === "blueprint" &&
+          built &&
+          card.perk &&
+          (card.perk.dice > 0 || dice.length > 0) && (
+            <div className={styles.dice}>
+              {Array.from({ length: Math.max(card.perk.dice, dice.length) }, (_, index) => {
+                const face = dice[index];
+                return face === undefined ? (
+                  <span key={index} className={`${styles.die} ${styles.hqSlot}`} />
+                ) : (
+                  <span key={index} className={`${styles.die} ${styles.dieSpent}`}>
+                    {face}
+                  </span>
+                );
+              })}
+            </div>
+          )}
+        {card.kind === "contractor" && (
+          <span className={styles.cardTag}>one engagement, then gone</span>
+        )}
+      </div>
     </>
   );
 
@@ -185,4 +224,15 @@ export function CardView({
       {body}
     </div>
   );
+}
+
+/**
+ * The type, and what a blueprint costs, kept somewhere it can still be read.
+ * Neither is printed on the face any more — the band says the type in colour
+ * and the stats row says the price in glyphs — so this is the way back to the
+ * words for anyone who wants them.
+ */
+function cardTitle(card: Card): string {
+  if (card.kind === "contractor") return "Contractor";
+  return `${card.type} · build: discard a ${card.tool}, ${describeResources(card.buildCost)}`;
 }

@@ -1,17 +1,95 @@
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@import "tailwindcss";
+
+/**
+ * The Rustward Concession — the whole design system, in one place.
+ *
+ * `static` matters. Tailwind only emits the variables behind utilities it can
+ * see you using, and it cannot see into `game.module.css`: the modules read
+ * these as plain custom properties, which is what lets the board be reskinned
+ * a component at a time instead of all at once. `static` emits every one of
+ * them regardless.
+ *
+ * See docs/theme.md for what each of these is for.
+ */
+@theme static {
+  /* Backgrounds. Cold iron, never pure black — black has no material. */
+  --color-void: #0b0c0e;
+  --color-deep: #121417;
+  --color-surface-1: #1a1d21;
+  --color-surface-2: #23272c;
+  --color-surface-3: #2e333a;
+  --color-edge: #3a4048;
+  --color-edge-bright: #565e68;
+
+  /* Steel. The three weights of anything written in the UI's own voice. */
+  --color-steel-100: #c9d1d9;
+  --color-steel-300: #8b949e;
+  --color-steel-500: #5a636e;
+
+  /* Spice. Reserved for "you can act here" and nothing else. */
+  --color-spice-400: #ff8a3d;
+  --color-spice-500: #e2660f;
+  --color-spice-600: #b44a08;
+
+  /* Aether. Reserved for "the die you are holding can land here". */
+  --color-aether-400: #4dd5e8;
+  --color-aether-500: #35c6dc;
+
+  /* Material. Plans are drawn on blueprint; what a card says is printed. */
+  --color-parchment: #e8dcc0;
+  --color-parchment-dim: #cbbe9e;
+  --color-ink: #2a2318;
+  --color-blueprint: #16324f;
+  --color-blueprint-line: #7fb3d9;
+
+  /* Resources. These have to survive being 12px tall beside a number. */
+  --color-res-metal: #9aa7b4;
+  --color-res-energy: #ffc53d;
+  --color-res-goods: #5fbf8a;
+  --color-res-standing: #d9b44a;
+
+  /*
+   * States. One meaning each, and never two at once on the same element —
+   * if everything glows, nothing does.
+   */
+  --color-legal: #46b37e;
+  --color-chosen: #e3b341;
+  --color-target: #35c6dc;
+  --color-danger: #d94f3d;
+
+  /*
+   * Glows, as whole shadow stacks rather than colours, so hover swaps the
+   * stack in one property. A Dota glow is a rim and not a bloom: a crisp
+   * bright edge, a short falloff, and the bevel kept underneath.
+   */
+  --shadow-glow-spice:
+    0 0 0 1px rgb(226 102 15 / 55%), 0 0 18px -4px rgb(255 138 61 / 65%),
+    inset 0 1px 0 rgb(255 255 255 / 6%);
+  --shadow-glow-spice-hi:
+    0 0 0 1px rgb(255 138 61 / 90%), 0 0 28px -2px rgb(255 138 61 / 80%),
+    inset 0 1px 0 rgb(255 255 255 / 10%);
+  --shadow-glow-aether:
+    0 0 0 1px rgb(53 198 220 / 70%), 0 0 22px -6px rgb(77 213 232 / 70%);
+  --shadow-glow-chosen:
+    0 0 0 1px rgb(227 179 65 / 85%), 0 0 20px -6px rgb(227 179 65 / 55%);
+  /* A brushed plate: highlight along the top edge, shadow pooling at the bottom. */
+  --shadow-plate:
+    inset 0 1px 0 rgb(255 214 153 / 22%), inset 0 -2px 6px rgb(0 0 0 / 55%),
+    0 1px 0 rgb(0 0 0 / 60%);
+
+  /* Type. The families themselves are loaded by next/font in layout.tsx. */
+  --font-display: var(--font-cinzel), Georgia, serif;
+  --font-label: var(--font-oswald), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+/*
+ * Dark only, and not as a preference. A light version of this theme is a
+ * different theme, so there is nothing here for the OS to switch between.
+ */
 html {
   height: 100%;
+  color-scheme: dark;
 }
 
 html,
@@ -24,12 +102,37 @@ body {
   min-height: 100%;
   display: flex;
   flex-direction: column;
-  color: var(--foreground);
-  background: var(--background);
-  font-family:
-    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: var(--color-steel-100);
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+
+  /*
+   * The desert ground: spice haze coming over the horizon from above, a cold
+   * aether bleed from the crust below, and a fine scanline for the grain of
+   * the thing. Fixed, so the light stays put while the board scrolls.
+   */
+  background-color: var(--color-void);
+  background-image:
+    radial-gradient(1200px 600px at 50% -10%, rgb(226 102 15 / 16%), transparent 60%),
+    radial-gradient(800px 400px at 85% 110%, rgb(53 198 220 / 8%), transparent 60%),
+    repeating-linear-gradient(0deg, rgb(255 255 255 / 2%) 0 1px, transparent 1px 4px);
+  background-attachment: fixed;
+}
+
+/*
+ * Grit over everything, drawn once. A single fixed layer costs one composited
+ * quad; the same noise applied per-panel would cost one per panel.
+ */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  pointer-events: none;
+  opacity: 0.045;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
 * {
@@ -41,10 +144,4 @@ body {
 a {
   color: inherit;
   text-decoration: none;
-}
-
-@media (prefers-color-scheme: dark) {
-  html {
-    color-scheme: dark;
-  }
 }

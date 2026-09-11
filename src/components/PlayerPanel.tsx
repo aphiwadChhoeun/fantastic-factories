@@ -7,6 +7,7 @@ import {
   HAND_LIMIT,
   overLimits,
   perkCost,
+  prestigeOf,
   RESOURCE_LIMIT,
   scoreOf,
   type BlueprintCard,
@@ -19,6 +20,7 @@ import { colorSwatch, DIE_SWATCHES } from "@/lib/colors";
 import { describeResources, moveKey } from "@/lib/format";
 import { CardView } from "./CardView";
 import { HeadquartersView } from "./HeadquartersView";
+import { ResourceChip, ResourceText } from "./Resource";
 import styles from "./game.module.css";
 
 /**
@@ -199,11 +201,20 @@ export function PlayerPanel({ player, active, market, interaction }: Props) {
           {player.name}
           {active ? " — to act" : ""}
         </span>
-        <span className={styles.cardMeta}>
+        <span className={styles.resourceBar}>
           {/* The automaton buys nothing, so it is never dealt anything to buy with. */}
-          {!automaton && `${player.resources.metal} metal · ${player.resources.energy} energy · `}
-          {player.resources.goods} goods · {player.compound.length} in compound ·{" "}
-          <strong title="Goods plus prestige standing">{scoreOf(player)} score</strong>
+          {!automaton && (
+            <>
+              <ResourceChip kind="metal" amount={player.resources.metal} />
+              <ResourceChip kind="energy" amount={player.resources.energy} />
+            </>
+          )}
+          <ResourceChip kind="goods" amount={player.resources.goods} />
+          <ResourceChip kind="prestige" amount={prestigeOf(player.compound)} />
+          <span className={styles.chipFree}>{player.compound.length} built</span>
+          <strong className={styles.score} title="Goods plus prestige standing">
+            {scoreOf(player)}
+          </strong>
         </span>
       </header>
 
@@ -215,8 +226,11 @@ export function PlayerPanel({ player, active, market, interaction }: Props) {
       {interaction && (over.resources > 0 || over.cards > 0) && (
         <div>
           <p className={styles.prompt}>
-            {over.resources > 0 &&
-              `Over by ${over.resources} — keep at most ${RESOURCE_LIMIT} metal and energy. `}
+            {over.resources > 0 && (
+              <ResourceText>
+                {`Over by ${over.resources} — keep at most ${RESOURCE_LIMIT} metal and energy. `}
+              </ResourceText>
+            )}
             {over.cards > 0 &&
               `Over by ${over.cards} — keep at most ${HAND_LIMIT} cards, so click one to discard.`}
           </p>

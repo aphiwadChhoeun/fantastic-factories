@@ -40,6 +40,26 @@ src/
   dev/        debug tools, compiled out of production
 ```
 
+## Look
+
+The board wears a theme — an industrial desert empire, pitched in full in
+[docs/theme.md](docs/theme.md). Two things are worth knowing before you touch
+any styling:
+
+- **The tokens live in `src/app/globals.css`**, under Tailwind v4's `@theme`.
+  There is no `tailwind.config.js`; v4 declares its theme in CSS. The block is
+  `@theme static` on purpose, so every token is emitted as a plain custom
+  property whether or not a utility class uses it — that is what lets
+  `game.module.css` read `var(--color-spice-500)` and the reskin proceed one
+  component at a time.
+- **`src/lib/colors.ts` owns everything chosen per card and per die** — the six
+  crew colours, the four guild marks, the five printed category bands. A
+  stylesheet cannot make those choices, so they are inline styles instead.
+
+Colour carries one meaning each and never two at once: spice for *you can act
+here*, aether for *the die you are holding lands here*, gilt for *this is the
+card being paid for*.
+
 ## Saving
 
 The game in progress is written to `localStorage` after every move, so a
