@@ -38,11 +38,20 @@ import styles from "./game.module.css";
  * is chosen). Those get a short uppercase note instead of a worse pictogram.
  */
 
-/** What a single die must show, in the die's own shape. Blank means any. */
+/**
+ * A die whose face is not pinned down: one the perk will take at any value,
+ * or one it hands over before anything has been rolled. Drawn as a `?` rather
+ * than left empty — an empty square is what an *unfilled socket* looks like in
+ * the card footer and on the Headquarters, and a die that takes anything is
+ * the opposite of one that has nothing on it yet.
+ */
+const ANY_FACE = "?";
+
+/** What a single die must show, in the die's own shape. */
 function requirementMark(accepts: ActivationRequirement): string {
   switch (accepts.kind) {
     case "any":
-      return "";
+      return ANY_FACE;
     case "exact":
       return String(accepts.face);
     case "atLeast":
@@ -58,9 +67,9 @@ function requirementMark(accepts: ActivationRequirement): string {
  * side of the arrow it is one the perk hands over.
  */
 function DieSlot({ accepts }: { accepts?: ActivationRequirement }) {
-  const mark = accepts ? requirementMark(accepts) : "";
+  const mark = accepts ? requirementMark(accepts) : ANY_FACE;
   return (
-    <span className={`${styles.pip} ${mark === "" ? styles.pipAny : ""}`}>{mark}</span>
+    <span className={`${styles.pip} ${mark === ANY_FACE ? styles.pipAny : ""}`}>{mark}</span>
   );
 }
 
@@ -68,7 +77,7 @@ function DieSlot({ accepts }: { accepts?: ActivationRequirement }) {
 function DiceToken({ amount }: { amount: number }) {
   return (
     <span className={styles.chip}>
-      <span className={`${styles.pip} ${styles.pipAny}`} />
+      <DieSlot />
       <span className={styles.chipCount}>{amount}</span>
     </span>
   );

@@ -41,6 +41,14 @@
   --color-ink: #2a2318;
   --color-blueprint: #16324f;
   --color-blueprint-line: #7fb3d9;
+  /*
+   * Hazard tape, for the contractor pile and nothing else. A freeholder is
+   * passing through and the pile is the site they are working: taped off
+   * while it lasts, and gone when the tape comes down. Deliberately the one
+   * yellow on the board that is not gilt — this is signage, not worth.
+   */
+  --color-hazard: #dfae1f;
+  --color-hazard-dark: #16130e;
 
   /*
    * Resources. These have to survive being 12px tall beside a number, and

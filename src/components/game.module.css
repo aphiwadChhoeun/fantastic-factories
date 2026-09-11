@@ -1,5 +1,16 @@
+/*
+ * Sized so that five plates fit one row of the board column, which is the
+ * width the whole layout is really for: a hand or a compound that wraps at
+ * four is a hand you have to read as two rows.
+ *
+ * The arithmetic, because it is load-bearing and every number in it is set
+ * somewhere else in this file: 1240 less 40 of padding leaves 1200; less the
+ * 300 sidebar and its 20 gap leaves an 840 board column; less the 28 a
+ * `.section` takes for its own padding leaves 812 for the row. Five plates at
+ * 152 with four 10px gaps is 800. Change any of those and check this again.
+ */
 .page {
-  max-width: 1100px;
+  max-width: 1240px;
   margin: 0 auto;
   padding: 24px 20px 64px;
   display: flex;
@@ -132,7 +143,8 @@
   position: relative;
   border: 1px solid var(--color-edge);
   border-radius: 8px;
-  width: 164px;
+  /* Five to a row — see the arithmetic on `.page`. */
+  width: 152px;
   height: 228px;
   padding: 0;
   overflow: hidden;
@@ -276,6 +288,113 @@
 .cardContractor {
   border-style: dashed;
   background: var(--color-deep);
+}
+
+/*
+ * The pile a market row is dealt from, drawn as the face-down card it is
+ * rather than as a number in a heading. A plate like everything else in the
+ * row — the market is five cards, not four and a counter.
+ */
+.deck {
+  /*
+   * Bottom of the row, not the top. The contractor slots are a tool token
+   * stacked above a card, so a deck aligned the ordinary way would float a
+   * token's height clear of the cards it deals. Aligning to the far edge puts
+   * it level with them and needs no magic number to do it.
+   */
+  align-self: flex-end;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: default;
+}
+
+/*
+ * Hazard tape. The stripes run the whole plate rather than banding it,
+ * because a strip of tape across a card reads as a card with tape on it —
+ * this is the tape, and there is no card to see until one is dealt.
+ */
+.deckTape {
+  background:
+    /*
+     * Dusk over the tape. Without it the pile is the loudest thing on the
+     * board, and the board reserves loud for "you can act here" — a deck is
+     * inert. The stripes stay unmistakably hazard tape; they just stop
+     * shouting over the cards they deal.
+     */
+    linear-gradient(rgb(12 10 7 / 22%), rgb(12 10 7 / 22%)),
+    repeating-linear-gradient(
+      -45deg,
+      var(--color-hazard) 0 15px,
+      var(--color-hazard-dark) 15px 30px
+    );
+  border-color: var(--color-hazard-dark);
+}
+
+/*
+ * A plan, on the navy the theme reserves for one. Two gradients for the
+ * graph paper and the drawing on top of it: the pile is the building nobody
+ * has raised yet, which is the whole idea behind blueprint-to-parchment.
+ */
+.deckPlan {
+  background:
+    /* The same dusk the tape wears, and for the same reason. */
+    linear-gradient(rgb(4 8 14 / 22%), rgb(4 8 14 / 22%)),
+    repeating-linear-gradient(
+      to right,
+      color-mix(in srgb, var(--color-blueprint-line) 20%, transparent) 0 1px,
+      transparent 1px 15px
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--color-blueprint-line) 20%, transparent) 0 1px,
+      transparent 1px 15px
+    ),
+    var(--color-blueprint);
+  border-color: color-mix(in srgb, var(--color-blueprint-line) 50%, transparent);
+}
+
+/* White line on navy — `currentColor`, so the SVG carries no colour itself. */
+.deckArt {
+  width: 76%;
+  flex: none;
+  color: #f2f7fc;
+}
+
+/*
+ * How deep the pile is. On its own dark plate, because it has to stay
+ * readable over hazard stripes and over graph paper alike, and those have
+ * nothing in common to sit against.
+ */
+.deckBand {
+  width: 100%;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 7px 6px;
+  /* Opaque enough that the stripes underneath cannot break up a digit. */
+  background: rgb(0 0 0 / 80%);
+  border-top: 1px solid rgb(255 255 255 / 14%);
+  border-bottom: 1px solid rgb(255 255 255 / 14%);
+}
+
+.deckCount {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-parchment);
+}
+
+.deckNote {
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  text-align: center;
+  color: var(--color-steel-300);
 }
 
 /*

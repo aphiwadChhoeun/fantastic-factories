@@ -343,7 +343,9 @@ The Dota 2 question. The answer is not "show less"; it is "rank harder".
 
 ### 4.1 Anatomy
 
-`176 × 248` at rest (up from today's 148 wide), `1.06×` on hover, top to bottom:
+`176 × 248` at rest, `1.06×` on hover, top to bottom. Today's plate is
+`152 × 228`, and the width is not free to grow: five of them have to fit one
+row of the board column — see the arithmetic on `.page` in `game.module.css`.
 
 ```
 ╔══════════════════════════════╗  1  FRAME — 3px iron bezel, 4 corner rivets,
@@ -433,24 +435,30 @@ goods, 1 metal"*. A card face is read at a glance a dozen times a round, and
 that is a price, an arrow and a payout wearing nine words. So it is drawn:
 
 ```
-▢ = ▢  +  ⚡5   →   🟩2 🔷1       a pair, and five energy, for two goods and a metal
-▢+1▢+1▢        →   🟩2           a run of three
-▢ ▢ ▢  Σ14+    →   ⚡2 🟩2        three dice adding to fourteen
-📄2 + ⚡2       →   🟩1 + 📄1      two plates into the furnace
-▢              →  ≤3 🔷1 / 4+ 🔷2  what the die you placed is worth
+[?] = [?]  + ⚡5  →   🟩2 🔷1        a pair, and five energy, for two goods and a metal
+[?]+1[?]+1[?]    →   🟩2            a run of three
+[?] [?] [?] Σ14+ →   ⚡2 🟩2         three dice adding to fourteen
+📄2 + ⚡2         →   🟩1 + 📄1       two plates into the furnace
+[?]              →  [≤3] 🔷1 / [4+] 🔷2   what the die you placed is worth
 ```
 
 The vocabulary, and it is deliberately small:
 
 | Mark | Means |
 |---|---|
-| `▢` (`.pip`) | one die — dashed and blank takes anything, solid and stamped names a face (`4`, `4+`, `≤3`) |
+| `[?]` (`.pip` + `.pipAny`) | a die at any value — dashed, and stamped with a `?` rather than left empty |
+| `[4]` `[4+]` `[≤3]` (`.pip`) | a die that must show a particular face. Solid, because the demand is specific |
 | 📄 (`.blueprintGlyph`) | a blueprint: out of hand on the left of the arrow, into it on the right |
 | `→` (`.arrow`) | which way the trade runs. Bone, not spice — see §2.1: orange means energy now |
 | `=` `+1` `Σn+` | the rule *between* dice: matching, a run, a floor on the total |
 | `+` `/` | everything in turn, versus one of several. Mistaking these costs a player real resources |
-| `=` (after a chip) | a count read off a face rather than printed — `⚡ = ▢` |
+| `=` (after a chip) | a count read off a face rather than printed — `⚡ = [?]` |
 | `⇅` `⟳` `±1` | a die handed back to the table changed rather than spent |
+
+The `?` is doing real work and is not decoration. An empty dashed square is
+already taken: it is what an *unfilled socket* looks like in a card's footer
+and on the Headquarters. A die that will take anything and a slot with nothing
+on it yet are opposites, and they were being drawn the same way.
 
 The dice are the one thing here still *drawn* rather than set in an emoji, and
 deliberately: a pip has to hold a stamped face (`4+`, `≤3`) and to match the
