@@ -4,8 +4,11 @@ import { diffDeals, diffStates } from "./events";
 
 type PlayerShape = {
   hand?: readonly string[];
-  /** Card id -> whether its perk has fired this round. */
-  compound?: Readonly<Record<string, boolean>>;
+  /**
+   * Card id -> whether its perk has fired this round, and how many dice stand
+   * on it where that matters. A bare boolean is a building with no dice on it.
+   */
+  compound?: Readonly<Record<string, boolean | { worked: boolean; dice: number }>>;
   /** Faces standing on each Headquarters section. */
   hq?: Partial<Record<HqSectionId, readonly DieFace[]>>;
   metal?: number;
@@ -31,9 +34,10 @@ function board({ players = [{}], market = [], turn = 0, phase = "market" }: Boar
     players: players.map((player, index) => ({
       id: `p${index}`,
       hand: (player.hand ?? []).map((id) => ({ id })),
-      compound: Object.entries(player.compound ?? {}).map(([id, worked]) => ({
+      compound: Object.entries(player.compound ?? {}).map(([id, standing]) => ({
         card: { id },
-        worked,
+        worked: typeof standing === "boolean" ? standing : standing.worked,
+        dice: Array.from({ length: typeof standing === "boolean" ? 0 : standing.dice }),
       })),
       headquarters: { ...NO_PLACEMENTS, ...(player.hq ?? {}) },
       resources: {
@@ -90,9 +94,34 @@ describe("diffStates", () => {
     const after = board({ players: [{ compound: { "warehouse-1": true }, goods: 3 }] });
 
     expect(diffStates(before, after)).toEqual([
-      { kind: "produced", cardId: "warehouse-1", playerIndex: 0, goods: 2 },
+      { kind: "produced", cardId: "warehouse-1", playerIndex: 0, goods: 2, byDie: false },
       { kind: "gained", playerIndex: 0, metal: 0, energy: 0, goods: 2 },
     ]);
+  });
+
+  it("says whether a die was struck into the card to work it", () => {
+    // A perk that takes dice, worked by dropping one on it.
+    const before = board({
+      players: [{ compound: { "foundry-0": { worked: false, dice: 0 } } }],
+    });
+    const after = board({
+      players: [{ compound: { "foundry-0": { worked: true, dice: 1 } } }],
+    });
+
+    expect(diffStates(before, after)).toEqual([
+      { kind: "produced", cardId: "foundry-0", playerIndex: 0, goods: 0, byDie: true },
+    ]);
+  });
+
+  it("does not call a perk clicked for free a landing", () => {
+    // The Laboratory takes no dice at all, so there is nothing to land and
+    // nothing to sequence: it fires the moment it is asked to.
+    const before = board({ players: [{ compound: { "laboratory-0": false } }] });
+    const after = board({ players: [{ compound: { "laboratory-0": true } }] });
+
+    expect(diffStates(before, after)).toContainEqual(
+      expect.objectContaining({ kind: "produced", byDie: false }),
+    );
   });
 
   it("says nothing when cleanup clears worked again", () => {

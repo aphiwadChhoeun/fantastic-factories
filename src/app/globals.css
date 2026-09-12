@@ -86,6 +86,9 @@
     inset 0 1px 0 rgb(255 255 255 / 10%);
   --shadow-glow-aether:
     0 0 0 1px rgb(53 198 220 / 70%), 0 0 22px -6px rgb(77 213 232 / 70%);
+  /* Not merely a place the die could go: the place it is being aimed at. */
+  --shadow-glow-aether-hi:
+    0 0 0 1px rgb(77 213 232 / 95%), 0 0 30px -2px rgb(77 213 232 / 85%);
   --shadow-glow-chosen:
     0 0 0 1px rgb(227 179 65 / 85%), 0 0 20px -6px rgb(227 179 65 / 55%);
   /* A brushed plate: highlight along the top edge, shadow pooling at the bottom. */

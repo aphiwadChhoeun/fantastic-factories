@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import {
   AUTOMA_PRODUCTION,
   buildCostFor,
@@ -20,7 +20,7 @@ import type { DieTargets } from "@/lib/board";
 import { colorSwatch } from "@/lib/colors";
 import { describeResources, moveKey } from "@/lib/format";
 import { CardView } from "./CardView";
-import { DraggableDie, type DropPoint } from "./DraggableDie";
+import { DraggableDie } from "./DraggableDie";
 import { HeadquartersView } from "./HeadquartersView";
 import { PlateButton } from "./PlateButton";
 import { ResourceChip, ResourceText, Rolling } from "./Resource";
@@ -178,6 +178,11 @@ type Props = {
    * stood up in the compound. They lean into the travel; nothing else does.
    */
   arriving?: ReadonlySet<string>;
+  /**
+   * Buildings a die has just landed on, winding up. Not part of `interaction`
+   * either: the automaton's perks fire too, and its compound is read-only.
+   */
+  charging?: ReadonlySet<string>;
   interaction?: PanelInteraction;
 };
 
@@ -187,11 +192,20 @@ export function PlayerPanel({
   market,
   flashing,
   arriving,
+  charging,
   interaction,
 }: Props) {
   const targets = interaction?.targets ?? null;
   /** How far a die may be dragged: its own panel, and no further. */
   const panel = useRef<HTMLElement | null>(null);
+  /**
+   * The `data-drop` the die in hand is aimed at, if any.
+   *
+   * Most of what a player feels as magnetism is here rather than in the die:
+   * the target reaches out as the die comes near, and it costs one render per
+   * target rather than one per pointer move. See docs/dice.md §2.3.
+   */
+  const [aimed, setAimed] = useState<string | null>(null);
   // The automaton holds no cards and never places a die on its Headquarters,
   // so both sections would be permanently empty furniture.
   const automaton = player.isAi;
@@ -202,22 +216,15 @@ export function PlayerPanel({
   /**
    * What a die was dropped on, and what that means.
    *
-   * Hit-tested rather than handled by the target, because the die is dragged
-   * by Motion rather than by the browser: there is no drop event to listen
-   * for, only a pointer that stopped somewhere. Every place a die may land
-   * carries a `data-drop` saying what it is, and only valid targets carry one
-   * — so a die let go over a card it cannot work finds nothing and springs
-   * home.
+   * The die works this out for itself and hands over the answer, rather than
+   * the board hit-testing the release. That is not a detail: the same answer
+   * lit the target up, leaned the die toward it and drew the line to it while
+   * the player was still deciding, so resolving the drop any other way would
+   * be letting the board break a promise it spent the whole drag making.
    *
-   * `elementsFromPoint` rather than `elementFromPoint`: the die itself is
-   * under the pointer, and the plural form lets us look straight past it.
+   * Null when the die was let go at nothing, which springs it home.
    */
-  function release(at: DropPoint | null) {
-    const zone = at
-      ? document.elementsFromPoint(at.x, at.y).find((el) => el.hasAttribute("data-drop"))
-      : undefined;
-    const drop = zone?.getAttribute("data-drop");
-
+  function release(drop: string | null) {
     if (drop && interaction) {
       const section = HQ_SECTION_IDS.find((id) => drop === `hq:${id}`);
       if (section) {
@@ -228,6 +235,7 @@ export function PlayerPanel({
       }
     }
 
+    setAimed(null);
     // Last, because the move above is resolved against the die still in hand.
     interaction?.onDragChange(null);
   }
@@ -315,6 +323,7 @@ export function PlayerPanel({
                   held={interaction?.dragging === die.id}
                   bounds={panel}
                   onPick={() => interaction?.onDragChange(die.id)}
+                  onAim={setAimed}
                   onRelease={release}
                 />
               );
@@ -333,6 +342,7 @@ export function PlayerPanel({
           placements={player.headquarters}
           color={player.color}
           targets={targets?.sections ?? null}
+          aimed={aimed}
         />
       )}
 
@@ -374,6 +384,8 @@ export function PlayerPanel({
                     choosing ? `Cancel ${building.card.name}` : `Work ${building.card.name}`
                   }
                   dropTarget={droppable}
+                  aimed={aimed === `card:${cardId}`}
+                  charging={charging?.has(cardId)}
                 />
               );
             })}

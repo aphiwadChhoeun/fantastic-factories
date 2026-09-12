@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { domMax, LazyMotion, MotionConfig } from "motion/react";
+import { domMax, LazyMotion, MotionConfig, useReducedMotion } from "motion/react";
 import { PHASE_LABELS, type Move } from "@/engine";
 import { DEV_TOOLS } from "@/dev/flag";
 import { burstFromCard, burstFromHq } from "@/effects/cardBurst";
 import { EmbersLayer } from "@/effects/EmbersLayer";
 import { useFlashes } from "@/hooks/useFlashes";
+import { useFuses } from "@/hooks/useFuses";
 import { useGame } from "@/hooks/useGame";
 import { useGameEvents } from "@/hooks/useGameEvents";
 import { useMounted } from "@/hooks/useMounted";
@@ -19,6 +20,7 @@ import {
   paymentsFor,
   paymentsOf,
 } from "@/lib/board";
+import { CHARGE_MS } from "@/lib/dice";
 import { describeMove, describeWinner } from "@/lib/format";
 import { Confirm } from "./Confirm";
 import { DevPanel } from "./DevPanel";
@@ -81,6 +83,7 @@ export function Game() {
 
   const board = useMemo(() => indexMoves(moves, active.dice), [moves, active.dice]);
   const mounted = useMounted();
+  const reduced = useReducedMotion();
   const playable = !state.gameOver && !isAiTurn;
 
   /**
@@ -89,6 +92,14 @@ export function Game() {
    * difference between a card that is standing and a card that just went up.
    */
   const [flashing, flash] = useFlashes(FLASH_MS);
+  /**
+   * Cards winding up: a die has landed on them and the perk is about to fire.
+   * Held for exactly as long as the fuse below, so the band of light arrives
+   * at the nameplate as the factory goes off.
+   */
+  const [charging, charge] = useFlashes(CHARGE_MS);
+  /** Beats of the landing sequence still to come, dropped if the board goes. */
+  const after = useFuses();
   /**
    * Cards that have just changed hands, which is the one thing a card cannot
    * work out for itself: crossing from the market to a hand unmounts it and
@@ -99,16 +110,38 @@ export function Game() {
 
   const onEvent = useCallback(
     (event: GameEvent) => {
-      if (event.kind === "built" || event.kind === "produced") flash(event.cardId);
-      if (event.kind === "built" || event.kind === "drafted") arrive(event.cardId);
-      // Sparks off a factory that has just paid out, and off a slot a die has
-      // just been struck into. Fire-and-forget: with the canvas switched off,
-      // still loading, or gone for reduced motion, the burst is dropped and
-      // nothing here has to know.
-      if (event.kind === "produced") burstFromCard(event.cardId, event.goods);
+      if (event.kind === "built") {
+        flash(event.cardId);
+        arrive(event.cardId);
+      }
+      if (event.kind === "drafted") arrive(event.cardId);
+      // Sparks off a slot a die has just been struck into. Fire-and-forget:
+      // with the canvas switched off, still loading, or gone for reduced
+      // motion, the burst is dropped and nothing here has to know.
       if (event.kind === "placed") burstFromHq(event.section);
+
+      if (event.kind === "produced") {
+        /*
+         * A perk worked by a die is three beats rather than one: the die
+         * strikes the socket, the charge runs up the card, and only then does
+         * the factory fire. The engine resolves all of it in a single move, so
+         * holding the last beat back is the only thing that turns a landing
+         * and a payout into one gesture instead of two at once.
+         *
+         * A perk that was simply clicked has no landing to follow, and a
+         * player who has asked for less motion has no charge to wait through
+         * — both fire on the spot. See docs/dice.md §3.
+         */
+        const fuse = event.byDie && !reduced ? CHARGE_MS : 0;
+        const { cardId, goods } = event;
+        if (fuse > 0) charge(cardId);
+        after(fuse, () => {
+          flash(cardId);
+          burstFromCard(cardId, goods);
+        });
+      }
     },
-    [flash, arrive],
+    [flash, arrive, charge, after, reduced],
   );
   useGameEvents(state, seed, onEvent);
 
@@ -328,6 +361,7 @@ export function Game() {
                   market={state.blueprints.row}
                   flashing={flashing}
                   arriving={arriving}
+                  charging={charging}
                   interaction={panelFor(index)}
                 />
               ))}

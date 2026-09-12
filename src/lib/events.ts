@@ -36,6 +36,14 @@ export type GameEvent =
       readonly cardId: string;
       readonly playerIndex: number;
       readonly goods: number;
+      /**
+       * Whether a die was struck into the card to work it, rather than the
+       * perk being clicked. It is the difference between one gesture and two:
+       * a die landing and a factory firing at the same instant are two
+       * animations that happen to be adjacent, so a landing gets the charge
+       * between them and a click does not. See docs/dice.md §3.
+       */
+      readonly byDie: boolean;
     }
   /** Stock moved, whatever moved it. Deltas, so a loss is negative. */
   | {
@@ -110,6 +118,11 @@ export function diffStates(before: GameState, after: GameState): readonly GameEv
           cardId: building.card.id,
           playerIndex,
           goods: now.resources.goods - was.resources.goods,
+          // Read off the same two buildings rather than remembered from a
+          // separate event: whether dice arrived with the firing is a fact
+          // about this card between these two boards, and nothing outside
+          // has to hold it.
+          byDie: building.dice.length > then.dice.length,
         });
       }
     }

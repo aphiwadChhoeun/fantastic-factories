@@ -14,8 +14,11 @@ import {
   BLUEPRINT_TOOL_GLYPHS,
   BLUEPRINT_TOOL_SWATCHES,
 } from "@/lib/colors";
+import { useGrowth } from "@/hooks/useGrowth";
+import { CHARGE_MS } from "@/lib/dice";
 import { describeResources } from "@/lib/format";
 import { EffectFormula, PassiveFormula, PerkFormula } from "./Formula";
+import { LandedDie } from "./LandedDie";
 import { ResourceChip, ResourceChips, ResourceText } from "./Resource";
 import styles from "./game.module.css";
 
@@ -84,6 +87,14 @@ type Props = {
   selected?: boolean;
   /** The die being dragged can be dropped here. */
   dropTarget?: boolean;
+  /** ...and is aimed at this card right now, rather than merely able to be. */
+  aimed?: boolean;
+  /**
+   * A die has landed on this card and the perk is about to fire. The fuse
+   * between the two, and the whole reason they read as one gesture rather than
+   * as two things happening at once — see docs/dice.md §3.2.
+   */
+  charging?: boolean;
   /** This card just did something — it was built, or its perk fired. */
   flash?: boolean;
 };
@@ -101,10 +112,14 @@ export function CardView({
   highlight = false,
   selected = false,
   dropTarget = false,
+  aimed = false,
+  charging = false,
   flash = false,
 }: Props) {
   const faceEl = useRef<HTMLElement | null>(null);
   const reduced = useReducedMotion();
+  /** How many dice stood on the perk a render ago, so an arrival can strike. */
+  const stood = useGrowth(dice.length);
   /** How hard this card is leaning into its travel. Zero unless it is moving. */
   const lean = arriving && !reduced ? LEAN_DEGREES : 0;
 
@@ -249,9 +264,14 @@ export function CardView({
                 return face === undefined ? (
                   <span key={index} className={`${styles.die} ${styles.hqSlot}`} />
                 ) : (
-                  <span key={index} className={`${styles.die} ${styles.dieSpent}`}>
-                    {face}
-                  </span>
+                  <LandedDie
+                    key={index}
+                    face={face}
+                    // Anything past what was standing on the perk a render ago
+                    // has only just been struck into it.
+                    struck={index >= stood}
+                    className={`${styles.die} ${styles.dieSpent}`}
+                  />
                 );
               })}
             </div>
@@ -271,10 +291,21 @@ export function CardView({
   const glow = selected
     ? styles.glowChosen
     : dropTarget
-      ? styles.glowAether
-      : highlight
-        ? styles.glowSpice
-        : null;
+      ? // A card being aimed at burns brighter than one merely offering
+        // itself, the same way a hovered card does. It is the only thing a
+        // card can do to reach out: it carries a `layout` animation and a
+        // tilt of its own, so scaling it here would be a third hand on the
+        // same transform.
+        `${styles.glowAether} ${aimed ? styles.glowAetherHi : ""}`
+      : // The die has landed and the card is winding up. Still aether, because
+        // the aether was the die: it hands over to the spice of the flash when
+        // the perk actually fires, which is the crossfade of §3.1 at the scale
+        // of a whole card.
+        charging
+        ? styles.glowAether
+        : highlight
+          ? styles.glowSpice
+          : null;
 
   const plate = {
     // A callback ref, so the same one serves a button and a div without
@@ -352,8 +383,10 @@ export function CardView({
       /*
        * Somewhere the die being held may land. Only on a card that would
        * actually take it, so a die let go over anything else finds nothing
-       * and springs home. PlayerPanel hit-tests for this: the die is dragged
-       * by Motion, so there is no drop event for the card to listen for.
+       * and springs home. The die reads these itself as it is picked up: it
+       * is dragged by Motion, so there is no drop event for the card to
+       * listen for, and this attribute is the board's whole answer to what
+       * the die may do.
        */
       data-drop={dropTarget ? `card:${card.id}` : undefined}
       layoutId={`card:${card.kind}:${card.id}`}
@@ -384,6 +417,26 @@ export function CardView({
           />
         )}
       </AnimatePresence>
+
+      {/*
+        * The charge: the die has landed and the machine is winding up. A band
+        * of light travelling from the dice row at the foot of the card to the
+        * nameplate at its head, arriving as the perk fires.
+        *
+        * Clipped by a wrapper of its own rather than by the plate, because the
+        * plate is tilted by the pointer and a band clipped inside it would
+        * travel up a card that is leaning away from you.
+        */}
+      {charging && !reduced && (
+        <span className={styles.charge} aria-hidden>
+          <m.span
+            className={styles.chargeBand}
+            initial={{ y: "185%" }}
+            animate={{ y: "-105%" }}
+            transition={{ duration: CHARGE_MS / 1000, ease: "easeIn" }}
+          />
+        </span>
+      )}
 
       {/* Thrown off once by a card that has just been built or just fired. */}
       <AnimatePresence>

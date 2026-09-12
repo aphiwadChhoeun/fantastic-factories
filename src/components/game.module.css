@@ -208,6 +208,42 @@
   box-shadow: var(--shadow-glow-aether);
 }
 
+/*
+ * Swapped rather than faded, like the spice glow under the pointer above:
+ * the answer to "would this take the die" has to keep up with the hand, and
+ * a transition on it would be the board thinking about it.
+ */
+.glowAetherHi {
+  box-shadow: var(--shadow-glow-aether-hi);
+}
+
+/*
+ * The fuse between a die landing on a building and the building firing: a
+ * band of light travelling up the card. Clipped here rather than by the plate
+ * inside, which tilts under the pointer.
+ */
+.charge {
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.chargeBand {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 55%;
+  background: linear-gradient(
+    to top,
+    transparent,
+    color-mix(in srgb, var(--color-aether-400) 34%, transparent) 55%,
+    transparent
+  );
+}
+
 /* Thrown off by a perk that has just fired. Expands once, and is gone. */
 .flashRing {
   position: absolute;
@@ -838,14 +874,26 @@ button.cardContractor {
   flex-wrap: wrap;
 }
 
+/*
+ * The hand a die is carried in: the drag lives on this layer and the die
+ * itself leans toward its target on the layer inside, so that the gesture and
+ * the magnet never write to the same transform — which the player would
+ * otherwise feel as stickiness. See docs/dice.md §2.3.
+ *
+ * Positioned so `z-index` is unconditional. A die is a flex item, which is
+ * enough for `z-index` to apply today, but that is a property of the tray
+ * rather than of the die — and a die being carried over the compound has to
+ * stay on top of it whatever the tray is doing.
+ */
+.dieGrip {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
 /* Fill, text and border colour come from the die's own colour, inline. */
 .die {
-  /*
-   * Positioned so `z-index` is unconditional. A die is a flex item, which is
-   * enough for `z-index` to apply today, but that is a property of the tray
-   * rather than of the die — and a die being carried over the compound has to
-   * stay on top of it whatever the tray is doing.
-   */
+  /* So that a ring thrown off a landing has this to measure itself against. */
   position: relative;
   width: 34px;
   height: 34px;
@@ -858,11 +906,58 @@ button.cardContractor {
   font-weight: 500;
   font-size: 15px;
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 18%);
+  /*
+   * So that a die turning over inside is turning a cube rather than folding a
+   * sheet of paper. Short, because the die is 34px and a distant vanishing
+   * point on an object this small is no perspective at all.
+   */
+  perspective: 200px;
+}
+
+/*
+ * The two faces of a die mid-turn, stacked in one grid cell so that neither
+ * has to be taken out of the flow to sit on top of the other — and so the die
+ * is still sized by its contents when nothing is turning.
+ */
+.dieTurn {
+  display: grid;
+  place-items: center;
+  transform-style: preserve-3d;
+}
+
+.dieTurn > * {
+  grid-area: 1 / 1;
+  /* Whichever face is pointing away is inside the die, and not readable. */
+  backface-visibility: hidden;
 }
 
 .dieSpent {
   opacity: 0.35;
   text-decoration: line-through;
+}
+
+/*
+ * The ring a socket throws off as a die is struck into it. Aether, because
+ * aether is the board's word for *the die you are holding goes here* — the
+ * slot wore it while you aimed, and this is that colour leaving. Outside the
+ * die's own edge, so it reads as coming off the socket rather than as a
+ * border the die arrived with.
+ */
+.strikeRing {
+  position: absolute;
+  inset: -2px;
+  border: 1px solid var(--color-aether-400);
+  border-radius: 8px;
+  pointer-events: none;
+}
+
+/* ...and the heat left in the socket once it has. */
+.strikeGlow {
+  position: absolute;
+  inset: 0;
+  border-radius: 7px;
+  box-shadow: var(--shadow-glow-spice-hi);
+  pointer-events: none;
 }
 
 /*
@@ -889,13 +984,92 @@ button.cardContractor {
   border: 1px solid var(--color-aether-500);
   background: color-mix(in srgb, var(--color-aether-500) 25%, transparent);
   opacity: 1;
+  /*
+   * Overshooting, so the slot springs open rather than inflating. This is the
+   * larger half of what a player feels as magnetism — the socket reaching for
+   * the die costs one class, where pulling the die costs a fight with the
+   * gesture carrying it. See docs/dice.md §2.3.
+   */
+  transition:
+    transform 180ms cubic-bezier(0.2, 1.5, 0.4, 1),
+    border-color 120ms ease-out,
+    background-color 120ms ease-out;
 }
 
-/* A die with somewhere to go. Anything else is not worth picking up. */
+/* ...and the one being aimed at right now opens up for it. */
+.hqSlotAimed {
+  transform: scale(1.22);
+  border-color: var(--color-aether-400);
+  background: color-mix(in srgb, var(--color-aether-400) 40%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hqSlotActive {
+    transition: none;
+  }
+
+  /* The slot still says it is the one; it just does not reach. */
+  .hqSlotAimed {
+    transform: none;
+  }
+}
+
+/*
+ * A die with somewhere to go. Anything else is not worth picking up.
+ *
+ * On the grip rather than on the die, because the grip is what the pointer is
+ * actually on — the die inside it drifts about under the magnet.
+ */
 .dieMovable {
   cursor: grab;
   /* The gesture is Motion's, so the browser must not try to scroll with it. */
   touch-action: none;
+}
+
+/*
+ * The line from the die in hand to where it would land. Fixed and portalled
+ * to the body, so it is measured against the viewport rather than against the
+ * tray — see DragTrajectory. Above the embers at 10, under the die at 60.
+ */
+.trajectory {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 30;
+}
+
+.trajectoryLine {
+  fill: none;
+  stroke: var(--color-aether-400);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-dasharray: 2 10;
+  /*
+   * Energy running toward the slot. `stroke-dashoffset` is not a property the
+   * compositor can animate, which is exactly why there is one of these and not
+   * one per target.
+   */
+  animation: flow 600ms linear infinite;
+}
+
+.trajectoryBloom {
+  fill: var(--color-aether-400);
+}
+
+@keyframes flow {
+  to {
+    /* Twice the dash period, so the loop has no seam. */
+    stroke-dashoffset: -24;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* The line still says where the die will land; it just stops travelling. */
+  .trajectoryLine {
+    animation: none;
+  }
 }
 
 /*
