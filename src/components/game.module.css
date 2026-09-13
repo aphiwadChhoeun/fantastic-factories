@@ -891,6 +891,23 @@ button.cardContractor {
   place-items: center;
 }
 
+/*
+ * The layer a die is thrown on. Between the grip and the die because the arc
+ * writes `x` and `y`, and those belong to the drag above it and to the magnet
+ * below it -- a die is never carried and in the air at once, but two hands on
+ * one transform is how they come to fight over it anyway.
+ *
+ * The perspective the lean is seen through rides on the element itself, as
+ * `transformPerspective` -- the CSS property would have to sit on the parent,
+ * and the parent is the grip, which would then be lending its vanishing point
+ * to a die being dragged as well.
+ */
+.dieToss {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
 /* Fill, text and border colour come from the die's own colour, inline. */
 .die {
   /* So that a ring thrown off a landing has this to measure itself against. */

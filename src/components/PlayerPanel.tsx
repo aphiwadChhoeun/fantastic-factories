@@ -1,4 +1,6 @@
-import { useRef, useState } from "react";
+"use client";
+
+import { useEffect, useRef, useState } from "react";
 import {
   AUTOMA_PRODUCTION,
   buildCostFor,
@@ -16,6 +18,8 @@ import {
   type Move,
   type Player,
 } from "@/engine";
+import { emitRoll } from "@/dice/bus";
+import { useGrowth } from "@/hooks/useGrowth";
 import type { DieTargets } from "@/lib/board";
 import { colorSwatch } from "@/lib/colors";
 import { describeResources, moveKey } from "@/lib/format";
@@ -206,6 +210,50 @@ export function PlayerPanel({
    * target rather than one per pointer move. See docs/dice.md §2.3.
    */
   const [aimed, setAimed] = useState<string | null>(null);
+  /** How many dice were on the table a render ago. Anything past that is new. */
+  const inTray = useGrowth(player.dice.length);
+  /*
+   * ...and whether enough of them arrived together to have been rolled.
+   *
+   * A handful comes down at once; a die that turns up on its own is as likely
+   * to have been *chosen* as thrown — a Foreman picks a face and never rolls
+   * it — and docs/dice.md §0 is blunt about which mistake matters: a dice
+   * system that only knows how to throw has nothing to show for a die that
+   * was placed. So a lone arrival is left to fade in, and the cost is that a
+   * contractor's single extra die fades when it should have been thrown.
+   *
+   * Nothing to read off the board can do better. A chosen die and a rolled one
+   * are the same die by the time the move is over.
+   */
+  const rolled = player.dice.length - inTray >= 2;
+  /** The last handful this panel asked to have thrown, so it asks only once. */
+  const asked = useRef("");
+
+  /*
+   * Hand the throw to the physics canvas, if there is one listening.
+   *
+   * Nothing here knows whether there is: `emitRoll` is dropped on the floor
+   * when the flag is off, the chunk has not loaded, or the player has asked
+   * for less motion, and the dice throw themselves in the DOM instead. The
+   * panel's own box goes with it, because that is the patch of screen the dice
+   * are allowed to roll across — see docs/dice.md §2.1.
+   */
+  useEffect(() => {
+    if (!rolled) return;
+    const fresh = player.dice.slice(inTray);
+    const key = fresh.map((die) => die.id).join(",");
+    // `rolled` stays true for the rest of the round, so without this a die
+    // being spent would be read as the whole handful being thrown again.
+    if (!key || key === asked.current) return;
+    asked.current = key;
+
+    const box = panel.current?.getBoundingClientRect();
+    if (!box) return;
+    emitRoll({
+      dice: fresh.map((die) => ({ id: die.id, face: die.face, color: die.color })),
+      within: { left: box.left, top: box.top, width: box.width, height: box.height },
+    });
+  }, [rolled, player.dice, inTray]);
   // The automaton holds no cards and never places a die on its Headquarters,
   // so both sections would be permanently empty furniture.
   const automaton = player.isAi;
@@ -313,7 +361,7 @@ export function PlayerPanel({
           <p className={styles.empty}>Not rolled yet.</p>
         ) : (
           <div className={styles.dice}>
-            {player.dice.map((die) => {
+            {player.dice.map((die, index) => {
               const movable = interaction?.movableDice.has(die.id) ?? false;
               return (
                 <DraggableDie
@@ -321,6 +369,8 @@ export function PlayerPanel({
                   die={die}
                   movable={movable}
                   held={interaction?.dragging === die.id}
+                  index={index}
+                  thrown={index >= inTray && rolled}
                   bounds={panel}
                   onPick={() => interaction?.onDragChange(die.id)}
                   onAim={setAimed}

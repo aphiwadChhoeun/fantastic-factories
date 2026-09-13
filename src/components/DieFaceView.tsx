@@ -29,11 +29,27 @@ const SETTLE_MS = 60;
  * yet: a re-roll turns rather than tumbles for now, which is still a die being
  * handled. See docs/dice.md §0 and §5.
  */
-export function DieFaceView({ face }: { face: DieFace }) {
+export function DieFaceView({
+  face,
+  tumbling = false,
+}: {
+  face: DieFace;
+  /**
+   * Whether the die is in the air. A face change is not a turn then — the die
+   * is rolling over, the numbers come up as fast as they come up, and the
+   * geometry below has nothing to say about it.
+   */
+  tumbling?: boolean;
+}) {
   /** The face on top. Behind `face` for as long as the turn takes. */
   const [shown, setShown] = useState<DieFace>(face);
-  const turn = turnTo(shown, face);
   const still = useReducedMotion();
+
+  // Caught up on the way past rather than in an effect, so a die in the air
+  // never renders a frame of the face it is about to leave.
+  if (tumbling && shown !== face) setShown(face);
+
+  const turn = tumbling ? 0 : turnTo(shown, face);
 
   /*
    * The turn is over after a fixed time, whether or not the animation meant to

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import {
   animate,
   m,
@@ -10,8 +10,10 @@ import {
   useVelocity,
 } from "motion/react";
 import type { Die } from "@/engine";
+import { useToss } from "@/hooks/useToss";
 import { aimAt, middleOf, pullOf, type Aim, type Point, type Target } from "@/lib/aim";
 import { DIE_SWATCHES } from "@/lib/colors";
+import { TOSS_EASE, TOSS_TIMES } from "@/lib/toss";
 import { DieFaceView } from "./DieFaceView";
 import { DragTrajectory } from "./DragTrajectory";
 import styles from "./game.module.css";
@@ -25,6 +27,24 @@ const SETTLE = { type: "spring", stiffness: 620, damping: 42, mass: 0.6 } as con
  * is still moving and a second oscillation on top of that reads as lag.
  */
 const MAGNET = { stiffness: 700, damping: 30 } as const;
+
+/**
+ * Where a die that was not thrown ends up: on the table, square, and showing
+ * its face. Also where one whose throw was called off lands, which is why it
+ * names every value the arc touches rather than only the two it fades.
+ */
+const SETTLED = { opacity: 1, scale: 1, x: 0, y: 0, rotate: 0, rotateX: 0, rotateY: 0 };
+
+/** How it gets there, when it is not being thrown there. */
+const ARRIVING = { type: "spring", stiffness: 420, damping: 30 } as const;
+
+/**
+ * ...and how a die crosses the board to join the row after the canvas has
+ * finished with it. Softer and slower than an arrival, because it is travel
+ * rather than a landing: the dice scatter where they fall and then gather
+ * themselves up, which is chaos resolving into order and worth watching.
+ */
+const GATHERING = { type: "spring", stiffness: 260, damping: 30, mass: 0.8 } as const;
 
 /**
  * Where the pointer is, whatever kind of event carried it.
@@ -77,6 +97,14 @@ type Props = {
   movable: boolean;
   /** Whether this is the die currently in hand. */
   held: boolean;
+  /** Its place in the tray, which is all the throw's stagger needs. */
+  index: number;
+  /**
+   * Whether it was thrown onto the table rather than arriving some other way.
+   * Decided by the tray, which is the only thing that can tell a handful being
+   * rolled from a single die being chosen. See docs/dice.md §0.
+   */
+  thrown: boolean;
   /** The panel the die may be dragged around inside. */
   bounds: RefObject<HTMLElement | null>;
   onPick: () => void;
@@ -100,10 +128,81 @@ type Props = {
  * to the same transform. Anything else fighting `drag` for `x` and `y` is felt
  * by the player as stickiness. See docs/dice.md §2.3.
  */
-export function DraggableDie({ die, movable, held, bounds, onPick, onAim, onRelease }: Props) {
+export function DraggableDie({
+  die,
+  movable,
+  held,
+  index,
+  thrown,
+  bounds,
+  onPick,
+  onAim,
+  onRelease,
+}: Props) {
+  const grip = useRef<HTMLSpanElement>(null);
+  const { toss, face: showing, waiting, gather } = useToss(
+    die.id,
+    die.face,
+    index,
+    thrown,
+    grip,
+  );
+  /*
+   * Held still across renders. Motion compares what it is asked to animate
+   * with what it was asked for last time, and a fresh array of keyframes every
+   * render is a die that starts its throw again whenever anything else on the
+   * board moves.
+   */
+  const tossTo = useMemo(
+    () =>
+      toss
+        ? {
+            x: [...toss.keyframes.x],
+            y: [...toss.keyframes.y],
+            rotate: [...toss.keyframes.rotate],
+            rotateX: [...toss.keyframes.rotateX],
+            rotateY: [...toss.keyframes.rotateY],
+            scale: [...toss.keyframes.scale],
+            opacity: [...toss.keyframes.opacity],
+          }
+        : SETTLED,
+    [toss],
+  );
+  const tossTiming = useMemo(
+    () =>
+      toss
+        ? {
+            delay: toss.delay / 1000,
+            duration: toss.duration / 1000,
+            times: [...TOSS_TIMES],
+            ease: [...TOSS_EASE],
+          }
+        : ARRIVING,
+    [toss],
+  );
+
+  /*
+   * The handoff, when the throw happened in the canvas instead.
+   *
+   * While the body is still rolling out there the DOM die keeps its place in
+   * the row and is simply not drawn — the die on screen is the simulated one.
+   * The moment it stops, this one appears at exactly the coordinates it
+   * stopped at and springs home, which is the scatter resolving into a tidy
+   * row that docs/dice.md §2.1 is after. The player never sees the swap
+   * because at the instant it happens the two are in the same place.
+   */
+  const gathering = useMemo(
+    () =>
+      waiting
+        ? { opacity: 0, scale: 1, x: 0, y: 0, rotate: 0, rotateX: 0, rotateY: 0 }
+        : gather
+          ? { ...SETTLED, x: [gather.x, 0], y: [gather.y, 0], opacity: [1, 1] }
+          : null,
+    [waiting, gather],
+  );
+
   const x = useMotionValue(0);
   const y = useMotionValue(0);
-  const grip = useRef<HTMLSpanElement>(null);
   /** The last place the pointer actually was, for working out the drop. */
   const at = useRef<Point | null>(null);
   /** Where the die sits when it is not being carried, in viewport pixels. */
@@ -243,25 +342,44 @@ export function DraggableDie({ die, movable, held, bounds, onPick, onAim, onRele
       }}
       title={`${die.color} ${die.face} — ${die.spent ? "spent" : "available"}`}
     >
+      {/*
+        * How the die got here: thrown, or simply arrived.
+        *
+        * Its own layer because the arc writes `x` and `y`, and those already
+        * belong to the drag above and to the magnet below. A die is never
+        * being carried and in the air at once, but the two would still be
+        * writing to one transform, which is how they come to fight over it.
+        *
+        * A die that was not thrown fades in showing its face, and that is
+        * right rather than a shortcut: a Foreman's die is *chosen*, and there
+        * is a legal path through the game where a player throws nothing all
+        * evening. See docs/dice.md §0.
+        */}
       <m.span
-        className={[styles.die, die.spent && styles.dieSpent, held && styles.dieHeld]
-          .filter(Boolean)
-          .join(" ")}
-        style={{ ...DIE_SWATCHES[die.color], x: pullX, y: pullY }}
-        /*
-         * A die arrives showing its face rather than being thrown onto the
-         * table. That is exactly right for the ones that are never thrown — a
-         * Foreman's die is *chosen*, and there is a legal path through the
-         * game where a player throws nothing all evening — and it is what a
-         * rolled die does until the tumble exists. See docs/dice.md §0.
-         */
+        className={styles.dieToss}
+        style={{
+          // Short, because the die is 34px: a distant vanishing point on
+          // something this small is no perspective at all.
+          transformPerspective: 320,
+          // A die still in the air has to clear the tray it is coming down into.
+          zIndex: toss ? 50 : undefined,
+        }}
         initial={{ opacity: 0, scale: 0.72 }}
-        // Bigger in the hand. On this layer rather than as a `whileDrag` on
-        // the gesture, because the gesture belongs to the layer above.
-        animate={{ opacity: 1, scale: held ? 1.18 : 1 }}
-        transition={{ type: "spring", stiffness: 420, damping: 30 }}
+        animate={gathering ?? (toss ? tossTo : SETTLED)}
+        transition={gathering && !waiting ? GATHERING : tossTiming}
       >
-        <DieFaceView face={die.face} />
+        <m.span
+          className={[styles.die, die.spent && styles.dieSpent, held && styles.dieHeld]
+            .filter(Boolean)
+            .join(" ")}
+          style={{ ...DIE_SWATCHES[die.color], x: pullX, y: pullY }}
+          // Bigger in the hand. On this layer rather than as a `whileDrag` on
+          // the gesture, because the gesture belongs to the layer above.
+          animate={{ scale: held ? 1.18 : 1 }}
+          transition={{ type: "spring", stiffness: 420, damping: 30 }}
+        >
+          <DieFaceView face={showing} tumbling={toss !== null} />
+        </m.span>
       </m.span>
       {held && <DragTrajectory from={{ x: liveX, y: liveY }} to={aimed?.at ?? null} />}
     </m.span>

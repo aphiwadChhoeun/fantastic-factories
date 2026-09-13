@@ -28,6 +28,14 @@ const nextConfig: NextConfig = {
      * a live `process.env` read.
      */
     NEXT_PUBLIC_EMBERS: process.env.NEXT_PUBLIC_EMBERS ?? "",
+    /**
+     * Same trick again, and back to the first default: the physics dice are
+     * off unless switched on, so an unset variable has to inline as something
+     * that is not "1". Rapier is the largest thing here that is not already
+     * being paid for, and docs/dice.md §1.3 is explicit that it earns its way
+     * in only once the keyframed throw has been found wanting.
+     */
+    NEXT_PUBLIC_DICE_PHYSICS: process.env.NEXT_PUBLIC_DICE_PHYSICS ?? "",
   },
   /** Emits out/index.html style paths, which Workers Assets serves cleanly. */
   trailingSlash: true,

@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from "react";
 import { domMax, LazyMotion, MotionConfig, useReducedMotion } from "motion/react";
 import { PHASE_LABELS, type Move } from "@/engine";
 import { DEV_TOOLS } from "@/dev/flag";
+import { DiceLayer } from "@/dice/DiceLayer";
 import { burstFromCard, burstFromHq } from "@/effects/cardBurst";
 import { EmbersLayer } from "@/effects/EmbersLayer";
 import { useFlashes } from "@/hooks/useFlashes";
@@ -429,6 +430,15 @@ export function Game() {
             * it is a WebGL canvas, and with the flag off it is not one.
             */}
           <EmbersLayer />
+
+          {/*
+            * The dice, if they are being simulated rather than keyframed.
+            * Nothing above this line knows whether they are: with the flag
+            * off — which is the default — this renders nothing, the chunk is
+            * never fetched, and the throw happens in the DOM instead. See
+            * docs/dice.md §1.3 on why that is the way round it is.
+            */}
+          <DiceLayer />
         </main>
       </MotionConfig>
     </LazyMotion>
