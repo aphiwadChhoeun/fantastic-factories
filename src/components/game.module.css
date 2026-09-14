@@ -7,6 +7,20 @@
  * would keep sizing the board for the viewport it had before it did.
  */
 .page {
+  /*
+   * The plate, as the one size the rest of the board is measured against —
+   * every row on the table is a row of these, so a card's height *is* the
+   * table's height. Declared here rather than written into `.card` because
+   * the short-landscape block at the foot of this file has to move it, and
+   * moving it in one place is the difference between a scale and a rewrite.
+   *
+   * 63 by 88 millimetres, the proportion of a real card. Kept as two numbers
+   * rather than one and a ratio so that a reader of `.card` still sees the
+   * size it has always been.
+   */
+  --card-h: 214px;
+  --card-w: 152px;
+
   position: relative;
   height: 100dvh;
   display: flex;
@@ -198,6 +212,34 @@
 }
 
 /*
+ * The machinery — the dice, the Headquarters, the compound — as against the
+ * hand. No box of its own: `display: contents` drops the wrapper out of the
+ * box tree entirely, so the three of them stay exactly what they were, direct
+ * children of the panel's column.
+ *
+ * It exists for the short-landscape block at the foot of this file, which
+ * turns it into a grid. Wrapping them there rather than gridding the panel
+ * itself is what keeps the placement off the panel's *other* children — the
+ * over-limit warning and the drag prompt come and go, and a layout that
+ * counts on which child is which breaks the first time one of them appears.
+ */
+.workbench,
+.machinery {
+  display: contents;
+}
+
+/*
+ * What stands, and what is held. Nothing to say about either until the screen
+ * is a phone on its side; `min-width: 0` is here so that both can be grid
+ * items without their card rows refusing to shrink, which is the default a
+ * grid gives an element that has content wider than its track.
+ */
+.compoundBlock,
+.handBlock {
+  min-width: 0;
+}
+
+/*
  * The market, as a modal over the board.
  *
  * Sized by the cards rather than by a column of prose, which is the whole of
@@ -339,9 +381,11 @@
    * than the rounder number it used to be. That is worth having for its own
    * sake, and it happens to be the cheapest fourteen pixels a row on a board
    * that now has to fit a screen rather than a scroll.
+   *
+   * Both come off `.page`, which is where a phone held sideways shrinks them.
    */
-  width: 152px;
-  height: 214px;
+  width: var(--card-w);
+  height: var(--card-h);
   padding: 0;
   overflow: hidden;
   display: flex;
@@ -1532,4 +1576,426 @@ button.cardContractor {
   font-size: 12px;
   text-align: center;
   color: var(--color-steel-500);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * A phone, turned on its side.
+ *
+ * Everything above assumes the one viewport is about 800 pixels tall. A phone
+ * in landscape gives 390, and the two bars take 72 of them: the table is left
+ * with roughly 300 for a stack three card-rows deep — dice and Headquarters,
+ * then the compound, then the hand. That stack cannot be shorter than three
+ * cards however small the cards get. Measured, with everything shrunk as far
+ * as it would legibly go: 596 pixels of content into 304 of table.
+ *
+ * So the shape changes here, and only here. The machinery goes *beside* the
+ * compound rather than above it — which is what the 844 pixels of width were
+ * always for — and the hand keeps the full width underneath, where a hand
+ * belongs and where seven plates still fit without scrolling.
+ *
+ * `orientation: landscape` rather than a pointer query, because a short
+ * browser window on a desk has exactly the same problem and wants exactly the
+ * same answer. Nothing below this line is reachable from a portrait phone,
+ * which is tall, or from a laptop, which is taller.
+ * ══════════════════════════════════════════════════════════════════════════ */
+@media (orientation: landscape) and (max-height: 500px) {
+  /*
+   * The whole scale, in one number.
+   *
+   * Two limits, and whichever bites first. Both constants are measured rather
+   * than derived — the bars, the strip, the panel's padding, the two section
+   * titles and the gaps between all of it are mostly line boxes, and a line
+   * box is not something arithmetic can be trusted about.
+   *
+   * `100dvh - 297px` is the Headquarters regime. The tile does not shrink
+   * with the cards — it is three sections of fixed furniture — so while it is
+   * the taller thing on the top line, the compound beside it is free and the
+   * screen is only paying for *one* row of cards: the hand's.
+   *
+   * `50dvh - 95px` is what happens once the compound outgrows it, at about a
+   * 400-tall screen, and the two rows start splitting the height between them.
+   *
+   * Both carry four pixels of slack past what measured exactly, which is what
+   * a board sized in line boxes needs: a font that lands a pixel taller than
+   * it did on the machine these were read off costs the table nothing.
+   *
+   * The floor keeps a card legible on the shortest phone anyone holds this
+   * way; the ceiling stops a short, wide *desktop* window — which this query
+   * also catches — from growing plates larger than the desk ones.
+   *
+   * `dvh`, like `.page`, because the address bar slides away mid-game and a
+   * board sized for the viewport it had before it did is a board that scrolls
+   * for the rest of the session.
+   */
+  .page {
+    --card-h: clamp(80px, min(calc(100dvh - 297px), calc(50dvh - 95px)), 152px);
+    --card-w: calc(var(--card-h) * 63 / 88);
+  }
+
+  /* The two bars. Thin enough to be chrome, tall enough to still be plates. */
+  .topBar,
+  .bottomBar {
+    gap: 8px;
+    padding: 4px 10px;
+  }
+
+  .title {
+    font-size: 13px;
+  }
+
+  .status {
+    font-size: 10px;
+  }
+
+  .hud,
+  .barEnd,
+  .barMain {
+    gap: 6px;
+  }
+
+  .moveButton {
+    font-size: 10px;
+    padding: 7px 10px;
+  }
+
+  .board {
+    padding: 2px 8px;
+  }
+
+  .boardInner {
+    gap: 4px;
+  }
+
+  .section {
+    padding: 6px;
+    gap: 5px;
+  }
+
+  .sectionTitle {
+    font-size: 9.5px;
+    letter-spacing: 0.07em;
+  }
+
+  /*
+   * Your own name comes off the board. It is the one thing on the panel that
+   * the top bar already says — "Round 1 · Work Phase · You to act" — and a
+   * line of it is a tenth of the table at this height.
+   */
+  .playerHeader {
+    display: none;
+  }
+
+  /*
+   * The turn, as two columns: what you are working with on the left, what you
+   * have already built on the right. Two items and two tracks, so neither has
+   * to be placed — the left is `auto`, which lets the Headquarters take the
+   * width it needs and gives the compound the rest.
+   *
+   * `start` rather than the default stretch, so a short compound sits at the
+   * top of its track instead of a row of cards being pulled to the height of
+   * the Headquarters beside it.
+   */
+  .workbench {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    column-gap: 10px;
+  }
+
+  .machinery {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  .tableRow {
+    gap: 4px 10px;
+  }
+
+  /*
+   * The Headquarters sections stop being card-shaped. They borrow `.card` for
+   * the plate and not for the proportion, and at this size a card is narrower
+   * than the three dice slots it has to hold — so they size to their contents
+   * instead, which is what `.hqSection` already does vertically.
+   */
+  .hqSection {
+    width: auto;
+    padding: 6px;
+    gap: 4px;
+  }
+
+  .hqName {
+    font-size: 10px;
+  }
+
+  /*
+   * Five dice — a full workforce — on one line, at this die and this gap. A
+   * Specialist's sixth wraps underneath, and costs nothing when it does: two
+   * rows of dice are still shorter than the Headquarters standing beside them.
+   */
+  .tray {
+    gap: 4px;
+    max-width: 170px;
+  }
+
+  .dice {
+    gap: 5px;
+  }
+
+  .die {
+    width: 28px;
+    height: 28px;
+    font-size: 12px;
+    border-radius: 6px;
+  }
+
+  /*
+   * The compound scrolls sideways rather than wrapping. It is the one row on
+   * the board that grows without limit, and a second row of it would cost the
+   * hand its place on the screen — which is the wrong way round, because the
+   * hand is where the decisions are and the compound is mostly reference.
+   *
+   * `safe center` so a compound of two sits centred like every other row here
+   * but one of ten starts at its first card instead of having its left edge
+   * clipped away — which is what plain `center` does to an overflowing flex
+   * row, and it clips the end you cannot scroll back to. No fallback pair: a
+   * browser old enough to want one is also too old for the `:has()` and the
+   * `color-mix` this stylesheet already takes for granted.
+   */
+  .compoundBlock .cardRow {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    justify-content: safe center;
+    /* Room for the glow on a live card, which the scroll box would clip. */
+    padding: 2px 0;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-edge-bright) transparent;
+  }
+
+  .cardRow {
+    gap: 6px;
+  }
+
+  /* The plate, and everything printed on it, a step down. */
+  .card {
+    font-size: 10px;
+    line-height: 1.3;
+    border-radius: 6px;
+  }
+
+  /*
+   * The name, tighter than a step down would give it — Oswald is a condensed
+   * face and the tracking is what it can afford to lose, so 9.5 with almost
+   * none of it fits a word the card would otherwise have to break.
+   *
+   * And when one still will not fit, it breaks rather than being cut off.
+   * "Motherlode" is one word wider than the plate at the floor, and a name
+   * with its tail clipped is a card you can misread for another; a name over
+   * two lines is merely a tight one. The second line comes out of the body,
+   * which was already the part allowed to scroll.
+   */
+  .cardName {
+    font-size: 9.5px;
+    letter-spacing: 0.01em;
+    padding: 3px 5px;
+    overflow-wrap: anywhere;
+  }
+
+  .cardStats {
+    gap: 3px 5px;
+    padding: 3px 6px;
+  }
+
+  .cardBody {
+    gap: 3px;
+    padding: 4px 6px;
+  }
+
+  .cardFoot {
+    padding: 0 6px;
+  }
+
+  .cardFoot:not(:empty) {
+    padding: 4px 6px;
+  }
+
+  .typeBadge {
+    width: 16px;
+    height: 16px;
+    font-size: 9px;
+    border-radius: 4px;
+  }
+
+  .chipGlyph,
+  .blueprintGlyph {
+    font-size: 10px;
+  }
+
+  .chipCount {
+    font-size: 10.5px;
+  }
+
+  .chipFree,
+  .discount,
+  .cardTag {
+    font-size: 9px;
+  }
+
+  .note {
+    font-size: 8.5px;
+  }
+
+  .pip {
+    min-width: 15px;
+    height: 15px;
+    font-size: 9px;
+  }
+
+  .arrow {
+    font-size: 11px;
+  }
+
+  .op {
+    font-size: 9.5px;
+  }
+
+  .empty {
+    font-size: 10px;
+  }
+
+  .prompt {
+    margin: 2px 0 0;
+    font-size: 9.5px;
+  }
+
+  /*
+   * The last question of a choice, floated rather than fitted.
+   *
+   * These are whole sentences — "work Black Market with 2 — burn Megalith,
+   * gain 3 metal, 1 energy" — and three of them stacked is 120 pixels, which
+   * is more than the table has spare and more than it could ever have spare.
+   * Sideways they come off the column and stand over the board instead.
+   *
+   * Which is where the question already was, in every sense but position: the
+   * focus pull has dimmed everything that cannot answer it, so the plates
+   * underneath are not being covered so much as finished with. `.page` is the
+   * positioned ancestor, and the z-index clears the bars.
+   */
+  .choices {
+    position: absolute;
+    z-index: 85;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: 6px;
+    margin: 0;
+    padding: 8px;
+    width: max-content;
+    max-width: min(560px, calc(100vw - 32px));
+    max-height: calc(100dvh - 96px);
+    overflow-y: auto;
+    border: 1px solid var(--color-edge-bright);
+    border-radius: 10px;
+    background: var(--color-deep);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 6%),
+      0 22px 56px rgb(0 0 0 / 66%);
+  }
+
+  /*
+   * Mid-choice the instruction takes the label's place rather than a line of
+   * its own. "Hand" names a row of cards the player is already looking at;
+   * "click a highlighted blueprint to discard as payment" is the only thing
+   * on the panel they do not know — and on a screen this short, stacking the
+   * two pushes the opponent's strip off the bottom to say the obvious one.
+   */
+  .handBlock:has(> .prompt) > .sectionTitle,
+  .handBlock:has(> .choices) > .sectionTitle {
+    display: none;
+  }
+
+  /*
+   * The opponent's strip, which was already the cheapest thing on the board
+   * and is now the last 32 pixels standing between the hand and the bar.
+   */
+  .compactPanel {
+    padding: 5px 10px;
+    gap: 5px;
+  }
+
+  /*
+   * Held to one line, and tightly. Everything on the strip is on it because
+   * it decides something, so nothing comes off — but a second line here costs
+   * the hand below it a third of its cards, and the widest screen this query
+   * catches is only 667 across. The gaps are the whole of the difference.
+   */
+  .compactRow {
+    gap: 4px 8px;
+  }
+
+  .resourceBar {
+    gap: 3px 7px;
+    font-size: 10px;
+  }
+
+  .score {
+    font-size: 12px;
+  }
+
+  .produces {
+    gap: 3px 7px;
+  }
+
+  /*
+   * The counts the automaton's dice are read against. The only text on the
+   * board with no size of its own — everywhere else it sits inside a card and
+   * takes the card's — so the strip is where it has to be given one.
+   */
+  .automaTypes {
+    gap: 3px 8px;
+    font-size: 9.5px;
+  }
+
+  .swatch {
+    width: 8px;
+    height: 8px;
+    margin-right: 5px;
+  }
+
+  /* The market, which is the same plates and so is already most of the way. */
+  .marketModal {
+    gap: 8px;
+    padding: 10px;
+    max-width: calc(100vw - 20px);
+    max-height: calc(100dvh - 20px);
+  }
+
+  .marketHeader {
+    gap: 10px;
+  }
+
+  .token {
+    width: 22px;
+    height: 22px;
+    font-size: 11px;
+  }
+
+  .slot {
+    gap: 4px;
+  }
+
+  /* A folded-away panel gets more of the screen, having so little to take. */
+  .popoverPanel {
+    max-height: 62dvh;
+  }
+
+  .log {
+    gap: 3px;
+    font-size: 10px;
+  }
 }

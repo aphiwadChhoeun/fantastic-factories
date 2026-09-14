@@ -459,43 +459,60 @@ export function PlayerPanel({
       )}
 
       {/*
-        * The tray and the tile it feeds, on one line. Stacked, they cost a
-        * heading and a gap to say something the player already knows — the
-        * dice and the slots they go into are one thought, and on a screen
-        * that has to hold the whole game they may as well be one line.
+        * The machinery: what you rolled, what it goes into, and what already
+        * stands. One wrapper with no box of its own — see `.workbench`, which
+        * is `display: contents` until the screen is a phone on its side, and
+        * a grid after that.
         */}
-      <div className={styles.tableRow}>
-        <div className={styles.tray}>
-          <div className={styles.sectionTitle}>Dice</div>
-          {tray}
+      <div className={styles.workbench}>
+        {/*
+          * What you rolled and where it can go — the dice, and the sentence
+          * about them. Another `display: contents` wrapper, so that sideways
+          * the two of them are one column and the sentence costs nothing: a
+          * dice tray is shorter than the Headquarters beside it, and that
+          * slack is exactly a line of text tall.
+          */}
+        <div className={styles.machinery}>
+          {/*
+            * The tray and the tile it feeds, on one line. Stacked, they cost a
+            * heading and a gap to say something the player already knows — the
+            * dice and the slots they go into are one thought, and on a screen
+            * that has to hold the whole game they may as well be one line.
+            */}
+          <div className={styles.tableRow}>
+            <div className={styles.tray}>
+              <div className={styles.sectionTitle}>Dice</div>
+              {tray}
+            </div>
+
+            {automaton ? (
+              <ProductionSummary player={player} />
+            ) : (
+              <HeadquartersView
+                placements={player.headquarters}
+                color={player.color}
+                targets={targets?.sections ?? null}
+                aimed={aimed}
+              />
+            )}
+          </div>
+
+          {interaction && interaction.movableDice.size > 0 && (
+            <p className={styles.prompt}>Drag a die onto a slot, a blueprint, or a building.</p>
+          )}
         </div>
 
-        {automaton ? (
-          <ProductionSummary player={player} />
-        ) : (
-          <HeadquartersView
-            placements={player.headquarters}
-            color={player.color}
-            targets={targets?.sections ?? null}
-            aimed={aimed}
-          />
-        )}
-      </div>
-
-      {interaction && interaction.movableDice.size > 0 && (
-        <p className={styles.prompt}>Drag a die onto a slot, a blueprint, or a building.</p>
-      )}
-
-      <div>
-        <div className={styles.sectionTitle}>Compound</div>
-        {compound}
-        {/* Asked beside whichever card is being chosen for. */}
-        {!choosingInHand && <Choices interaction={interaction} />}
+        <div className={styles.compoundBlock}>
+          <div className={styles.sectionTitle}>Compound</div>
+          {compound}
+          {/* Asked beside whichever card is being chosen for. */}
+          {!choosingInHand && <Choices interaction={interaction} />}
+        </div>
       </div>
 
       {/* The automaton has no hand — a card it takes goes straight up. */}
       {!automaton && (
-      <div>
+      <div className={styles.handBlock}>
         <div className={styles.sectionTitle}>Hand</div>
         {/* The payment comes from hand whether a card is taken, built or sold. */}
         {interaction?.payments && (
