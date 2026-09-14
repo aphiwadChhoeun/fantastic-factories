@@ -823,6 +823,125 @@
   white-space: nowrap;
 }
 
+/*
+ * One card, held up to the light — see `CardZoom`.
+ *
+ * Only ever opened from a phone on its side, where a plate on the table is
+ * sixty pixels across and the face on it has been cut down to a band, a name
+ * and one line of symbols. This is where the rest of the card went.
+ *
+ * A row rather than a column, because of the screen it is for: 390 pixels tall
+ * and 844 wide. A card is the tall thing, and the sentences beside it are what
+ * all that width was always for.
+ */
+.zoomModal {
+  /*
+   * A modal dialog centres itself with `margin: auto`, which the global
+   * `* { margin: 0 }` reset takes away again. Putting it back is the whole of
+   * the positioning.
+   */
+  margin: auto;
+  border: 1px solid var(--color-edge-bright);
+  border-radius: 12px;
+  padding: 12px;
+  max-width: calc(100vw - 20px);
+  max-height: calc(100dvh - 20px);
+  display: flex;
+  align-items: stretch;
+  gap: 14px;
+  color: inherit;
+  background: var(--color-deep);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 6%),
+    0 26px 64px rgb(0 0 0 / 66%);
+}
+
+/* Blurred like the market's, and for the same reason: what it covers is cards. */
+.zoomModal::backdrop {
+  background: rgb(0 0 0 / 60%);
+  backdrop-filter: blur(3px);
+}
+
+/*
+ * The plate, back at a size worth reading — and back to the *desk* plate, not
+ * a third size of card. Every shrinking rule in the short-landscape block at
+ * the foot of this file excludes `.zoomCard *`, so what is inside here is the
+ * card as it is drawn on a laptop, which is a card that has been read for as
+ * long as this game has existed.
+ *
+ * Taken off the height the dialog can have rather than written as a number, so
+ * it grows with the screen instead of being wrong on both the phones it runs
+ * on. Never larger than the desk plate: this is the card, not a poster of it.
+ */
+.zoomCard {
+  --card-h: min(calc(100dvh - 44px), 214px);
+  --card-w: min(calc(var(--card-h) * 63 / 88), 152px);
+  flex: none;
+}
+
+/* The same card in sentences, and the way out. */
+.zoomSide {
+  min-width: 0;
+  max-width: 340px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-edge-bright) transparent;
+}
+
+.zoomName {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-parchment);
+}
+
+/*
+ * Each fact as a label over what it says, rather than as two columns. A column
+ * of terms wide enough for "Build" and "Always" is a column of terms eating a
+ * third of a panel that is already only as wide as a phone will spare.
+ */
+.zoomFacts {
+  flex: 1;
+  min-height: 0;
+}
+
+.zoomTerm {
+  margin-top: 9px;
+  font-family: var(--font-label);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-steel-500);
+}
+
+.zoomTerm:first-child {
+  margin-top: 0;
+}
+
+.zoomFact {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--color-steel-100);
+}
+
+.zoomActions {
+  flex: none;
+  display: flex;
+  gap: 8px;
+}
+
+.zoomActions button {
+  flex: 1;
+  text-align: center;
+}
+
 /* The automaton's compound, counted by type — the whole of its Work Phase. */
 .automaTypes {
   display: flex;
@@ -1739,11 +1858,24 @@ button.cardContractor {
     max-width: 170px;
   }
 
-  .dice {
+  /*
+   * ── `:not(.zoomCard *)`, from here to the end of the block ──
+   *
+   * Everything below shrinks a plate until it is a summary rather than a card,
+   * which is the whole bargain this screen strikes: a plate you can tell apart
+   * at sixty pixels, and a tap to read it. The zoom is where that tap lands,
+   * and it holds *the same elements* — so every rule that makes the face
+   * smaller has to stop at its door, or the card held up to the light would be
+   * the same illegible card.
+   *
+   * Excluded rather than restored. A restore block would be the desk values
+   * written out a second time, and the second copy is the one that goes stale.
+   */
+  .dice:not(.zoomCard *) {
     gap: 5px;
   }
 
-  .die {
+  .die:not(.zoomCard *) {
     width: 28px;
     height: 28px;
     font-size: 12px;
@@ -1779,85 +1911,245 @@ button.cardContractor {
   }
 
   /* The plate, and everything printed on it, a step down. */
-  .card {
+  .card:not(.zoomCard *) {
     font-size: 10px;
     line-height: 1.3;
     border-radius: 6px;
   }
 
   /*
-   * The name, tighter than a step down would give it — Oswald is a condensed
-   * face and the tracking is what it can afford to lose, so 9.5 with almost
-   * none of it fits a word the card would otherwise have to break.
+   * The name, on one line, sized to the line it has.
    *
-   * And when one still will not fit, it breaks rather than being cut off.
-   * "Motherlode" is one word wider than the plate at the floor, and a name
-   * with its tail clipped is a card you can misread for another; a name over
-   * two lines is merely a tight one. The second line comes out of the body,
-   * which was already the part allowed to scroll.
+   * It used to be allowed to break over two — "Motherlode" is one word wider
+   * than the plate at the floor, and a name with its tail clipped is a card
+   * you can misread for another. But the second line came out of the body, and
+   * the body is now the only place a formula is; so the name shrinks to fit
+   * instead of spending a line it cannot spare, and the whole card is one tap
+   * away when the shrinking runs out.
+   *
+   * The arithmetic: the plate, less its border and its padding, shared out
+   * over the letters. 0.52em is the measured average advance of uppercase
+   * Oswald, which is condensed — and it only has to be right to the pixel at
+   * the point where it stops shrinking, which is the floor below. `--name-len`
+   * is written by `CardView`: how long the word is is the one term in this sum
+   * that no stylesheet can see.
+   *
+   * The floor is where the face stops being readable at arm's length, and it
+   * is set where the two together hold every name in the deck up to fifteen
+   * letters — "Trash Compactor" fits exactly. Past that the tail is cut rather
+   * than the whole shrunk into nothing: "Fulfillment Cen…" is still the only
+   * card on the board that begins that way, and the name is printed in full in
+   * the zoom the plate opens.
    */
-  .cardName {
-    font-size: 9.5px;
+  .cardName:not(.zoomCard *) {
+    font-size: clamp(7px, calc((var(--card-w) - 12px) / (var(--name-len, 12) * 0.52)), 9.5px);
     letter-spacing: 0.01em;
     padding: 3px 5px;
-    overflow-wrap: anywhere;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
-  .cardStats {
-    gap: 3px 5px;
-    padding: 3px 6px;
+  /*
+   * The price row, gapped and padded to fit the widest one in the deck on a
+   * single line: the tool mark, then metal and energy. Nothing costs three
+   * resources, so this is the whole of what has to fit, and it fits with a
+   * pixel to spare at the floor.
+   *
+   * What does not fit is the word "discounted", which comes last and is cut.
+   * That is the right thing to lose: the number beside the chips is *already*
+   * the discounted one, so the word is the explanation and not the price.
+   */
+  .cardStats:not(.zoomCard *) {
+    gap: 2px;
+    padding: 3px 5px;
   }
 
-  .cardBody {
+  .cardBody:not(.zoomCard *) {
     gap: 3px;
     padding: 4px 6px;
   }
 
-  .cardFoot {
+  /*
+   * The price and the formula, each held to one line.
+   *
+   * Left to wrap, these are the two tallest things on the plate: a formula
+   * that breaks twice is three of the five lines a card has at this height,
+   * and it pushes whatever is under it out of the box. Held to a line they run
+   * off the side instead — and what runs off the side is recoverable in a way
+   * that what is pushed out of the bottom of a scroller is not, because the
+   * card is a tap away and the tap is the only gesture this screen has spare.
+   *
+   * Which is also why the body stops scrolling. A scroll box inside a plate
+   * inside a compound that scrolls sideways is three things to get hold of in
+   * the width of a thumb.
+   */
+  .cardStats:not(.zoomCard *),
+  .formula:not(.zoomCard *),
+  .formulaGlyphs:not(.zoomCard *),
+  .group:not(.zoomCard *) {
+    flex-wrap: nowrap;
+  }
+
+  .cardStats:not(.zoomCard *),
+  .formulaGlyphs:not(.zoomCard *),
+  .cardBody:not(.zoomCard *) {
+    overflow: hidden;
+  }
+
+  /* Tighter, so that rather less of the line is the air between its symbols. */
+  .formula:not(.zoomCard *),
+  .formulaGlyphs:not(.zoomCard *) {
+    gap: 2px 3px;
+  }
+
+  .group:not(.zoomCard *) {
+    gap: 2px;
+  }
+
+  .cardFoot:not(.zoomCard *) {
     padding: 0 6px;
   }
 
-  .cardFoot:not(:empty) {
+  .cardFoot:not(:empty):not(.zoomCard *) {
     padding: 4px 6px;
   }
 
-  .typeBadge {
-    width: 16px;
-    height: 16px;
+  /*
+   * The sockets on a built perk, sized to hold three across.
+   *
+   * Three is the whole of the requirement: the greediest perk in the deck
+   * takes three dice, and the footer is where they stand. At the size the
+   * dice tray uses they were two rows deep in a plate this narrow, and the
+   * second row came out of the body — which on a Harvester left eight pixels
+   * for the formula, and eight pixels of a formula is none of it.
+   *
+   * Taken off the plate rather than written as a number, so three still fit on
+   * the shortest phone this query catches, where the plate is a third narrower
+   * again. The 20px is everything the row is not: the plate's border, the
+   * footer's padding, and the two gaps.
+   *
+   * Capped at sixteen, which is where a socket stops being a socket and starts
+   * looking like a die you could pick up. The ones you *can* pick up are in the
+   * tray, at 28, and they are untouched by this — a drop target sized by the
+   * card it sits on would be a drop target you cannot hit.
+   */
+  .cardFoot:not(.zoomCard *) .dice {
+    gap: 3px;
+  }
+
+  .cardFoot:not(.zoomCard *) .die {
+    width: min(16px, calc((var(--card-w) - 20px) / 3));
+    height: min(16px, calc((var(--card-w) - 20px) / 3));
     font-size: 9px;
-    border-radius: 4px;
+    border-radius: 3px;
   }
 
-  .chipGlyph,
-  .blueprintGlyph {
-    font-size: 10px;
+  /*
+   * What a card scores comes off the face.
+   *
+   * Prestige is the one number on a plate that decides nothing *now* — it is
+   * counted once, when the game is over — and at this size it was a line of
+   * chips competing with the line that says what the card actually does. It is
+   * still printed in the zoom, which is where a player weighing the endgame
+   * has the room to weigh it.
+   */
+  .prestige:not(.zoomCard *) {
+    display: none;
   }
 
-  .chipCount {
-    font-size: 10.5px;
+  /*
+   * ...and with nothing else standing in it, the footer goes with it — which
+   * on a contractor means the footer goes for its own reason. "One engagement,
+   * then gone" is three of the five lines a plate has at this height, and the
+   * dashed edge around the card has been saying the same thing since long
+   * before there was a phone to say it on. It is spelled out again in the zoom.
+   */
+  .cardFoot:has(> .prestige:only-child):not(.zoomCard *),
+  .cardFoot:has(> .cardTag:only-child):not(.zoomCard *) {
+    display: none;
   }
 
-  .chipFree,
-  .discount,
-  .cardTag {
+  .typeBadge:not(.zoomCard *) {
+    width: 12px;
+    height: 12px;
+    font-size: 8px;
+    border-radius: 3px;
+  }
+
+  /*
+   * The symbols on a plate, a shade under the ones in the bar and on the
+   * opponent's strip.
+   *
+   * Everywhere else on this screen a row of glyphs may wrap, and a glyph that
+   * would rather be legible can be. On a plate the two rows are held to one
+   * line each against fifty-five pixels of card, so a point off each glyph is
+   * two or three more glyphs that make it on to the line before the rest is
+   * cut — and what is cut here is a tap from being read in full, which is not
+   * true of the bar.
+   */
+  .card:not(.zoomCard *) .chipGlyph,
+  .card:not(.zoomCard *) .blueprintGlyph {
     font-size: 9px;
   }
 
-  .note {
+  .card:not(.zoomCard *) .chipCount {
+    font-size: 9.5px;
+  }
+
+  /*
+   * A count sits right up against its own glyph. The gap here is not spacing
+   * so much as the difference between "🔷 2" and "🔷2", and at this size the
+   * chips need to read as two units on a line rather than four things.
+   */
+  .card:not(.zoomCard *) .chip {
+    gap: 1px;
+  }
+
+  .card:not(.zoomCard *) .pip {
+    min-width: 13px;
+    height: 13px;
     font-size: 8.5px;
   }
 
-  .pip {
-    min-width: 15px;
-    height: 15px;
+  .card:not(.zoomCard *) .arrow {
+    font-size: 10px;
+  }
+
+  .card:not(.zoomCard *) .op {
     font-size: 9px;
   }
 
-  .arrow {
+  .chipGlyph:not(.zoomCard *),
+  .blueprintGlyph:not(.zoomCard *) {
+    font-size: 10px;
+  }
+
+  .chipCount:not(.zoomCard *) {
+    font-size: 10.5px;
+  }
+
+  .chipFree:not(.zoomCard *),
+  .discount:not(.zoomCard *),
+  .cardTag:not(.zoomCard *) {
+    font-size: 9px;
+  }
+
+  .note:not(.zoomCard *) {
+    font-size: 8.5px;
+  }
+
+  .pip:not(.zoomCard *) {
+    min-width: 14px;
+    height: 14px;
+    font-size: 9px;
+  }
+
+  .arrow:not(.zoomCard *) {
     font-size: 11px;
   }
 
-  .op {
+  .op:not(.zoomCard *) {
     font-size: 9.5px;
   }
 

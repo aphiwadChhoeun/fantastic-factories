@@ -1,4 +1,4 @@
-import { useRef, type PointerEvent } from "react";
+import { useRef, useState, type CSSProperties, type PointerEvent } from "react";
 import {
   AnimatePresence,
   m,
@@ -15,8 +15,10 @@ import {
   BLUEPRINT_TOOL_SWATCHES,
 } from "@/lib/colors";
 import { useGrowth } from "@/hooks/useGrowth";
+import { useShortLandscape } from "@/hooks/useShortLandscape";
 import { CHARGE_MS } from "@/lib/dice";
 import { describeResources } from "@/lib/format";
+import { CardZoom } from "./CardZoom";
 import { EffectFormula, PassiveFormula, PerkFormula } from "./Formula";
 import { LandedDie } from "./LandedDie";
 import { ResourceChip, ResourceChips, ResourceText } from "./Resource";
@@ -120,6 +122,13 @@ export function CardView({
   const reduced = useReducedMotion();
   /** How many dice stood on the perk a render ago, so an arrival can strike. */
   const stood = useGrowth(dice.length);
+  /**
+   * Sideways on a phone the plate is a summary rather than a card — see the
+   * short-landscape block in the stylesheet — so a tap opens it instead of
+   * playing it, and the move it would have played moves into the zoom.
+   */
+  const summarised = useShortLandscape();
+  const [zoomed, setZoomed] = useState(false);
   /** How hard this card is leaning into its travel. Zero unless it is moving. */
   const lean = arriving && !reduced ? LEAN_DEGREES : 0;
 
@@ -160,6 +169,19 @@ export function CardView({
     highlight && styles.cardHighlight,
     selected && styles.cardSelected,
     dropTarget && styles.cardDropTarget,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  /**
+   * The same plate, held up in the zoom. The material only — a card being read
+   * is not being offered, so none of the lights the board puts on it come with
+   * it, and a spent building is not greyed out where the point is to read it.
+   */
+  const faceClassName = [
+    styles.card,
+    card.kind === "contractor" && styles.cardContractor,
+    built && styles.cardBuilt,
   ]
     .filter(Boolean)
     .join(" ");
@@ -208,7 +230,18 @@ export function CardView({
 
   const body = (
     <>
-      <span className={styles.cardName} style={band} title={cardTitle(card)}>
+      {/*
+        * The band, and how much name has to fit in it. Sideways the name is
+        * held to one line and sized to the plate, which is arithmetic CSS can
+        * do — but only if something tells it how long the word is, and that is
+        * the one part of it no stylesheet can see. See `.cardName` in the
+        * short-landscape block.
+        */}
+      <span
+        className={styles.cardName}
+        style={{ ...band, "--name-len": card.name.length } as CSSProperties}
+        title={cardTitle(card)}
+      >
         {card.name}
       </span>
       {stats}
@@ -307,6 +340,20 @@ export function CardView({
           ? styles.glowSpice
           : null;
 
+  /**
+   * What tapping the plate does.
+   *
+   * Sideways it opens the card, whether or not there is a move on it — the
+   * face up there is too small to read, so *every* plate is worth opening and
+   * the ones you cannot play are exactly the ones you most want to look at.
+   * The move is not lost; it goes on the plate inside the zoom.
+   *
+   * Everywhere else the plate is legible and the tap plays the move, which is
+   * the board this game has always been.
+   */
+  const tap = summarised ? () => setZoomed(true) : onSelect;
+  const tapLabel = summarised ? `Open ${card.name}` : selectLabel;
+
   const plate = {
     // A callback ref, so the same one serves a button and a div without
     // either of them having to know which it is.
@@ -336,7 +383,7 @@ export function CardView({
      */
     animate: { rotate: lean },
     whileHover: reduced ? undefined : { scale: 1.03 },
-    whileTap: onSelect && !reduced ? { scale: 0.985 } : undefined,
+    whileTap: tap && !reduced ? { scale: 0.985 } : undefined,
     transition: arriving ? TRAVEL : { duration: 0.08, ease: "easeOut" as const },
   };
 
@@ -395,12 +442,33 @@ export function CardView({
       // A card in flight has to clear the panels it passes over.
       style={{ zIndex: arriving ? 40 : undefined }}
     >
-      {onSelect ? (
-        <m.button type="button" onClick={onSelect} aria-label={selectLabel} {...plate}>
+      {tap ? (
+        <m.button type="button" onClick={tap} aria-label={tapLabel} {...plate}>
           {contents}
         </m.button>
       ) : (
         <m.div {...plate}>{contents}</m.div>
+      )}
+
+      {/*
+        * The card, held up to the light — and the rest of what the plate had
+        * to leave off at sixty pixels across. Rendered from here rather than
+        * from the board because the plate is the only thing that knows all of
+        * it: the discounted price, the note about why a perk will not fire,
+        * and the one move the card is offering.
+        */}
+      {zoomed && (
+        <CardZoom
+          card={card}
+          buildCost={buildCost}
+          note={note}
+          action={
+            onSelect ? { label: selectLabel ?? `Play ${card.name}`, onSelect } : undefined
+          }
+          onClose={() => setZoomed(false)}
+        >
+          <div className={faceClassName}>{body}</div>
+        </CardZoom>
       )}
 
       {/* Keyed on the light itself, so going from spice to gilt cross-fades. */}

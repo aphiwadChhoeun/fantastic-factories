@@ -133,6 +133,20 @@ body {
   -moz-osx-font-smoothing: grayscale;
 
   /*
+   * Nothing on the board is text to be taken away with you. It is a table of
+   * cards and dice, and every gesture on it is a press or a drag — so a press
+   * held a moment too long over a card name selecting the word, or a drag
+   * along a row of plates painting half of them blue, is the board answering a
+   * question nobody asked. Worst on a phone, where a long press is also how
+   * the platform offers to select, and where the drag *is* how a die is moved.
+   *
+   * `-webkit-` as well as the standard property: Safari, including on iOS,
+   * still only answers to the prefixed one.
+   */
+  -webkit-user-select: none;
+  user-select: none;
+
+  /*
    * The desert ground: spice haze coming over the horizon from above, a cold
    * aether bleed from the crust below, and a fine scanline for the grain of
    * the thing. Fixed, so the light stays put while the board scrolls.
