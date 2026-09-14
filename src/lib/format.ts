@@ -4,6 +4,7 @@ import {
   activationOptions,
   END_COMPOUND_SIZE,
   END_GOODS,
+  endsGame,
   hqSection,
   MAX_ROUNDS,
   oppositeFace,
@@ -357,8 +358,12 @@ export function describeMove(state: GameState, move: Move): string {
       return "Read the green die";
     case "automaWork":
       return "Produce goods";
+    // A cleanup either opens the next round or is the end of the game, and
+    // the plate has to say which — "Start next round" on the press that
+    // scores the game is the board promising a round that will never come.
     case "endPhase":
-      return state.phase === "cleanup" ? "Start next round" : "End turn";
+      if (state.phase !== "cleanup") return "End turn";
+      return endsGame(state) ? "Score the game" : "Start next round";
   }
 }
 

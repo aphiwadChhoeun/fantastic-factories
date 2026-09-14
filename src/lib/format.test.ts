@@ -6,9 +6,13 @@ import {
   MAX_ROUNDS,
   createBlueprintDeck,
   type GameState,
+  type Move,
   type Player,
 } from "@/engine";
-import { describeEnding, describeWinner } from "./format";
+import { describeEnding, describeMove, describeWinner } from "./format";
+
+/** The one move every Cleanup Phase offers, and the only one it offers. */
+const END_PHASE: Move = { type: "endPhase" };
 
 function patch(state: GameState, index: number, player: Partial<Player>): GameState {
   return {
@@ -64,6 +68,42 @@ describe("describing how a game ended", () => {
 
   it("falls back to the round cap, which is the only other way out", () => {
     expect(describeEnding(state)).toBe(`The round cap of ${MAX_ROUNDS} was reached`);
+  });
+});
+
+describe("naming what ending the Cleanup Phase actually does", () => {
+  const state = createInitialState({ seed: 3 });
+  const cleanup = (over: Partial<GameState>): GameState =>
+    ({ ...state, phase: "cleanup", ...over }) as GameState;
+
+  it("promises the next round while there is one", () => {
+    expect(describeMove(cleanup({ round: 4, finalRound: null }), END_PHASE)).toBe(
+      "Start next round",
+    );
+  });
+
+  it("says it scores the game when the last round has been played", () => {
+    expect(describeMove(cleanup({ round: 7, finalRound: 7 }), END_PHASE)).toBe("Score the game");
+  });
+
+  /*
+   * The date is set by the cleanup that sees the threshold crossed, and it is
+   * set to the round *after* it — so crossing it does not end anything yet.
+   * Getting this backwards would put "Score the game" on a press with a whole
+   * round still to play.
+   */
+  it("still promises a round on the cleanup that calls the end", () => {
+    expect(describeMove(cleanup({ round: 6, finalRound: 7 }), END_PHASE)).toBe("Start next round");
+  });
+
+  it("says it scores the game on the last cleanup the round cap allows", () => {
+    expect(describeMove(cleanup({ round: MAX_ROUNDS, finalRound: null }), END_PHASE)).toBe(
+      "Score the game",
+    );
+  });
+
+  it("calls it ending the turn in any other phase", () => {
+    expect(describeMove({ ...state, phase: "work" }, END_PHASE)).toBe("End turn");
   });
 });
 

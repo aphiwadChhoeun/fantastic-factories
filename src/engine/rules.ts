@@ -68,6 +68,24 @@ export function triggersEnd(player: Player): boolean {
 }
 
 /**
+ * Whether ending the Cleanup Phase ends the game rather than opening another
+ * round.
+ *
+ * Answerable before cleanup runs, which is the point: the plate that ends the
+ * phase has to say which of the two it is about to do, and it is drawn while
+ * the state is still this one. A date set *by* this cleanup never stops it —
+ * `endRound` sets the final round to the one after this, so a threshold
+ * crossed now is a round still owed, and only a date already on the books can
+ * come due.
+ */
+export function endsGame(state: GameState): boolean {
+  return (
+    (state.finalRound !== null && state.round >= state.finalRound) ||
+    state.round + 1 > MAX_ROUNDS
+  );
+}
+
+/**
  * What may be carried out of a Work Phase. Anything over comes off before the
  * phase can end — the player chooses what goes.
  *
@@ -1487,10 +1505,12 @@ function endRound(state: GameState): GameState {
       : { ...refilled, finalRound };
 
   // The last round is over once it has been played, and the cap is the only
-  // other way out.
-  if ((finalRound !== null && played >= finalRound) || next > MAX_ROUNDS) {
+  // other way out. Asked of the state as it stood before the date above was
+  // set, because `endsGame` is also what the plate on the bar reads and the
+  // two must not be able to disagree about what pressing it does.
+  if (endsGame(refilled)) {
     const reason =
-      finalRound !== null && played >= finalRound
+      refilled.finalRound !== null && played >= refilled.finalRound
         ? "Last round played"
         : `Round cap (${MAX_ROUNDS}) reached`;
     return log(
