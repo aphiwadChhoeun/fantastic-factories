@@ -111,14 +111,20 @@ html {
   color-scheme: dark;
 }
 
+/*
+ * The board is an app shell, not a document: a bar at the top, a bar at the
+ * bottom and the table between them, all of it inside one viewport. So the
+ * page itself never scrolls — whatever will not fit scrolls inside the table,
+ * where it can do it without carrying the chrome off the screen with it.
+ */
 html,
 body {
   max-width: 100vw;
-  overflow-x: hidden;
+  overflow: hidden;
 }
 
 body {
-  min-height: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
   color: var(--color-steel-100);

@@ -3,10 +3,10 @@
 import { useCallback, useMemo, useState } from "react";
 import { domMax, LazyMotion, MotionConfig, useReducedMotion } from "motion/react";
 import { PHASE_LABELS, type Move } from "@/engine";
-import { DEV_TOOLS } from "@/dev/flag";
 import { DiceLayer } from "@/dice/DiceLayer";
 import { burstFromCard, burstFromHq } from "@/effects/cardBurst";
 import { EmbersLayer } from "@/effects/EmbersLayer";
+import { useAutoPanel } from "@/hooks/useAutoPanel";
 import { useFlashes } from "@/hooks/useFlashes";
 import { useFuses } from "@/hooks/useFuses";
 import { useGame } from "@/hooks/useGame";
@@ -23,14 +23,14 @@ import {
 } from "@/lib/board";
 import { CHARGE_MS } from "@/lib/dice";
 import { describeMove, describeWinner } from "@/lib/format";
+import { ActionBar } from "./ActionBar";
 import { Confirm } from "./Confirm";
-import { DevPanel } from "./DevPanel";
 import { GameLog } from "./GameLog";
 import { GameOver } from "./GameOver";
-import { Marketplace, type MarketInteraction } from "./Marketplace";
-import { MoveList } from "./MoveList";
+import { Marketplace, type MarketInteraction, type MarketPayment } from "./Marketplace";
 import { PlateButton } from "./PlateButton";
 import { PlayerPanel, type PanelInteraction } from "./PlayerPanel";
+import { Settings } from "./Settings";
 import styles from "./game.module.css";
 
 /** What a first-time visitor is dealt. Every later seed comes from a click. */
@@ -81,6 +81,27 @@ export function Game() {
   const [resultHidden, setResultHidden] = useState(false);
   /** Whether a new game has been asked for but not yet confirmed. */
   const [confirming, setConfirming] = useState(false);
+  /** Whether the settings dialog is up. Not saved with the game either. */
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  /*
+   * Whether the market is showing.
+   *
+   * The turn is the unit the game gets to have an opinion at: a new round, the
+   * turn passing, or the phase turning over. Within one of those the button is
+   * the only thing that decides, so a row waved away stays away for the rest of
+   * the Work Phase it was in the way of.
+   *
+   * A Market Phase opens the row only when it is *yours*. The automaton's is a
+   * second and a half of watching a card it already chose leave the row — the
+   * log says what it took, and throwing the market up over the board to show
+   * that is the board flinching on somebody else's behalf.
+   */
+  const turn = `${state.round}:${state.currentPlayerIndex}:${state.phase}`;
+  const [marketOpen, setMarketOpen] = useAutoPanel(
+    turn,
+    state.phase === "market" && !active.isAi,
+  );
 
   const board = useMemo(() => indexMoves(moves, active.dice), [moves, active.dice]);
   const mounted = useMounted();
@@ -151,10 +172,12 @@ export function Game() {
   if (!mounted) {
     return (
       <main className={styles.page}>
-        <header className={styles.header}>
+        <header className={styles.topBar}>
           <h1 className={styles.title}>Fantastic Factories</h1>
           <span className={styles.status}>Dealing…</span>
+          <span className={styles.hud} />
         </header>
+        <div className={styles.board} />
       </main>
     );
   }
@@ -200,6 +223,11 @@ export function Game() {
   const settled = pending?.paying ?? [];
   const borrowers = borrowsFor(options);
   const borrowing = choice && asksRow ? borrowers : null;
+  // A Replicator asks the row which blueprint to copy, so the row has to be
+  // there to be asked — whatever the button last said. The only time the
+  // market is needed in a Work Phase, and the only time it overrules a click.
+  const marketAsked = (borrowing?.size ?? 0) > 0;
+  const showMarket = marketOpen || marketAsked;
   const payers = paymentsFor(options, settled);
   // With several blueprints in hand that could pay, the hand is the next
   // question. Anything still open after that is spelled out as buttons —
@@ -217,6 +245,20 @@ export function Game() {
         : options
     : [];
   const choices = open.map((move) => ({ move, label: describeMove(state, move) }));
+
+  /*
+   * Who sits where. The board you are playing on comes first and gets the
+   * whole of the table; everyone else is a strip underneath it, close enough
+   * to read at a glance and cheap enough not to cost the cards anything.
+   *
+   * Found rather than assumed: `players[0]` being the human is a fact about
+   * `setup`, and this is a layout that would quietly seat the wrong person if
+   * that ever changed.
+   */
+  const youIndex = state.players.findIndex((player) => !player.isAi);
+  const seated = state.players
+    .map((player, index) => ({ player, index }))
+    .sort((a, b) => Number(b.index === youIndex) - Number(a.index === youIndex));
 
   // Worth saying loudly: what is worth doing changes completely once there is
   // only one round left to do it in.
@@ -293,6 +335,24 @@ export function Game() {
       }
     : undefined;
 
+  /*
+   * The blueprints that could pay for whatever has been picked out of the row,
+   * carried into the market so the modal can ask for one itself.
+   *
+   * Only while the market is actually up. Every other payment in the game is
+   * asked over the hand, where the cards already are, and that is still where
+   * this one is asked the moment the row is not covering it — a Replicator
+   * mid-Work-Phase closes the market before it gets this far.
+   */
+  const marketPayment: MarketPayment | undefined =
+    showMarket && payments
+      ? {
+          cards: state.players[youIndex].hand.filter((card) => payments.has(card.id)),
+          spending: new Set(settled),
+          onSelect: selectCard,
+        }
+      : undefined;
+
   function panelFor(playerIndex: number): PanelInteraction | undefined {
     if (!playable || playerIndex !== state.currentPlayerIndex) return undefined;
     return {
@@ -342,19 +402,38 @@ export function Game() {
           * already here; this only has to say so out loud.
           */}
         <main className={styles.page} data-choosing={choice ? "true" : undefined}>
-          <header className={styles.header}>
+          <header className={styles.topBar}>
             <h1 className={styles.title}>Fantastic Factories</h1>
             <span className={styles.status}>{status}</span>
+            {/*
+              * What is not the table: what has happened, what is true of the
+              * software, and the way out of this game into another. All three
+              * fold away, which is the whole reason the table is the screen.
+              */}
+            <div className={styles.hud}>
+              <GameLog entries={state.log} />
+              <PlateButton onClick={() => setSettingsOpen(true)}>Settings</PlateButton>
+              {/*
+                * The seed is not printed here. It is the one number on the
+                * board that is about the software rather than the game, and it
+                * was changing under a button whose label is a promise about
+                * what clicking it does — so it is said in Settings instead,
+                * and kept as a tooltip because this is where it bites.
+                */}
+              <PlateButton onClick={askNewGame} title={`Next deal: seed ${seed + 1}`}>
+                New game
+              </PlateButton>
+            </div>
           </header>
 
-          <div className={styles.columns}>
-            <div className={styles.stack}>
-              <Marketplace
-                contractors={state.contractors}
-                blueprints={state.blueprints}
-                interaction={marketInteraction}
-              />
-              {state.players.map((player, index) => (
+          {/*
+            * The table: your own concession with the run of it, and whoever
+            * else is playing as a strip underneath. The market is a modal over
+            * the whole of it, so nothing here moves when it opens.
+            */}
+          <div className={styles.board}>
+            <div className={styles.boardInner}>
+              {seated.map(({ player, index }) => (
                 <PlayerPanel
                   key={player.id}
                   player={player}
@@ -363,38 +442,49 @@ export function Game() {
                   flashing={flashing}
                   arriving={arriving}
                   charging={charging}
+                  compact={player.isAi}
                   interaction={panelFor(index)}
                 />
               ))}
             </div>
-
-            <div className={styles.stack}>
-              <MoveList state={state} moves={moves} waiting={isAiTurn} onPlay={play} />
-              {/*
-                * The way back to a result that has been waved away. Only there
-                * once there is one, and only while it is hidden — the dialog is
-                * modal, so while it is up this button could not be clicked anyway.
-                */}
-              {state.gameOver && resultHidden && (
-                <PlateButton full onClick={() => setResultHidden(false)}>
-                  Show result
-                </PlateButton>
-              )}
-              {/*
-                * The seed is not printed. It is the one number on the board
-                * that is about the software rather than the game, and it was
-                * changing under a button whose label is a promise about what
-                * clicking it does. Kept as a tooltip, because it is still what
-                * makes a deal reproducible and nothing else on screen says it.
-                */}
-              <PlateButton full onClick={askNewGame} title={`Next deal: seed ${seed + 1}`}>
-                New game
-              </PlateButton>
-              {/* Folds to `false` in a production build, and the panel goes with it. */}
-              {DEV_TOOLS && <DevPanel debug={debug} />}
-              <GameLog entries={state.log} />
-            </div>
           </div>
+
+          <ActionBar
+            state={state}
+            you={state.players[youIndex]}
+            moves={moves}
+            waiting={isAiTurn}
+            onPlay={play}
+            marketOpen={showMarket}
+            onToggleMarket={marketAsked ? undefined : () => setMarketOpen(!marketOpen)}
+            /*
+             * The way back to a result that has been waved away. Only there
+             * once there is one, and only while it is hidden — the dialog is
+             * modal, so while it is up this plate could not be clicked anyway.
+             */
+            onShowResult={
+              state.gameOver && resultHidden ? () => setResultHidden(false) : undefined
+            }
+          />
+
+          {/*
+            * The market, in the browser's top layer with the rest of the
+            * dialogs. Rendered here rather than in the table because that is
+            * what it is now — a modal, not a panel with a place in the column.
+            */}
+          {showMarket && (
+            <Marketplace
+              contractors={state.contractors}
+              blueprints={state.blueprints}
+              interaction={marketInteraction}
+              payment={marketPayment}
+              onClose={marketAsked ? undefined : () => setMarketOpen(false)}
+            />
+          )}
+
+          {settingsOpen && (
+            <Settings seed={seed} debug={debug} onClose={() => setSettingsOpen(false)} />
+          )}
 
           {state.gameOver && !resultHidden && (
             <GameOver

@@ -10,9 +10,7 @@ import {
   HQ_SECTION_IDS,
   overLimits,
   perkCost,
-  prestigeFor,
   RESOURCE_LIMIT,
-  scoreOf,
   type BlueprintCard,
   type Building,
   type Move,
@@ -27,7 +25,8 @@ import { CardView } from "./CardView";
 import { DraggableDie } from "./DraggableDie";
 import { HeadquartersView } from "./HeadquartersView";
 import { PlateButton } from "./PlateButton";
-import { ResourceChip, ResourceText, Rolling } from "./Resource";
+import { ResourceText } from "./Resource";
+import { Stock } from "./Stock";
 import styles from "./game.module.css";
 
 /**
@@ -123,8 +122,8 @@ function perkNote(
  */
 function ProductionSummary({ player }: { player: Player }) {
   return (
-    <div>
-      <div className={styles.sectionTitle}>Produces on</div>
+    <div className={styles.produces}>
+      <span className={styles.sectionTitle}>Produces on</span>
       <div className={styles.automaTypes}>
         {AUTOMA_PRODUCTION.map(({ color, category }) => {
           const standing = countByCategory(player.compound, category);
@@ -187,6 +186,15 @@ type Props = {
    * either: the automaton's perks fire too, and its compound is read-only.
    */
   charging?: ReadonlySet<string>;
+  /**
+   * Whether this is somebody sitting across the table rather than the player
+   * holding the screen. Their compound folds away, because with the whole game
+   * in one viewport it is the largest thing on it that nobody can act on — and
+   * for the automaton it is very nearly redundant besides, since what its
+   * cards are worth to it is the count of each type, which is printed either
+   * way.
+   */
+  compact?: boolean;
   interaction?: PanelInteraction;
 };
 
@@ -197,9 +205,12 @@ export function PlayerPanel({
   flashing,
   arriving,
   charging,
+  compact = false,
   interaction,
 }: Props) {
   const targets = interaction?.targets ?? null;
+  /** Whether an opponent's compound has been unfolded to be read. */
+  const [showCompound, setShowCompound] = useState(!compact);
   /** How far a die may be dragged: its own panel, and no further. */
   const panel = useRef<HTMLElement | null>(null);
   /**
@@ -288,44 +299,136 @@ export function PlayerPanel({
     interaction?.onDragChange(null);
   }
 
+  /*
+   * The parts both shapes of panel are made of, so that the strip an opponent
+   * gets is the same board as the panel you get and not a second rendering of
+   * it that can drift.
+   */
+
+  /** Who this is, and whether it is their go. */
+  const who = (
+    <span className={styles.playerName}>
+      <span
+        className={styles.swatch}
+        style={colorSwatch(player.color)}
+        title={`${player.color} dice`}
+      />
+      {player.name}
+      {active ? " — to act" : ""}
+    </span>
+  );
+
+  /** The dice on the table, however they came to be there. */
+  const tray =
+    player.dice.length === 0 ? (
+      <p className={styles.empty}>Not rolled yet.</p>
+    ) : (
+      <div className={styles.dice}>
+        {player.dice.map((die, index) => (
+          <DraggableDie
+            key={die.id}
+            die={die}
+            movable={interaction?.movableDice.has(die.id) ?? false}
+            held={interaction?.dragging === die.id}
+            index={index}
+            thrown={index >= inTray && rolled}
+            bounds={panel}
+            onPick={() => interaction?.onDragChange(die.id)}
+            onAim={setAimed}
+            onRelease={release}
+          />
+        ))}
+      </div>
+    );
+
+  /** Everything standing, as the row of plates it is. */
+  const compound =
+    player.compound.length === 0 ? (
+      <p className={styles.empty}>Nothing built yet.</p>
+    ) : (
+      <div className={styles.cardRow}>
+        {player.compound.map((building) => {
+          const cardId = building.card.id;
+          const droppable = targets?.activations.has(cardId) ?? false;
+          // A perk with nothing to drag at it is worked by clicking the card
+          // instead — it takes no dice, or it has to be told what to copy
+          // before its dice mean anything.
+          const free = interaction?.workable.has(cardId) ?? false;
+          // The card mid-choice stays clickable, to back out of it.
+          const choosing = interaction?.pending === cardId;
+          return (
+            <CardView
+              key={cardId}
+              card={building.card}
+              arriving={arriving?.has(cardId)}
+              built
+              // The automaton never works a perk, so "needs 2 energy" would be
+              // reporting a failure it is not having.
+              note={automaton ? undefined : perkNote(player, building, market)}
+              dice={building.dice}
+              spent={building.worked}
+              highlight={free}
+              selected={choosing}
+              flash={flashing?.has(cardId)}
+              // Both cases go through the same click: working a perk that
+              // offers a choice asks it, and clicking again backs out.
+              onSelect={choosing || free ? () => interaction?.onSelectCard(cardId) : undefined}
+              selectLabel={
+                choosing ? `Cancel ${building.card.name}` : `Work ${building.card.name}`
+              }
+              dropTarget={droppable}
+              aimed={aimed === `card:${cardId}`}
+              charging={charging?.has(cardId)}
+            />
+          );
+        })}
+      </div>
+    );
+
+  /** The plate that unfolds an opponent's compound, once they have one. */
+  const unfold = player.compound.length > 0 && (
+    <PlateButton onClick={() => setShowCompound(!showCompound)} aria-expanded={showCompound}>
+      {showCompound ? "Hide cards" : `${player.compound.length} cards`}
+    </PlateButton>
+  );
+
+  /*
+   * Somebody across the table, in one line. See `.compactPanel` for why an
+   * opponent gets a strip: it is the biggest thing on a screen that has to
+   * hold the whole game, and it is the one thing on it nobody can act on.
+   */
+  if (compact) {
+    return (
+      <section
+        ref={panel}
+        className={[styles.section, styles.compactPanel, active && styles.playerActive]
+          .filter(Boolean)
+          .join(" ")}
+      >
+        <div className={styles.compactRow}>
+          {who}
+          {tray}
+          {/* What its dice are read against, which is its whole Work Phase. */}
+          {automaton && <ProductionSummary player={player} />}
+          <Stock player={player} />
+          {unfold}
+        </div>
+        {showCompound && compound}
+      </section>
+    );
+  }
+
   return (
     <section
       ref={panel}
       className={`${styles.section} ${active ? styles.playerActive : ""}`}
     >
-      <header className={styles.playerHeader}>
-        <span className={styles.playerName}>
-          <span
-            className={styles.swatch}
-            style={colorSwatch(player.color)}
-            title={`${player.color} dice`}
-          />
-          {player.name}
-          {active ? " — to act" : ""}
-        </span>
-        <span className={styles.resourceBar}>
-          {/* The automaton buys nothing, so it is never dealt anything to buy with. */}
-          {!automaton && (
-            <>
-              <ResourceChip kind="metal" amount={player.resources.metal} track />
-              <ResourceChip kind="energy" amount={player.resources.energy} track />
-            </>
-          )}
-          <ResourceChip kind="goods" amount={player.resources.goods} track />
-          <ResourceChip kind="prestige" amount={prestigeFor(player)} track />
-          <span className={styles.chipFree}>{player.compound.length} built</span>
-          <strong
-            className={styles.score}
-            title={
-              automaton
-                ? "Goods, plus a point a card and another for each Monument"
-                : "Goods plus prestige standing"
-            }
-          >
-            <Rolling value={scoreOf(player)} />
-          </strong>
-        </span>
-      </header>
+      {/*
+        * Your name and nothing else. What you are holding is in the action
+        * bar — see `Stock` — where it is on screen whatever the table is
+        * doing, and where it is not a second copy of itself.
+        */}
+      <header className={styles.playerHeader}>{who}</header>
 
       {/*
         * Over a limit, the Work Phase cannot end until it comes down. Said up
@@ -355,92 +458,37 @@ export function PlayerPanel({
         </div>
       )}
 
-      <div>
-        <div className={styles.sectionTitle}>Dice</div>
-        {player.dice.length === 0 ? (
-          <p className={styles.empty}>Not rolled yet.</p>
+      {/*
+        * The tray and the tile it feeds, on one line. Stacked, they cost a
+        * heading and a gap to say something the player already knows — the
+        * dice and the slots they go into are one thought, and on a screen
+        * that has to hold the whole game they may as well be one line.
+        */}
+      <div className={styles.tableRow}>
+        <div className={styles.tray}>
+          <div className={styles.sectionTitle}>Dice</div>
+          {tray}
+        </div>
+
+        {automaton ? (
+          <ProductionSummary player={player} />
         ) : (
-          <div className={styles.dice}>
-            {player.dice.map((die, index) => {
-              const movable = interaction?.movableDice.has(die.id) ?? false;
-              return (
-                <DraggableDie
-                  key={die.id}
-                  die={die}
-                  movable={movable}
-                  held={interaction?.dragging === die.id}
-                  index={index}
-                  thrown={index >= inTray && rolled}
-                  bounds={panel}
-                  onPick={() => interaction?.onDragChange(die.id)}
-                  onAim={setAimed}
-                  onRelease={release}
-                />
-              );
-            })}
-          </div>
-        )}
-        {interaction && interaction.movableDice.size > 0 && (
-          <p className={styles.prompt}>Drag a die onto a slot, a blueprint, or a building.</p>
+          <HeadquartersView
+            placements={player.headquarters}
+            color={player.color}
+            targets={targets?.sections ?? null}
+            aimed={aimed}
+          />
         )}
       </div>
 
-      {automaton ? (
-        <ProductionSummary player={player} />
-      ) : (
-        <HeadquartersView
-          placements={player.headquarters}
-          color={player.color}
-          targets={targets?.sections ?? null}
-          aimed={aimed}
-        />
+      {interaction && interaction.movableDice.size > 0 && (
+        <p className={styles.prompt}>Drag a die onto a slot, a blueprint, or a building.</p>
       )}
 
       <div>
         <div className={styles.sectionTitle}>Compound</div>
-        {player.compound.length === 0 ? (
-          <p className={styles.empty}>Nothing built yet.</p>
-        ) : (
-          <div className={styles.cardRow}>
-            {player.compound.map((building) => {
-              const cardId = building.card.id;
-              const droppable = targets?.activations.has(cardId) ?? false;
-              // A perk with nothing to drag at it is worked by clicking the
-              // card instead — it takes no dice, or it has to be told what to
-              // copy before its dice mean anything.
-              const free = interaction?.workable.has(cardId) ?? false;
-              // The card mid-choice stays clickable, to back out of it.
-              const choosing = interaction?.pending === cardId;
-              return (
-                <CardView
-                  key={cardId}
-                  card={building.card}
-                  arriving={arriving?.has(cardId)}
-                  built
-                  // The automaton never works a perk, so "needs 2 energy"
-                  // would be reporting a failure it is not having.
-                  note={automaton ? undefined : perkNote(player, building, market)}
-                  dice={building.dice}
-                  spent={building.worked}
-                  highlight={free}
-                  selected={choosing}
-                  flash={flashing?.has(cardId)}
-                  // Both cases go through the same click: working a perk that
-                  // offers a choice asks it, and clicking again backs out.
-                  onSelect={
-                    choosing || free ? () => interaction?.onSelectCard(cardId) : undefined
-                  }
-                  selectLabel={
-                    choosing ? `Cancel ${building.card.name}` : `Work ${building.card.name}`
-                  }
-                  dropTarget={droppable}
-                  aimed={aimed === `card:${cardId}`}
-                  charging={charging?.has(cardId)}
-                />
-              );
-            })}
-          </div>
-        )}
+        {compound}
         {/* Asked beside whichever card is being chosen for. */}
         {!choosingInHand && <Choices interaction={interaction} />}
       </div>

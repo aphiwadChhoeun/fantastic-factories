@@ -1,6 +1,10 @@
+"use client";
+
+import { useEffect, useRef, type MouseEvent, type SyntheticEvent } from "react";
 import type { BlueprintCard, CardPool, ContractorMarket } from "@/engine";
 import { BLUEPRINT_TOOL_GLYPHS, BLUEPRINT_TOOL_SWATCHES } from "@/lib/colors";
 import { CardView } from "./CardView";
+import { PlateButton } from "./PlateButton";
 import styles from "./game.module.css";
 
 /**
@@ -188,18 +192,131 @@ function BlueprintRow({ pool, interaction }: { pool: CardPool<BlueprintCard> } &
   );
 }
 
+/**
+ * The blueprints in hand that could pay for whatever has just been picked out
+ * of the row, and the click that spends one.
+ *
+ * Asked here rather than over the hand, which is where every other payment in
+ * the game is asked. A modal makes the board behind it inert, so a market that
+ * takes a card out of your hand has to hold out its own hand for it — anything
+ * else would be the row asking a question nothing on screen could answer.
+ */
+export type MarketPayment = {
+  readonly cards: readonly BlueprintCard[];
+  /** Those already promised. A perk that eats two is fed one click at a time. */
+  readonly spending: ReadonlySet<string>;
+  readonly onSelect: (cardId: string) => void;
+};
+
 type Props = {
   contractors: ContractorMarket;
   blueprints: CardPool<BlueprintCard>;
   interaction?: MarketInteraction;
+  /** Only while a choice out of the row is waiting to be paid for. */
+  payment?: MarketPayment;
+  /**
+   * Escape, the backdrop and the bar's own plate all arrive here. Absent while
+   * the row is being asked something it has to have an answer to — a
+   * Replicator waiting to be told which blueprint to copy — where dismissing
+   * the market would be dismissing the question.
+   */
+  onClose?: () => void;
 };
 
-/** The market: a tokened contractor row above a blueprint row. */
-export function Marketplace({ contractors, blueprints, interaction }: Props) {
+/**
+ * The market: a tokened contractor row above a blueprint row, over the board
+ * as a modal.
+ *
+ * A native `<dialog>` rather than a panel with a high `z-index`, the same as
+ * `GameOver` and `Confirm`: the browser's top layer puts it over everything
+ * without the board having to know it exists, Escape closes it, and focus
+ * stays inside. Nothing behind it is clickable, which is why the payment row
+ * below is part of it.
+ *
+ * Whether it is up at all is not its own decision — the bar opens it, your own
+ * Market Phase opens it, and the phase turning over closes it again. See
+ * `useAutoPanel` and `ActionBar`.
+ */
+export function Marketplace({ contractors, blueprints, interaction, payment, onClose }: Props) {
+  const ref = useRef<HTMLDialogElement>(null);
+
+  // Mounted only while the market is up, so opening on mount is the whole of
+  // it. Closing on the way out keeps the browser's top layer tidy.
+  useEffect(() => {
+    const dialog = ref.current;
+    dialog?.showModal();
+    return () => dialog?.close();
+  }, []);
+
+  /** Escape, which the browser delivers as `cancel` and nothing else. */
+  function onCancel(event: SyntheticEvent<HTMLDialogElement>) {
+    if (onClose) {
+      onClose();
+      return;
+    }
+    // Nothing to close to: the row is mid-question. Letting Escape through
+    // would take the market away and leave the choice it was asked for open.
+    event.preventDefault();
+  }
+
+  /**
+   * A modal dialog fills the viewport with its backdrop, so a click outside
+   * the panel still lands on the dialog itself. That is what tells the two
+   * apart.
+   */
+  function onBackdropClick(event: MouseEvent<HTMLDialogElement>) {
+    if (event.target === ref.current) onClose?.();
+  }
+
   return (
-    <section className={styles.section}>
+    <dialog
+      ref={ref}
+      className={styles.marketModal}
+      aria-label="Market"
+      onCancel={onCancel}
+      onClick={onBackdropClick}
+    >
+      {/*
+        * A way out you can see. Escape and the backdrop both close this, but a
+        * modal takes the bar's own Market plate out of reach along with the
+        * rest of the board — so the plate that put the row up cannot be the
+        * plate that takes it down, and something here has to be.
+        */}
+      <div className={styles.marketHeader}>
+        <span className={styles.sectionTitle}>Market</span>
+        <PlateButton
+          onClick={onClose}
+          disabled={!onClose}
+          title={onClose ? undefined : "Pick the blueprint to copy first"}
+        >
+          Close
+        </PlateButton>
+      </div>
+
       <ContractorRow market={contractors} interaction={interaction} />
       <BlueprintRow pool={blueprints} interaction={interaction} />
-    </section>
+
+      {payment && payment.cards.length > 0 && (
+        <div>
+          <div className={styles.sectionTitle}>Pay from hand</div>
+          <p className={styles.prompt}>
+            Click a blueprint to discard as payment.
+            {payment.spending.size > 0 && " It wants another."}
+          </p>
+          <div className={styles.cardRow}>
+            {payment.cards.map((card) => (
+              <CardView
+                key={card.id}
+                card={card}
+                highlight
+                selected={payment.spending.has(card.id)}
+                onSelect={() => payment.onSelect(card.id)}
+                selectLabel={`Discard ${card.name} to pay`}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </dialog>
   );
 }

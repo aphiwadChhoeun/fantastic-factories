@@ -1,37 +1,44 @@
 /*
- * Sized so that five plates fit one row of the board column, which is the
- * width the whole layout is really for: a hand or a compound that wraps at
- * four is a hand you have to read as two rows.
+ * The shell: a thin bar, the table, a thin bar. Exactly one viewport tall and
+ * never taller, so the two bars are always where the player last saw them and
+ * the floating panels have something fixed to hang off.
  *
- * The arithmetic, because it is load-bearing and every number in it is set
- * somewhere else in this file: 1240 less 40 of padding leaves 1200; less the
- * 300 sidebar and its 20 gap leaves an 840 board column; less the 28 a
- * `.section` takes for its own padding leaves 812 for the row. Five plates at
- * 152 with four 10px gaps is 800. Change any of those and check this again.
+ * `dvh` rather than `vh` because a phone's address bar slides away, and `vh`
+ * would keep sizing the board for the viewport it had before it did.
  */
 .page {
-  max-width: 1240px;
-  margin: 0 auto;
-  padding: 24px 20px 64px;
+  position: relative;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  overflow: hidden;
 }
 
-.header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
+/*
+ * Title, where the game is up to, and the three plates that open what is not
+ * on the table. Three columns rather than a flex row so the status is centred
+ * against the *page* and not against whatever the two sides happen to weigh.
+ */
+.topBar {
+  flex: none;
+  z-index: 70;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--color-edge);
+  background: color-mix(in srgb, var(--color-void) 82%, transparent);
+  backdrop-filter: blur(8px);
 }
 
 .title {
   font-family: var(--font-display);
-  font-size: 22px;
+  font-size: 18px;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+  white-space: nowrap;
   color: var(--color-parchment);
 }
 
@@ -40,32 +47,209 @@
   font-size: 13px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
+  text-align: center;
   color: var(--color-steel-300);
 }
 
-.columns {
+/* The log, the settings and the new deal, at the right-hand end of the bar. */
+.hud {
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/*
+ * The table. Everything that is actually the game, and the only thing on the
+ * page allowed to scroll — and then only when a compound has outgrown the
+ * screen, which is the one case where refusing to scroll would hide cards.
+ *
+ * Centred by the inner block's own `margin: auto` rather than by
+ * `justify-content`, which is the difference between content that centres when
+ * it fits and content whose top is cut off when it does not.
+ */
+.board {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: auto;
+  padding: 12px 14px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-edge-bright) transparent;
+}
+
+/*
+ * Sized so that seven plates fit a row, which is more than a hand or a market
+ * row has ever needed — the sidebar used to hold this to five and its going
+ * is most of what the table gained.
+ *
+ * The arithmetic, because every number in it is set somewhere else in this
+ * file: 1200 less the 28 a `.section` takes for its own padding leaves 1172.
+ * Seven plates at 152 with six 10px gaps is 1124.
+ */
+.boardInner {
+  margin: auto;
+  width: 100%;
+  max-width: 1200px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+}
+
+/*
+ * The action bar: whatever the player can do that is not a card or a die to
+ * point at. Three columns again, so the phase plates sit dead centre however
+ * long the labels at either end turn out to be.
+ */
+.bottomBar {
+  flex: none;
+  z-index: 70;
   display: grid;
-  grid-template-columns: 1fr 300px;
-  gap: 20px;
-  align-items: start;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--color-edge);
+  background: color-mix(in srgb, var(--color-void) 82%, transparent);
+  backdrop-filter: blur(8px);
 }
 
-@media (max-width: 820px) {
-  .columns {
-    grid-template-columns: 1fr;
-  }
+/* The plates in the middle of the bar: roll, end the turn, start the round. */
+.barMain {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
-/* A panel is a plate bolted to the frame: iron fill, a lit top edge. */
+/* ...and what hangs off either end of them: your stock, and the two panels. */
+.barStart {
+  justify-self: start;
+  min-width: 0;
+}
+
+.barEnd {
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/*
+ * A plate with a panel folded up behind it. Positioned, because the panel is
+ * measured against the plate rather than against the bar it sits in.
+ */
+.popover {
+  position: relative;
+  display: flex;
+}
+
+/*
+ * ...and the panel itself, floating over the table. Capped at half the screen
+ * and scrolling inside that: a log forty rounds long is the one thing here
+ * that grows without limit.
+ */
+.popoverPanel {
+  position: absolute;
+  z-index: 80;
+  width: 340px;
+  max-width: min(340px, calc(100vw - 28px));
+  max-height: 52dvh;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-edge-bright) transparent;
+  box-shadow: 0 18px 50px rgb(0 0 0 / 55%);
+}
+
+/* Hanging from a plate in the top bar, and pinned to its right-hand edge. */
+.popoverBelow {
+  top: calc(100% + 8px);
+  right: 0;
+}
+
+/*
+ * ...and from one in the bottom bar, which opens upward instead. Pinned to the
+ * right like the one above it: the plate it hangs from is at that end of the
+ * bar, and a panel growing the other way would run off the screen.
+ */
+.popoverAbove {
+  bottom: calc(100% + 8px);
+  right: 0;
+}
+
+/*
+ * A panel is a plate bolted to the frame: iron fill, a lit top edge.
+ *
+ * The padding is as tight as it goes. With the whole game in one viewport,
+ * every pixel a panel keeps for itself is a pixel the cards inside it do not
+ * get, and there are four of these stacked down the table.
+ */
 .section {
   border: 1px solid var(--color-edge);
   border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  background: var(--color-deep);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 4%);
+}
+
+/*
+ * The market, as a modal over the board.
+ *
+ * Sized by the cards rather than by a column of prose, which is the whole of
+ * why it does not use `.modal` — `max-content` off a row of six plates, and
+ * the viewport as the only ceiling. The plates inside are the same plates as
+ * everywhere else: a market card that is not the size of the card you would be
+ * holding is a different card.
+ *
+ * The board behind it goes inert, so nothing on it can be clicked while this
+ * is up. That is the point of a modal and it is also the one thing this panel
+ * has to make up for — see `MarketPayment`, which brings the hand in here.
+ */
+.marketModal {
+  /*
+   * A modal dialog centres itself with `margin: auto`, which the global
+   * `* { margin: 0 }` reset takes away again. Putting it back is the whole of
+   * the positioning.
+   */
+  margin: auto;
+  border: 1px solid var(--color-edge-bright);
+  border-radius: 12px;
   padding: 14px;
+  width: max-content;
+  max-width: calc(100vw - 28px);
+  max-height: calc(100dvh - 28px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-edge-bright) transparent;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  color: inherit;
   background: var(--color-deep);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 4%);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 6%),
+    0 26px 64px rgb(0 0 0 / 66%);
+}
+
+/* Darker than the other dialogs' and blurred, because what it covers is a
+ * board full of cards rather than a page of text — dimming alone still leaves
+ * a dozen legible plates competing with the dozen in front of them. */
+.marketModal::backdrop {
+  background: rgb(0 0 0 / 55%);
+  backdrop-filter: blur(3px);
+}
+
+/* What the panel is, and the way out of it, on one line above the rows. */
+.marketHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
 }
 
 .sectionTitle {
@@ -74,18 +258,23 @@
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.09em;
+  text-align: center;
   color: var(--color-steel-300);
 }
 
-.stack {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
+/*
+ * Centred, now that the table is the whole screen. A row of four cards pinned
+ * to the left of a 1200px panel reads as a panel with something missing from
+ * it; centred, it reads as a hand.
+ *
+ * The cost is that the hand shifts as it grows, which left alignment would
+ * have spared it. Worth it here: the cards are large, the rows are short, and
+ * the alternative is a board that looks lopsided all game.
+ */
 .cardRow {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   gap: 10px;
 }
 
@@ -143,9 +332,16 @@
   position: relative;
   border: 1px solid var(--color-edge);
   border-radius: 8px;
-  /* Five to a row — see the arithmetic on `.page`. */
+  /*
+   * Seven to a row — see the arithmetic on `.boardInner`.
+   *
+   * The height is the proportion of a real card, 63 by 88 millimetres, rather
+   * than the rounder number it used to be. That is worth having for its own
+   * sake, and it happens to be the cheapest fourteen pixels a row on a board
+   * that now has to fit a screen rather than a scroll.
+   */
   width: 152px;
-  height: 228px;
+  height: 214px;
   padding: 0;
   overflow: hidden;
   display: flex;
@@ -488,6 +684,38 @@
   backdrop-filter: blur(2px);
 }
 
+/* Settings holds a full-width control or two, so it is not sized by a table. */
+.modalWide {
+  composes: modal;
+  width: 100%;
+  max-width: min(540px, calc(100vw - 32px));
+}
+
+/* One block of settings under another, each with its own small heading. */
+.settingsBody {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.settingsGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* A heading over a paragraph, not over a centred row of cards. */
+.settingsGroup .sectionTitle {
+  text-align: left;
+}
+
+.settingsNote {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--color-steel-300);
+}
+
 .modalTitle {
   font-family: var(--font-display);
   font-size: 20px;
@@ -555,6 +783,7 @@
 .automaTypes {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   gap: 4px 16px;
 }
 
@@ -868,8 +1097,35 @@ button.cardContractor {
   color: var(--color-steel-500);
 }
 
+/*
+ * A row of the table that holds two blocks rather than one: the dice tray and
+ * the Headquarters tile it feeds, or the tray and the automaton's production
+ * summary. Bottom-aligned, so the dice sit level with the slots.
+ */
+.tableRow {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+}
+
+/*
+ * The tray. Capped at the width of one full workforce — five dice — so that
+ * a Specialist's extra wraps underneath into a block rather than stretching
+ * the row and shoving the Headquarters off centre.
+ */
+.tray {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 210px;
+}
+
+/* Centred like every other row on the table — the tray, and the HQ slots. */
 .dice {
   display: flex;
+  justify-content: center;
   gap: 8px;
   flex-wrap: wrap;
 }
@@ -1104,6 +1360,7 @@ button.cardContractor {
 .prompt {
   margin: 6px 0 0;
   font-size: 11px;
+  text-align: center;
   color: var(--color-spice-400);
 }
 
@@ -1115,6 +1372,7 @@ button.cardContractor {
 .choices {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   gap: 8px;
   margin-top: 10px;
 }
@@ -1177,11 +1435,11 @@ button.cardContractor {
   cursor: default;
 }
 
-.resetButton {
-  composes: moveButton;
-  text-align: center;
-}
-
+/*
+ * Reversed by CSS so the newest line sits on top without copying the array.
+ * No height of its own any more — the popover it floats in caps that, and two
+ * scrolling boxes one inside the other is one too many.
+ */
 .log {
   margin: 0;
   padding: 0;
@@ -1190,9 +1448,43 @@ button.cardContractor {
   flex-direction: column-reverse;
   gap: 4px;
   font-size: 12px;
-  max-height: 260px;
-  overflow-y: auto;
   color: var(--color-steel-300);
+}
+
+/*
+ * Somebody across the table, as a strip rather than a panel.
+ *
+ * An opponent's board is the largest thing on screen that nobody can act on,
+ * and it sits below yours where a glance costs the least. Everything on it
+ * that decides anything is on one line: who they are, what they rolled, what
+ * their compound is worth to them, and the score. The cards themselves are
+ * behind the plate at the end — and for the automaton they are very nearly a
+ * restatement of the counts beside it, since a count is all its dice are ever
+ * read against.
+ */
+.compactPanel {
+  padding: 8px 12px;
+  gap: 8px;
+}
+
+.compactRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+}
+
+/*
+ * The automaton's production, as one line: the label and the counts together.
+ * One shape, because it sits beside a dice tray in a panel and inside a strip
+ * in the row above, and neither wants a heading on a line of its own.
+ */
+.produces {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
 }
 
 /* Whose concession is being worked right now. */
@@ -1238,5 +1530,6 @@ button.cardContractor {
 
 .empty {
   font-size: 12px;
+  text-align: center;
   color: var(--color-steel-500);
 }
