@@ -143,20 +143,28 @@ export function ActionBar({
         </div>
 
         {/*
-          * The label does not change with the state. This plate is the way to
-          * the market and back, it never moves, and it is the one plate on the
-          * bar that is always there — a word that swaps under a fixed target
-          * is a word that has to be re-read every time it is aimed at, to say
-          * something the market being on screen has already said. `aria-expanded`
-          * carries it for anyone who cannot see that.
+          * A mark rather than a word, and the mark does not change with the
+          * state. This plate is the way to the market and back, it never
+          * moves, and it is the one plate on the bar that is always there —
+          * a label that swaps under a fixed target has to be re-read every
+          * time it is aimed at, to say something the market being on screen
+          * has already said.
+          *
+          * What the word was carrying is carried by `aria-label` and the
+          * tooltip instead, so the plate still has a name for a screen reader
+          * and still says what it is on hover. `aria-expanded` says whether
+          * the row is up, as it did before.
           */}
         <PlateButton
           onClick={onToggleMarket}
           disabled={!onToggleMarket}
           aria-expanded={marketOpen}
-          title={onToggleMarket ? undefined : "Pick the blueprint to copy first"}
+          aria-label="Market"
+          title={onToggleMarket ? "Market" : "Pick the blueprint to copy first"}
         >
-          Market
+          <span className={styles.plateIcon} aria-hidden>
+            🏪
+          </span>
         </PlateButton>
       </div>
     </footer>

@@ -760,6 +760,27 @@
   color: var(--color-steel-300);
 }
 
+/*
+ * The one link on the board, and the only thing on it that leads off the page.
+ *
+ * `globals.css` takes the colour and the underline off every `a`, which is
+ * right for the rest of them — nothing else here that happens to be an anchor
+ * is meant to read as a link — so this puts both back.
+ *
+ * Spice, which is not a special case: the rule is that spice means "you can
+ * act here", and a link is the most literal thing on the board that it could
+ * mean. The underline is what carries it for anyone who cannot see the hue.
+ */
+.link {
+  color: var(--color-spice-400);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.link:hover {
+  color: var(--color-parchment);
+}
+
 .modalTitle {
   font-family: var(--font-display);
   font-size: 20px;
@@ -1585,6 +1606,41 @@ button.cardContractor {
 }
 
 /*
+ * A plate carrying a mark instead of a word — the market, and the credits.
+ *
+ * The plate itself is unchanged; this is only the glyph inside it. Bigger than
+ * the label type because a word at 12px is a row of shapes to read and a mark
+ * at 12px is one shape to recognise, and recognition wants the size. The
+ * tracking goes: `.moveButton` spaces letters out, which on a single character
+ * is a gap hung off its right-hand side that pushes it off centre.
+ *
+ * `min-width: 1em` so that a narrow mark and a wide one make the same plate —
+ * two icon plates side by side at different widths read as two different kinds
+ * of control.
+ */
+.plateIcon {
+  display: grid;
+  place-items: center;
+  min-width: 1em;
+  /*
+   * One line of label, so a plate with a mark on it stands exactly as tall as
+   * a plate with a word on it — they sit side by side in both bars, and a few
+   * pixels of difference reads as one of them being slightly broken.
+   *
+   * Written out rather than derived. The obvious `1.5em` does not work from
+   * here: `em` in a custom property resolves against whatever element *uses*
+   * the variable, so handing one down from `.moveButton` would size it off
+   * the mark's 15px instead of the label's 12px. So it is the label's line
+   * box as a number, next to the `font-size` it comes from, and the
+   * short-landscape block restates both.
+   */
+  height: 18px;
+  font-size: 15px;
+  line-height: 1;
+  letter-spacing: normal;
+}
+
+/*
  * Lighting only. The plate's downward travel belongs to Motion — see
  * PlateButton — because an inline transform written per frame would win over
  * anything declared here anyway.
@@ -1775,6 +1831,18 @@ button.cardContractor {
   .moveButton {
     font-size: 10px;
     padding: 7px 10px;
+  }
+
+  /*
+   * The mark comes down with the plate, but not as far as the words do. A
+   * label can lose two points and still be read; a mark that loses them stops
+   * being recognisable, which is the only job it has.
+   *
+   * The height is the label's line box again — 10px at the 1.5 the page sets.
+   */
+  .plateIcon {
+    height: 15px;
+    font-size: 13px;
   }
 
   .board {

@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { domMax, LazyMotion, MotionConfig, useReducedMotion } from "motion/react";
 import { PHASE_LABELS, type Move } from "@/engine";
+import { DEV_TOOLS } from "@/dev/flag";
 import { DiceLayer } from "@/dice/DiceLayer";
 import { burstFromCard, burstFromHq } from "@/effects/cardBurst";
 import { EmbersLayer } from "@/effects/EmbersLayer";
@@ -25,6 +26,7 @@ import { CHARGE_MS } from "@/lib/dice";
 import { describeMove, describeWinner } from "@/lib/format";
 import { ActionBar } from "./ActionBar";
 import { Confirm } from "./Confirm";
+import { Credits } from "./Credits";
 import { GameLog } from "./GameLog";
 import { GameOver } from "./GameOver";
 import { Marketplace, type MarketInteraction, type MarketPayment } from "./Marketplace";
@@ -83,6 +85,8 @@ export function Game() {
   const [confirming, setConfirming] = useState(false);
   /** Whether the settings dialog is up. Not saved with the game either. */
   const [settingsOpen, setSettingsOpen] = useState(false);
+  /** ...nor whether the credits are. */
+  const [creditsOpen, setCreditsOpen] = useState(false);
 
   /*
    * Whether the market is showing.
@@ -406,22 +410,43 @@ export function Game() {
             <h1 className={styles.title}>Fantastic Factories</h1>
             <span className={styles.status}>{status}</span>
             {/*
-              * What is not the table: what has happened, what is true of the
-              * software, and the way out of this game into another. All three
-              * fold away, which is the whole reason the table is the screen.
+              * What is not the table: what has happened, the way out of this
+              * game into another, and who to tell when it goes wrong. All of
+              * it folds away, which is the whole reason the table is the
+              * screen.
               */}
             <div className={styles.hud}>
               <GameLog entries={state.log} />
-              <PlateButton onClick={() => setSettingsOpen(true)}>Settings</PlateButton>
               {/*
-                * The seed is not printed here. It is the one number on the
-                * board that is about the software rather than the game, and it
-                * was changing under a button whose label is a promise about
-                * what clicking it does — so it is said in Settings instead,
-                * and kept as a tooltip because this is where it bites.
+                * Settings is a development tool now, and folds away with the
+                * rest of them. What it holds is the seed and the dev panel:
+                * the panel was already behind this flag, and the seed is the
+                * one number on the board that is about the software rather
+                * than the game — so in a shipped build the dialog was a
+                * heading over a sentence nobody had asked for. The seed is
+                * still on the plate below, where it bites.
+                */}
+              {DEV_TOOLS && (
+                <PlateButton onClick={() => setSettingsOpen(true)}>Settings</PlateButton>
+              )}
+              {/*
+                * The seed is not printed here, only hung off the plate: a
+                * button whose label is a promise about what clicking it does
+                * should not have a number changing underneath it.
                 */}
               <PlateButton onClick={askNewGame} title={`Next deal: seed ${seed + 1}`}>
                 New game
+              </PlateButton>
+              {/*
+                * Who made this and who to tell when it breaks. A question
+                * mark rather than a word, because it is the one plate up here
+                * that is not about the game in progress and should not be
+                * competing with the two that are.
+                */}
+              <PlateButton onClick={() => setCreditsOpen(true)} aria-label="Credits" title="Credits">
+                <span className={styles.plateIcon} aria-hidden>
+                  ?
+                </span>
               </PlateButton>
             </div>
           </header>
@@ -482,9 +507,12 @@ export function Game() {
             />
           )}
 
-          {settingsOpen && (
+          {/* Folds to `false` in a shipped build, and the dialog goes with it. */}
+          {DEV_TOOLS && settingsOpen && (
             <Settings seed={seed} debug={debug} onClose={() => setSettingsOpen(false)} />
           )}
+
+          {creditsOpen && <Credits onClose={() => setCreditsOpen(false)} />}
 
           {state.gameOver && !resultHidden && (
             <GameOver
