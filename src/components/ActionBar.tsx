@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type RefObject } from "react";
 import type { GameState, Move, Player } from "@/engine";
 import { useDismissible } from "@/hooks/useDismissible";
 import { describeMove, moveKey } from "@/lib/format";
+import { DiceTray, type TrayInteraction } from "./DiceTray";
 import { PlateButton } from "./PlateButton";
 import { Stock } from "./Stock";
 import styles from "./game.module.css";
@@ -25,6 +26,14 @@ type Props = {
   state: GameState;
   /** Whoever is holding the screen, for the stock at the near end of the bar. */
   you: Player;
+  /**
+   * Your crew, and what can be done with it. The tray is here rather than on
+   * the panel because the bar is the one strip of screen that never moves and
+   * is never covered — see `.barTray`.
+   */
+  tray?: TrayInteraction;
+  /** The table, which is the patch a throw is allowed to scatter across. */
+  within: RefObject<HTMLElement | null>;
   moves: readonly Move[];
   /**
    * True while the opponent is deciding. The list is hidden rather than
@@ -57,6 +66,8 @@ type Props = {
 export function ActionBar({
   state,
   you,
+  tray,
+  within,
   moves,
   waiting,
   onPlay,
@@ -67,8 +78,34 @@ export function ActionBar({
   const [listing, setListing] = useState(false);
   const ref = useDismissible(listing, () => setListing(false));
 
-  const main = waiting ? [] : moves.filter(isBarMove);
-  const rest = waiting ? [] : moves.filter((move) => !isBarMove(move));
+  /*
+   * Whether the turn still has a die in it.
+   *
+   * Counted as dice with somewhere to *go* rather than dice unspent, and that
+   * is the whole of why this is safe: a die whose face fits no open slot and
+   * no perk is already as spent as it is ever going to be, and gating on the
+   * stricter reading would leave a player holding a die they cannot put down
+   * and a turn they cannot end.
+   */
+  const crewLeft = tray?.movableDice.size ?? 0;
+
+  /*
+   * The turn does not end while there is a die left to spend. Dice are the
+   * game, a wasted one is almost never what was meant, and the plate sitting
+   * there all phase invites exactly that — so it is folded away until the
+   * tray is done with.
+   *
+   * Folded rather than removed: it goes to `All moves`, which is the faithful
+   * view of `legalMoves` and is the bar's standing promise that everything
+   * still legal is reachable from it. A player who really does mean to throw a
+   * die away has it two clicks from here.
+   */
+  function isHeldBack(move: Move): boolean {
+    return move.type === "endPhase" && state.phase === "work" && crewLeft > 0;
+  }
+
+  const main = waiting ? [] : moves.filter((move) => isBarMove(move) && !isHeldBack(move));
+  const rest = waiting ? [] : moves.filter((move) => !isBarMove(move) || isHeldBack(move));
 
   function play(move: Move) {
     setListing(false);
@@ -88,6 +125,16 @@ export function ActionBar({
       </div>
 
       <div className={styles.barMain}>
+        {/*
+          * Your crew, in the middle of the bar and beside the plates that act
+          * on it. The dice used to sit up on the panel next to the
+          * Headquarters — which is where the *board* says they go — but that
+          * is also the patch a market, a zoom or a choice covers, and a die
+          * you cannot see is a die you cannot spend. Down here they are
+          * always to hand, and the table is what they are dragged up onto.
+          */}
+        <DiceTray player={you} className={styles.barTray} within={within} interaction={tray} />
+
         {waiting ? (
           <span className={styles.empty}>Opponent is thinking…</span>
         ) : (
@@ -102,8 +149,11 @@ export function ActionBar({
               * Said rather than left blank. An empty middle of the bar during
               * your own turn looks like the game has stopped answering, when
               * what it means is that everything left to do is on the table.
+              *
+              * Unless there are dice sitting here, in which case it has
+              * already been said by something the player can pick up.
               */}
-            {main.length === 0 && !onShowResult && (
+            {main.length === 0 && !onShowResult && crewLeft === 0 && (
               <span className={styles.empty}>
                 {rest.length > 0 ? "Play from the table" : "No moves available."}
               </span>

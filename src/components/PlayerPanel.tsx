@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import {
   AUTOMA_PRODUCTION,
   buildCostFor,
   canAfford,
   countByCategory,
   HAND_LIMIT,
-  HQ_SECTION_IDS,
   overLimits,
   perkCost,
   RESOURCE_LIMIT,
@@ -16,13 +15,11 @@ import {
   type Move,
   type Player,
 } from "@/engine";
-import { emitRoll } from "@/dice/bus";
-import { useGrowth } from "@/hooks/useGrowth";
 import type { DieTargets } from "@/lib/board";
 import { colorSwatch } from "@/lib/colors";
 import { describeResources, moveKey } from "@/lib/format";
 import { CardView } from "./CardView";
-import { DraggableDie } from "./DraggableDie";
+import { DiceTray } from "./DiceTray";
 import { HeadquartersView } from "./HeadquartersView";
 import { PlateButton } from "./PlateButton";
 import { ResourceText } from "./Resource";
@@ -32,15 +29,27 @@ import styles from "./game.module.css";
 /**
  * Everything the panel needs to be playable. Absent for the opponent's panel
  * and while the opponent is thinking, which leaves it a plain read-only view.
+ *
+ * The dice themselves are not in here any more — they live in the action bar,
+ * and the gesture that carries them is the bar's. What the panel still needs
+ * of it is everything the *targets* need: where the die in hand may land, and
+ * which of those it is pointed at right now.
  */
 export type PanelInteraction = {
-  /** Dice with somewhere to go. Anything else is not worth picking up. */
+  /**
+   * Dice with somewhere to go, which is only still here for the sentence that
+   * tells the player what to do with them.
+   */
   readonly movableDice: ReadonlySet<string>;
-  /** The die under the cursor right now, if one is being dragged. */
-  readonly dragging: string | null;
-  readonly onDragChange: (dieId: string | null) => void;
   /** Where the die being dragged may land. Null when nothing is in hand. */
   readonly targets: DieTargets | null;
+  /**
+   * The `data-drop` that die is aimed at, if any. Most of what a player feels
+   * as magnetism is here rather than in the die: the target reaches out as the
+   * die comes near, and it costs one render per target rather than one per
+   * pointer move. See docs/dice.md §2.3.
+   */
+  readonly aimed: string | null;
   /** Hand cards that could be built right now. */
   readonly buildable: ReadonlySet<string>;
   /**
@@ -68,8 +77,6 @@ export type PanelInteraction = {
   readonly pending: string | null;
   /** Clicking a hand card: starts a build, pays for one, or cancels. */
   readonly onSelectCard: (cardId: string) => void;
-  /** Dropping the die being dragged onto a building in the compound. */
-  readonly onDropDie: (cardId: string) => void;
   readonly onPlay: (move: Move) => void;
 };
 
@@ -209,95 +216,17 @@ export function PlayerPanel({
   interaction,
 }: Props) {
   const targets = interaction?.targets ?? null;
+  const aimed = interaction?.aimed ?? null;
   /** Whether an opponent's compound has been unfolded to be read. */
   const [showCompound, setShowCompound] = useState(!compact);
-  /** How far a die may be dragged: its own panel, and no further. */
+  /** The patch of screen an opponent's throw is allowed to scatter across. */
   const panel = useRef<HTMLElement | null>(null);
-  /**
-   * The `data-drop` the die in hand is aimed at, if any.
-   *
-   * Most of what a player feels as magnetism is here rather than in the die:
-   * the target reaches out as the die comes near, and it costs one render per
-   * target rather than one per pointer move. See docs/dice.md §2.3.
-   */
-  const [aimed, setAimed] = useState<string | null>(null);
-  /** How many dice were on the table a render ago. Anything past that is new. */
-  const inTray = useGrowth(player.dice.length);
-  /*
-   * ...and whether enough of them arrived together to have been rolled.
-   *
-   * A handful comes down at once; a die that turns up on its own is as likely
-   * to have been *chosen* as thrown — a Foreman picks a face and never rolls
-   * it — and docs/dice.md §0 is blunt about which mistake matters: a dice
-   * system that only knows how to throw has nothing to show for a die that
-   * was placed. So a lone arrival is left to fade in, and the cost is that a
-   * contractor's single extra die fades when it should have been thrown.
-   *
-   * Nothing to read off the board can do better. A chosen die and a rolled one
-   * are the same die by the time the move is over.
-   */
-  const rolled = player.dice.length - inTray >= 2;
-  /** The last handful this panel asked to have thrown, so it asks only once. */
-  const asked = useRef("");
-
-  /*
-   * Hand the throw to the physics canvas, if there is one listening.
-   *
-   * Nothing here knows whether there is: `emitRoll` is dropped on the floor
-   * when the flag is off, the chunk has not loaded, or the player has asked
-   * for less motion, and the dice throw themselves in the DOM instead. The
-   * panel's own box goes with it, because that is the patch of screen the dice
-   * are allowed to roll across — see docs/dice.md §2.1.
-   */
-  useEffect(() => {
-    if (!rolled) return;
-    const fresh = player.dice.slice(inTray);
-    const key = fresh.map((die) => die.id).join(",");
-    // `rolled` stays true for the rest of the round, so without this a die
-    // being spent would be read as the whole handful being thrown again.
-    if (!key || key === asked.current) return;
-    asked.current = key;
-
-    const box = panel.current?.getBoundingClientRect();
-    if (!box) return;
-    emitRoll({
-      dice: fresh.map((die) => ({ id: die.id, face: die.face, color: die.color })),
-      within: { left: box.left, top: box.top, width: box.width, height: box.height },
-    });
-  }, [rolled, player.dice, inTray]);
   // The automaton holds no cards and never places a die on its Headquarters,
   // so both sections would be permanently empty furniture.
   const automaton = player.isAi;
   const over = overLimits(player);
   // A choice about a card in hand is asked beside the hand, not the compound.
   const choosingInHand = player.hand.some((card) => card.id === interaction?.pending);
-
-  /**
-   * What a die was dropped on, and what that means.
-   *
-   * The die works this out for itself and hands over the answer, rather than
-   * the board hit-testing the release. That is not a detail: the same answer
-   * lit the target up, leaned the die toward it and drew the line to it while
-   * the player was still deciding, so resolving the drop any other way would
-   * be letting the board break a promise it spent the whole drag making.
-   *
-   * Null when the die was let go at nothing, which springs it home.
-   */
-  function release(drop: string | null) {
-    if (drop && interaction) {
-      const section = HQ_SECTION_IDS.find((id) => drop === `hq:${id}`);
-      if (section) {
-        const move = targets?.sections.get(section);
-        if (move) interaction.onPlay(move);
-      } else if (drop.startsWith("card:")) {
-        interaction.onDropDie(drop.slice("card:".length));
-      }
-    }
-
-    setAimed(null);
-    // Last, because the move above is resolved against the die still in hand.
-    interaction?.onDragChange(null);
-  }
 
   /*
    * The parts both shapes of panel are made of, so that the strip an opponent
@@ -318,28 +247,16 @@ export function PlayerPanel({
     </span>
   );
 
-  /** The dice on the table, however they came to be there. */
-  const tray =
-    player.dice.length === 0 ? (
-      <p className={styles.empty}>Not rolled yet.</p>
-    ) : (
-      <div className={styles.dice}>
-        {player.dice.map((die, index) => (
-          <DraggableDie
-            key={die.id}
-            die={die}
-            movable={interaction?.movableDice.has(die.id) ?? false}
-            held={interaction?.dragging === die.id}
-            index={index}
-            thrown={index >= inTray && rolled}
-            bounds={panel}
-            onPick={() => interaction?.onDragChange(die.id)}
-            onAim={setAimed}
-            onRelease={release}
-          />
-        ))}
-      </div>
-    );
+  /*
+   * An opponent's dice, on their own strip.
+   *
+   * Only theirs. Yours are in the action bar — see `ActionBar` — where they
+   * are on screen whatever the table is doing, and where they are not a
+   * second copy of themselves. This panel is only ever unfolded for the
+   * player holding the screen, so the tray below belongs to the strip and
+   * appears nowhere else in here.
+   */
+  const tray = <DiceTray player={player} within={panel} empty="Not rolled yet." />;
 
   /** Everything standing, as the row of plates it is. */
   const compound =
@@ -466,25 +383,18 @@ export function PlayerPanel({
         */}
       <div className={styles.workbench}>
         {/*
-          * What you rolled and where it can go — the dice, and the sentence
-          * about them. Another `display: contents` wrapper, so that sideways
-          * the two of them are one column and the sentence costs nothing: a
-          * dice tray is shorter than the Headquarters beside it, and that
-          * slack is exactly a line of text tall.
+          * Where a die can go, and the sentence about it. Another
+          * `display: contents` wrapper, so that sideways the two of them are
+          * one column and the sentence costs nothing: the tile is shorter than
+          * the compound beside it, and that slack is exactly a line of text
+          * tall.
+          *
+          * The dice that feed it are in the bar now, so what is left here is
+          * the half of the thought that has to stay on the table — the slots
+          * are a thing the board owns and a die is carried up to.
           */}
         <div className={styles.machinery}>
-          {/*
-            * The tray and the tile it feeds, on one line. Stacked, they cost a
-            * heading and a gap to say something the player already knows — the
-            * dice and the slots they go into are one thought, and on a screen
-            * that has to hold the whole game they may as well be one line.
-            */}
           <div className={styles.tableRow}>
-            <div className={styles.tray}>
-              <div className={styles.sectionTitle}>Dice</div>
-              {tray}
-            </div>
-
             {automaton ? (
               <ProductionSummary player={player} />
             ) : (
@@ -498,7 +408,9 @@ export function PlayerPanel({
           </div>
 
           {interaction && interaction.movableDice.size > 0 && (
-            <p className={styles.prompt}>Drag a die onto a slot, a blueprint, or a building.</p>
+            <p className={styles.prompt}>
+              Drag a die up from the bar onto a slot, a blueprint, or a building.
+            </p>
           )}
         </div>
 

@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { domMax, LazyMotion, MotionConfig, useReducedMotion } from "motion/react";
-import { PHASE_LABELS, type Move } from "@/engine";
+import { HQ_SECTION_IDS, PHASE_LABELS, type Move } from "@/engine";
 import { DEV_TOOLS } from "@/dev/flag";
 import { DiceLayer } from "@/dice/DiceLayer";
 import { burstFromCard, burstFromHq } from "@/effects/cardBurst";
@@ -27,6 +27,7 @@ import { describeMove, describeWinner } from "@/lib/format";
 import { ActionBar } from "./ActionBar";
 import { Confirm } from "./Confirm";
 import { Credits } from "./Credits";
+import type { TrayInteraction } from "./DiceTray";
 import { GameLog } from "./GameLog";
 import { GameOver } from "./GameOver";
 import { Marketplace, type MarketInteraction, type MarketPayment } from "./Marketplace";
@@ -76,6 +77,19 @@ export function Game() {
 
   const [pending, setPending] = useState<Pending | null>(null);
   const [dragged, setDragged] = useState<string | null>(null);
+  /**
+   * The `data-drop` the die in hand is aimed at, if any.
+   *
+   * Up here because the die and the thing it is aimed at are now at opposite
+   * ends of the screen: the tray is in the bar and every target is on the
+   * table above it, so the one piece of state that ties them together cannot
+   * belong to either.
+   */
+  const [aimed, setAimed] = useState<string | null>(null);
+  /** The whole screen, which is as far as a die may be carried. */
+  const page = useRef<HTMLElement | null>(null);
+  /** The table, which is the patch of it a throw may scatter across. */
+  const table = useRef<HTMLDivElement | null>(null);
   /**
    * Whether the result has been waved away. Not saved with the game: coming
    * back to a finished one should show how it went, not assume you remember.
@@ -357,13 +371,58 @@ export function Game() {
         }
       : undefined;
 
+  /**
+   * What a die was dropped on, and what that means.
+   *
+   * The die works this out for itself and hands over the answer, rather than
+   * the board hit-testing the release. That is not a detail: the same answer
+   * lit the target up, leaned the die toward it and drew the line to it while
+   * the player was still deciding, so resolving the drop any other way would
+   * be letting the board break a promise it spent the whole drag making.
+   *
+   * Null when the die was let go at nothing, which springs it home.
+   */
+  function release(drop: string | null) {
+    const targets = dragging ? board.dice.get(dragging) : undefined;
+    if (drop && dragging) {
+      const section = HQ_SECTION_IDS.find((id) => drop === `hq:${id}`);
+      if (section) {
+        const move = targets?.sections.get(section);
+        if (move) {
+          setPending(null);
+          play(move);
+        }
+      } else if (drop.startsWith("card:")) {
+        resolve({ cardId: drop.slice("card:".length), dieId: dragging });
+      }
+    }
+
+    setAimed(null);
+    setDragged(null);
+  }
+
+  /**
+   * Your crew, for the bar. Only while the board is yours to play: the tray
+   * still shows the automaton's dice on its own strip, but nothing about them
+   * can be picked up.
+   */
+  const trayInteraction: TrayInteraction | undefined = playable
+    ? {
+        movableDice: new Set(board.dice.keys()),
+        dragging,
+        bounds: page,
+        onPick: setDragged,
+        onAim: setAimed,
+        onRelease: release,
+      }
+    : undefined;
+
   function panelFor(playerIndex: number): PanelInteraction | undefined {
     if (!playable || playerIndex !== state.currentPlayerIndex) return undefined;
     return {
       movableDice: new Set(board.dice.keys()),
-      dragging,
-      onDragChange: setDragged,
       targets: dragging ? (board.dice.get(dragging) ?? null) : null,
+      aimed,
       buildable: new Set(board.builds.keys()),
       // A card is clicked to work it either because nothing is placed on it,
       // or because it copies and has to be asked what.
@@ -378,9 +437,6 @@ export function Game() {
       choices,
       pending: choice?.cardId ?? null,
       onSelectCard: selectCard,
-      onDropDie: (cardId: string) => {
-        if (dragging) resolve({ cardId, dieId: dragging });
-      },
       onPlay: (move: Move) => {
         setPending(null);
         play(move);
@@ -405,7 +461,11 @@ export function Game() {
           * answer it — see the focus pull in game.module.css. The state is
           * already here; this only has to say so out loud.
           */}
-        <main className={styles.page} data-choosing={choice ? "true" : undefined}>
+        <main
+          ref={page}
+          className={styles.page}
+          data-choosing={choice ? "true" : undefined}
+        >
           <header className={styles.topBar}>
             <h1 className={styles.title}>Fantastic Factories</h1>
             <span className={styles.status}>{status}</span>
@@ -456,7 +516,7 @@ export function Game() {
             * else is playing as a strip underneath. The market is a modal over
             * the whole of it, so nothing here moves when it opens.
             */}
-          <div className={styles.board}>
+          <div ref={table} className={styles.board}>
             <div className={styles.boardInner}>
               {seated.map(({ player, index }) => (
                 <PlayerPanel
@@ -477,6 +537,8 @@ export function Game() {
           <ActionBar
             state={state}
             you={state.players[youIndex]}
+            tray={trayInteraction}
+            within={table}
             moves={moves}
             waiting={isAiTurn}
             onPlay={play}
